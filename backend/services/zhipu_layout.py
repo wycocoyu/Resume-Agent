@@ -47,14 +47,99 @@ _last_key: Optional[str] = None
 
 
 def _get_client(api_key: Optional[str] = None) -> ZhipuAI:
-    global _zhipu_client, _last_key
-    key = api_key or ZHIPU_API_KEY
+    global _zhipu_client, _last_key, ZHIPU_API_KEY
+    key = (api_key or os.getenv("ZHIPU_API_KEY", "") or ZHIPU_API_KEY).strip()
     if not key:
         raise ValueError("ZHIPU_API_KEY 未配置")
+    ZHIPU_API_KEY = key
     if _zhipu_client is None or _last_key != key:
         _zhipu_client = ZhipuAI(api_key=key)
         _last_key = key
     return _zhipu_client
+
+
+def refresh_zhipu_api_key(api_key: Optional[str] = None) -> str:
+    """刷新内存中的智谱 API Key 并重置客户端缓存（供配置中心保存/删除后即时生效）。"""
+    global ZHIPU_API_KEY, _zhipu_client, _last_key
+    resolved = (api_key if api_key is not None else os.getenv("ZHIPU_API_KEY", "")).strip()
+    ZHIPU_API_KEY = resolved
+    _zhipu_client = None
+    _last_key = None
+    return ZHIPU_API_KEY
+
+
+def test_zhipu_api_key(api_key: Optional[str] = None) -> None:
+    """使用最小请求检测智谱 API Key 是否有效（用于设置页连通性探测）。"""
+    import httpx
+
+    key = (api_key or os.getenv("ZHIPU_API_KEY", "") or ZHIPU_API_KEY).strip()
+    if not key:
+        raise ValueError("ZHIPU_API_KEY 未配置")
+
+    # 320x80 标准 PNG 的 base64（智谱 glm-ocr 要求标准 PNG 结构与最小尺寸，过小图片会报 1214）
+    tiny_png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAUAAAABQCAIAAADnUzvSAAAHDElEQVR4nO3aX0hT"
+        "fRzH8emktUIGpVJWREYgaTY3g9b0bLklopabRV1ookkUXQhZLfCimy7KzC6y6CKb"
+        "FSEWNgkitlXmIkuJIqKYkCvtH1nQZjlty7Pvw9OBIXNTn2dR/PTzujo7O+fsd37z"
+        "vXM2jCEiEQCwKfZvDwAA/j8EDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzA"
+        "MAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzA"
+        "MAQMwDAEDMAwBAzAMAQMwDAEDDCLA543b55Wq9VoNAqFwuFwiP6gpqYmiUQyODgY"
+        "5XGOHz8+/mFzc7NSqVSpVEql8tKlS8LK8+fPKxQKjUZTWFj47t27Sc69vb1d+0tc"
+        "XJyw0NbW9p8GYDabc3Jy5HK53W4XiURDQ0MGgyE7O9tgMAwNDYXdJhAIVFdXq1Qq"
+        "juNev34d5YQASyg6MplMWHj+/PmaNWvoD9qyZcvBgwfNZvPvOgUislqtarXa7XYT"
+        "kdvtVqvVt2/fttvtGzduHBkZIaJbt27l5uZO59zHH3b6A/j8+TPHcTzPO53O1NRU"
+        "Ijp06FBDQwMRnTx58vDhw2G3OXv2bG1tLRFZLBaj0RjlhABDflvAgUBgwYIFX79+"
+        "LS0t1el0OTk5PT09RHT69Gm5XJ6ZmWmz2UL+WIPLMpmssrIyJSXl3LlzpaWlK1as"
+        "OHXqFBFNPFqQ1+vV6XS9vb0lJSVE9OnTp82bN2dnZ5eVlS1cuDDSvjKZrLa2luO4"
+        "jIwMi8VCREeOHBGLxZs2bRI20Ol0Dx8+DL5KV1eXXq/Py8t79OhRcOXu3bv9fv/E"
+        "c480M5PPScgAnE7ntWvXiGh4eDgxMZGI0tLSPnz4QETv379PT08Pu82GDRtevXpF"
+        "RD6fr66uLsr3FGZjwFarddu2bVVVVd3d3UQ0MDCwdu1aIkpMTPz27ZvT6dy5c2ek"
+        "gCUSSXd398DAQExMTE9PT39//+LFi4lo4tGCLBZLfX09ESkUCp/PV1ZWduXKFSJq"
+        "b2+XSCSR9pVKpcJHg8vlWrZsWcgwiCg5OXl0dDT4cHR0NDk5ecmSJT9+/Jjy3CM9"
+        "+5/mJOjixYu7du0iooSEBJ7niYjneSHXsNs0NDRoNBqDwfDmzZtpvG8wQ8RFeQfu"
+        "9/u1Wu3Pnz97e3tfvny5bt26vr4+4Smv18vzfEFBQXl5+b59+y5fvhyybyAQEBZi"
+        "Y2OzsrLEYvGcOXOysrJiY2NHRkZEIpHNZgs5mlgsFh7euHHj2bNnbW1tHz9+dDgc"
+        "nZ2dTU1NIpGoqKhI2CbsvoFAoLKyUiQSpaSkBL9PTv79IiYmhuf56Zx7pINMHMkk"
+        "cyJwuVz19fX37t2bZGzjt/H7/cuXL+/s7Lx+/XpVVdXdu3enPDWYIaL8AAhePerq"
+        "6o4dO7Zo0SLhCsbzvMPhEJ5yOBxGo7GiooKI4uPjhZVut1u4VIbcS49fCHs0Ihob"
+        "G1OpVMKy1Wqtrq5OSkoSLpI+n08qlUbaN/jqYV+UiPR6fVdXV/DhgwcP8vLyOI4T"
+        "LqHC3XJ5eXnYc480M1POScgV+Pv370qlMviKE2+hJ26zatWqsbExYWYSEhKm8b7B"
+        "DPHbAn769KnRaNy6dWtLSwsR3bx5Mz8/3+PxcBzn9/uHh4eTkpKIaOnSpS9evCCi"
+        "M2fOzJ07N+QgIQshRwu+qMPh2Lt3r7Ds9XpTU1MNBsPVq1eJqLW1VThs2H3D3sDH"
+        "x8cL96hEZLPZ1Gq1x+MJ/oh1586d1tZWvV4vfEC0tLTs2LEj7LlHmpkp52T8AAKB"
+        "QElJibC9YPyPWCaTKew2e/bs6ejoIKKOjg6dThfF+wmzNWCv17ty5cr+/v78/HyO"
+        "43Jzc10uFxGdOHFCoVDI5fLGxkbhu+vq1au1Wq3JZIrUbXDh7du3IUcT1NTUCL/i"
+        "CDiOs9vtOb+YTCbhR6yw+4YNuKCgoLCwMLj+woULmZmZ69evVygUzc3NwsqjR4+m"
+        "paVptdrt27d/+fIl7LkHIwx5duJIQuZk/ADMZvP8+fM1vwgrPR5PcXGxWq0uLi4W"
+        "PlkmbjM4OFhUVKTVavV6fV9fX5TvKTAk5t+I2VdRUVFTU5ORkfH48eMDBw7cv3//"
+        "b48I4E+YIQE/efJk//79UqnU7/c3Njamp6f/7REB/AkzJGCA2Qn/Cw3AMAQMwDAE"
+        "DMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAE"
+        "DMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAE"
+        "DMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAEDMAwBAzAMAQMwDAE"
+        "DMAwBAzAMAQMwDAEDCBi1z9WZJbigbIt9wAAAABJRU5ErkJggg=="
+    )
+    api_url = "https://open.bigmodel.cn/api/paas/v4/layout_parsing"
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": ZHIPU_OCR_MODEL or "glm-ocr",
+        "file": f"data:image/png;base64,{tiny_png_b64}",
+    }
+    transport = httpx.HTTPTransport(retries=2)
+    with httpx.Client(timeout=20, transport=transport) as http_client:
+        resp = http_client.post(api_url, json=payload, headers=headers)
+    if resp.status_code in (401, 403):
+        raise ValueError(f"智谱 API Key 鉴权失败 (HTTP {resp.status_code}): {resp.text}")
+    if resp.status_code >= 500:
+        raise ValueError(f"智谱服务端异常 (HTTP {resp.status_code}): {resp.text}")
+    if resp.status_code != 200:
+        # 若因 1x1 图片无文字返回业务 400 但非鉴权错误，进一步检查错误码
+        err_text = resp.text
+        if "1001" in err_text or "1002" in err_text or "token" in err_text.lower() or "auth" in err_text.lower() or "key" in err_text.lower():
+            raise ValueError(f"智谱 API Key 无效: {err_text}")
+        raise ValueError(f"智谱 OCR 探测异常 (HTTP {resp.status_code}): {err_text}")
 
 
 def _strip_json_block(text: str) -> str:
@@ -313,7 +398,7 @@ def recognize_with_ocr(
     """
     import httpx
     
-    key = api_key or ZHIPU_API_KEY
+    key = (api_key or os.getenv("ZHIPU_API_KEY", "") or ZHIPU_API_KEY).strip()
     if not key:
         raise ValueError("ZHIPU_API_KEY 未配置")
     
@@ -333,7 +418,8 @@ def recognize_with_ocr(
     
     try:
         print(f"[智谱OCR] 开始调用 layout_parsing API，模型: {ZHIPU_OCR_MODEL}，PDF大小: {len(pdf_bytes)/1024:.1f}KB", flush=True)
-        with httpx.Client(timeout=300) as http_client:
+        transport = httpx.HTTPTransport(retries=2)
+        with httpx.Client(timeout=300, transport=transport) as http_client:
             resp = http_client.post(api_url, json=payload, headers=headers)
         
         if resp.status_code != 200:

@@ -70,10 +70,9 @@ class RenderPDFRequest(BaseModel):
 
 
 class SaveKeysRequest(BaseModel):
-    """保存 API Key 请求"""
-    zhipu_key: Optional[str] = None
-    doubao_key: Optional[str] = None
+    """保存 API Key 请求（DeepSeek 官方 + 智谱 GLM-OCR）"""
     deepseek_key: Optional[str] = None
+    zhipu_key: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
