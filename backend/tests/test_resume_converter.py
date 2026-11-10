@@ -234,3 +234,25 @@ def test_convert_to_backend_format_full_field_and_visibility_invariants() -> Non
     assert out["sectionTitles"]["openSource"] == "开源贡献"
     assert out["sectionTitles"]["open_source"] == "开源贡献"
     assert out["sectionTitles"]["opensource"] == "开源贡献"
+
+
+def test_import_resume_converter_first_has_no_circular_import() -> None:
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from backend.resume_converter import convert_to_backend_format; import backend.cli; print('OK')",
+        ],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "OK"
+

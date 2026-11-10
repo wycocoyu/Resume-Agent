@@ -4,10 +4,12 @@ from __future__ import annotations
 import copy
 import re
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from backend.cli.schema import ResumeDataModel
 from backend.latex_utils import strip_html_tags
+
+if TYPE_CHECKING:
+    from backend.cli.schema import ResumeDataModel
 
 _BIRTH_DATE_RE = re.compile(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$")
 _COMPACT_TOKEN_RE = re.compile(r"[\s：:·\-]")
@@ -160,12 +162,15 @@ def convert_to_backend_format(
     today: date | None = None,
 ) -> dict[str, Any]:
     """Convert validated Workspace v2 ResumeData into BackendResumeData dict."""
-    if isinstance(data, ResumeDataModel):
-        src = data.model_dump(exclude_unset=True)
-    elif isinstance(data, dict):
+    if isinstance(data, dict):
         src = data
     else:
-        raise TypeError("convert_to_backend_format expects a validated ResumeData dict or ResumeDataModel")
+        from backend.cli.schema import ResumeDataModel
+
+        if isinstance(data, ResumeDataModel):
+            src = data.model_dump(exclude_unset=True)
+        else:
+            raise TypeError("convert_to_backend_format expects a validated ResumeData dict or ResumeDataModel")
 
     menu_sections = src["menuSections"]
     section_titles: dict[str, str] = {}
