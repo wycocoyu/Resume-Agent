@@ -1,0 +1,7 @@
+interface:
+  display_name: "Resume Agent"
+  short_description: "Create, validate, and render LaTeX PDF resumes via CLI"
+  default_prompt: "Use $resume-agent to initialize, validate, and render a polished PDF resume from my background."
+
+policy:
+  allow_implicit_invocation: true

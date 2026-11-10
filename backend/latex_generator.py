@@ -200,36 +200,94 @@ def _summarize_latex_error(error_msg: str, max_chars: int = 2000) -> str:
     return tail[:max_chars]
 
 
-def _download_user_photo_to_dir(photo_url: str, temp_dir: str) -> str | None:
+def _detect_xelatex_image_ext(raw_bytes: bytes) -> str | None:
+    """Strict magic-byte whitelist for XeLaTeX / xdvipdfmx (PNG, JPEG, PDF only; blocks WebP/SVG/HTML)."""
+    if not isinstance(raw_bytes, (bytes, bytearray)) or len(raw_bytes) < 4:
+        return None
+    head = bytes(raw_bytes[:16])
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if head.startswith(b"%PDF-"):
+        return ".pdf"
+    return None
+
+
+def _is_xelatex_supported_image(data_or_path: bytes | Path) -> bool:
+    """Return True iff bytes or file header match PNG, JPEG, or PDF magic bytes."""
+    if isinstance(data_or_path, Path):
+        try:
+            with data_or_path.open("rb") as fh:
+                head = fh.read(16)
+        except OSError:
+            return False
+        return _detect_xelatex_image_ext(head) is not None
+    return _detect_xelatex_image_ext(data_or_path) is not None
+
+
+def _strip_photo_block_from_latex(latex_content: str) -> str:
+    stripped_lines = []
+    for line in latex_content.splitlines():
+        if "{photo}" in line:
+            continue
+        if r"\vspace{-1.1\baselineskip}" in line:
+            continue
+        if r"\vspace{-0.8ex}" in line:
+            continue
+        stripped_lines.append(line)
+    return "\n".join(stripped_lines)
+
+
+def _append_warning(warnings_out: List[str] | None, message: str) -> None:
+    if warnings_out is not None and message not in warnings_out:
+        warnings_out.append(message)
+
+
+def _download_user_photo_to_dir(
+    photo_url: str,
+    temp_dir: str,
+    *,
+    offline: bool = False,
+) -> str | None:
     """
     下载用户照片到临时目录，固定命名为 photo.<ext>
-    返回本地文件名（不含路径），下载失败返回 None。
+    仅接受 http(s)://（严禁读取服务器本地路径），offline=True 或非支持魔数返回 None。
     """
+    if offline:
+        return None
     if not photo_url or not isinstance(photo_url, str):
         return None
     if not (photo_url.startswith("http://") or photo_url.startswith("https://")):
         return None
 
     try:
-        parsed = urllib.parse.urlparse(photo_url)
-        ext = Path(parsed.path).suffix.lower()
-        allowed_ext = {".png", ".jpg", ".jpeg", ".webp"}
-        if ext not in allowed_ext:
-            ext = ".png"
-
-        local_name = f"photo{ext}"
         logos_dir = Path(temp_dir) / "logos"
         logos_dir.mkdir(parents=True, exist_ok=True)
-        local_path = logos_dir / local_name
+        staging_path = logos_dir / "photo.download"
         from .company_logos import _download_url_to_path
 
-        _download_url_to_path(photo_url, local_path, timeout=15.0)
+        _download_url_to_path(photo_url, staging_path, timeout=15.0)
+        raw_bytes = staging_path.read_bytes()
+        staging_path.unlink(missing_ok=True)
+
+        detected_ext = _detect_xelatex_image_ext(raw_bytes)
+        if not detected_ext:
+            return None
+
+        local_name = f"photo{detected_ext}"
+        (logos_dir / local_name).write_bytes(raw_bytes)
         return local_name
     except Exception:
         return None
 
 
-def _sanitize_resume_for_latex(resume_data: Dict[str, Any]) -> Dict[str, Any]:
+def _sanitize_resume_for_latex(
+    resume_data: Dict[str, Any],
+    *,
+    offline: bool = False,
+    warnings_out: List[str] | None = None,
+) -> Dict[str, Any]:
     """
     LaTeX 与前端图片支持范围不同：前端可显示 svg/webp，但 XeLaTeX 不支持这些学校 Logo。
     在生成 LaTeX 前先降级掉不支持的学校 Logo，避免编译阶段引用不存在的资源。
@@ -241,7 +299,11 @@ def _sanitize_resume_for_latex(resume_data: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(item, dict):
                 continue
             logo_key = item.get("logo")
-            if logo_key and not is_school_logo_latex_supported(logo_key):
+            if logo_key and not is_school_logo_latex_supported(logo_key, offline=offline):
+                _append_warning(
+                    warnings_out,
+                    f"学校 Logo 未命中或格式不受 LaTeX 支持，已自动跳过: {logo_key}",
+                )
                 item.pop("logo", None)
                 item.pop("logoSize", None)
     return sanitized
@@ -289,19 +351,29 @@ def _sanitize_resume_for_available_assets(
     return sanitized
 
 
-def json_to_latex(resume_data: Dict[str, Any], section_order: List[str] = None) -> str:
+def json_to_latex(
+    resume_data: Dict[str, Any],
+    section_order: List[str] | None = None,
+    *,
+    offline: bool = False,
+    warnings_out: List[str] | None = None,
+) -> str:
     """
     将简历 JSON 转换为 LaTeX 代码
     支持中文和英文字段名，支持自定义 section 顺序
     
     参数:
         resume_data: 简历数据字典（中文或英文字段名）
-        section_order: 自定义 section 顺序列表
+        section_order: 自定义 section 顺序列表（None 回退默认顺序，[] 表示不输出任何正文模块）
     
     返回:
         LaTeX 代码字符串
     """
-    resume_data = _sanitize_resume_for_latex(resume_data)
+    resume_data = _sanitize_resume_for_latex(
+        resume_data,
+        offline=offline,
+        warnings_out=warnings_out,
+    )
 
     """标准化 JSON：先尝试通用方法，失败则降级到固定映射"""
     try:
@@ -491,8 +563,8 @@ def json_to_latex(resume_data: Dict[str, Any], section_order: List[str] = None) 
     """获取自定义模块标题"""
     section_titles = resume_data.get('sectionTitles') or {}
     
-    """按顺序生成各 section"""
-    order = section_order if section_order else DEFAULT_SECTION_ORDER
+    """按顺序生成各 section（严格区分 None 与空列表 []）"""
+    order = section_order if section_order is not None else DEFAULT_SECTION_ORDER
     for section_id in order:
         generator = SECTION_GENERATORS.get(section_id)
         if generator:
@@ -506,18 +578,73 @@ def json_to_latex(resume_data: Dict[str, Any], section_order: List[str] = None) 
     return "\n".join(latex_content)
 
 
-def compile_latex_to_pdf(latex_content: str, template_dir: Path, resume_data: Dict[str, Any] = None) -> BytesIO:
+def _filter_supported_logos_in_dir(
+    items: list,
+    asset_map: Dict[int, str],
+    temp_dir: str,
+    kind_label: str,
+    warnings_out: List[str] | None,
+) -> Dict[int, str]:
+    """Verify magic bytes on each downloaded/copied logo; strip unsupported files and emit warnings."""
+    logos_dir = Path(temp_dir) / "logos"
+    verified: Dict[int, str] = {}
+    unsupported_indices: set[int] = set()
+
+    for idx, fname in list(asset_map.items()):
+        fpath = logos_dir / fname
+        if _is_xelatex_supported_image(fpath):
+            verified[idx] = fname
+        else:
+            fpath.unlink(missing_ok=True)
+            unsupported_indices.add(idx)
+            logo_key = items[idx].get("logo") if idx < len(items) and isinstance(items[idx], dict) else fname
+            _append_warning(
+                warnings_out,
+                f"{kind_label} Logo 图片格式不受 XeLaTeX 支持（仅支持 PNG/JPEG/PDF），已自动跳过: {logo_key}",
+            )
+
+    for idx, item in enumerate(items or []):
+        if not isinstance(item, dict):
+            continue
+        logo_key = item.get("logo")
+        if logo_key and idx not in verified and idx not in unsupported_indices:
+            _append_warning(
+                warnings_out,
+                f"{kind_label} Logo 未命中，已自动跳过: {logo_key}",
+            )
+
+    return verified
+
+
+def compile_latex_to_pdf(
+    latex_content: str,
+    template_dir: Path,
+    resume_data: Dict[str, Any] = None,
+    *,
+    section_order: List[str] | None = None,
+    offline: bool = False,
+    local_photo_bytes: tuple[str, bytes] | None = None,
+    warnings_out: List[str] | None = None,
+) -> BytesIO:
     """
-    编译 LaTeX 代码为 PDF（简化版本）
+    编译 LaTeX 代码为 PDF
 
     参数:
         latex_content: LaTeX 代码字符串
         template_dir: LaTeX 模板目录（包含 resume.cls 等文件）
         resume_data: 简历数据（用于下载 Logo 等资源）
+        section_order: 显式传入的模块顺序（用于缺图二次重生成时保持 [] 空列表语义）
+        offline: True 时严格禁止任何网络请求
+        local_photo_bytes: CLI 边界已校验通过的本地/base64 头像字节 (ext, bytes)
+        warnings_out: 可选告警收集列表
 
     返回:
         PDF 文件的 BytesIO 对象
     """
+    template_dir = Path(template_dir)
+    if not template_dir.is_dir() or not (template_dir / "resume.cls").is_file():
+        raise RuntimeError(f"LaTeX 模板目录无效或缺少 resume.cls: {template_dir}")
+
     """创建临时目录"""
     temp_dir = tempfile.mkdtemp()
 
@@ -533,32 +660,46 @@ def compile_latex_to_pdf(latex_content: str, template_dir: Path, resume_data: Di
                 dest_file = Path(temp_dir) / file_name
                 shutil.copy2(src_file, dest_file)
             else:
-                print(f"[警告] 文件不存在: {file_name}")
+                raise RuntimeError(f"LaTeX 模板缺少必要文件: {src_file}")
 
         # 复制字体目录（如果存在）
         fonts_dir = template_dir / 'fonts'
         if fonts_dir.exists():
             shutil.copytree(fonts_dir, Path(temp_dir) / 'fonts', dirs_exist_ok=True)
 
-        # 下载公司 Logo 到临时目录
+        # 下载/复制公司与学校 Logo 到临时目录
         local_photo = None
-        logo_map = {}
-        school_logo_map = {}
-        work_logo_map = {}
+        logo_map: Dict[int, str] = {}
+        school_logo_map: Dict[int, str] = {}
+        work_logo_map: Dict[int, str] = {}
         if resume_data:
             internships = resume_data.get('internships') or []
-            if any(it.get('logo') for it in internships):
-                logo_map = download_logos_to_dir(internships, temp_dir)
+            if any(isinstance(it, dict) and it.get('logo') for it in internships):
+                logo_map = download_logos_to_dir(internships, temp_dir, offline=offline)
+                logo_map = _filter_supported_logos_in_dir(
+                    internships, logo_map, temp_dir, "实习经历", warnings_out
+                )
                 print(f"[Logo] 下载完成，共 {len(logo_map)} 个 Logo")
             work_experience = resume_data.get('workExperience') or []
-            if any(it.get('logo') for it in work_experience):
+            if any(isinstance(it, dict) and it.get('logo') for it in work_experience):
                 work_logo_map = download_logos_to_dir(
-                    work_experience, temp_dir, prefix=WORK_EXPERIENCE_LOGO_PREFIX
+                    work_experience,
+                    temp_dir,
+                    prefix=WORK_EXPERIENCE_LOGO_PREFIX,
+                    offline=offline,
+                )
+                work_logo_map = _filter_supported_logos_in_dir(
+                    work_experience, work_logo_map, temp_dir, "工作经历", warnings_out
                 )
                 print(f"[Logo] 工作经历下载完成，共 {len(work_logo_map)} 个 Logo")
             education = resume_data.get('education') or []
-            if any(ed.get('logo') for ed in education):
-                school_logo_map = download_school_logos_to_dir(education, temp_dir)
+            if any(isinstance(ed, dict) and ed.get('logo') for ed in education):
+                school_logo_map = download_school_logos_to_dir(
+                    education, temp_dir, offline=offline
+                )
+                school_logo_map = _filter_supported_logos_in_dir(
+                    education, school_logo_map, temp_dir, "教育经历", warnings_out
+                )
                 print(f"[SchoolLogo] 下载完成，共 {len(school_logo_map)} 个 Logo")
 
             sanitized_for_assets = _sanitize_resume_for_available_assets(
@@ -568,27 +709,56 @@ def compile_latex_to_pdf(latex_content: str, template_dir: Path, resume_data: Di
                 work_logo_map=work_logo_map,
             )
             if sanitized_for_assets != resume_data:
+                effective_order = (
+                    section_order
+                    if section_order is not None
+                    else sanitized_for_assets.get("sectionOrder")
+                )
+                if local_photo_bytes is not None and not sanitized_for_assets.get("photo"):
+                    sanitized_for_assets["photo"] = "__cli_local_photo__"
                 latex_content = json_to_latex(
                     sanitized_for_assets,
-                    sanitized_for_assets.get("sectionOrder"),
+                    effective_order,
+                    offline=offline,
+                    warnings_out=warnings_out,
                 )
 
             photo_url = resume_data.get("photo")
-            if photo_url:
-                local_photo = _download_user_photo_to_dir(photo_url, temp_dir)
+            if local_photo_bytes is not None:
+                _, raw_photo_bytes = local_photo_bytes
+                detected_ext = _detect_xelatex_image_ext(raw_photo_bytes)
+                if not detected_ext:
+                    _append_warning(
+                        warnings_out,
+                        "本地头像格式不受 XeLaTeX 支持（仅支持 PNG/JPEG/PDF），已自动降级为无照片渲染",
+                    )
+                    latex_content = _strip_photo_block_from_latex(latex_content)
+                else:
+                    logos_dir = Path(temp_dir) / "logos"
+                    logos_dir.mkdir(parents=True, exist_ok=True)
+                    local_photo = f"photo{detected_ext}"
+                    (logos_dir / local_photo).write_bytes(raw_photo_bytes)
+            elif photo_url:
+                if offline and isinstance(photo_url, str) and (
+                    photo_url.startswith("http://") or photo_url.startswith("https://")
+                ):
+                    _append_warning(
+                        warnings_out,
+                        f"离线模式已跳过远程头像下载，已降级为无照片渲染: {photo_url}",
+                    )
+                    local_photo = None
+                else:
+                    local_photo = _download_user_photo_to_dir(
+                        photo_url, temp_dir, offline=offline
+                    )
+                    if not local_photo:
+                        _append_warning(
+                            warnings_out,
+                            f"头像资源不可用或格式不支持，已降级为无照片渲染: {photo_url}",
+                        )
                 if not local_photo:
                     print("[Photo] 下载失败，已自动降级为无照片渲染")
-                    # 避免 LaTeX includegraphics{photo} 找不到文件导致编译失败
-                    stripped_lines = []
-                    for line in latex_content.splitlines():
-                        if "{photo}" in line:
-                            continue
-                        if r"\vspace{-1.1\baselineskip}" in line:
-                            continue
-                        if r"\vspace{-0.8ex}" in line:
-                            continue
-                        stripped_lines.append(line)
-                    latex_content = "\n".join(stripped_lines)
+                    latex_content = _strip_photo_block_from_latex(latex_content)
 
         # 写入 LaTeX 文件
         tex_file = Path(temp_dir) / 'resume.tex'
@@ -665,13 +835,20 @@ _pdf_cache_order: List[str] = []
 _PDF_CACHE_MAX_SIZE = 50
 
 
-def _get_cache_key(resume_data: Dict[str, Any], section_order: List[str] = None) -> str:
-    """生成缓存键"""
-    content = json.dumps(resume_data, sort_keys=True, ensure_ascii=False) + str(section_order or [])
+def _get_cache_key(resume_data: Dict[str, Any], section_order: List[str] | None = None) -> str:
+    """生成缓存键（严格区分 section_order=None 与 section_order=[]）"""
+    content = json.dumps(
+        {"resume_data": resume_data, "section_order": section_order},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
     return hashlib.md5(content.encode()).hexdigest()
 
 
-def render_pdf_from_resume_latex(resume_data: Dict[str, Any], section_order: List[str] = None) -> BytesIO:
+def render_pdf_from_resume_latex(
+    resume_data: Dict[str, Any],
+    section_order: List[str] | None = None,
+) -> BytesIO:
     """
     将简历 JSON 渲染为 PDF（使用 LaTeX）
     支持内容缓存，相同内容直接返回缓存
@@ -709,7 +886,12 @@ def render_pdf_from_resume_latex(resume_data: Dict[str, Any], section_order: Lis
     
     """编译为 PDF"""
     compile_start = time.time()
-    pdf_io = compile_latex_to_pdf(latex_content, template_dir, resume_data=resume_data)
+    pdf_io = compile_latex_to_pdf(
+        latex_content,
+        template_dir,
+        resume_data=resume_data,
+        section_order=section_order,
+    )
     compile_time = time.time() - compile_start
     print(f"[性能] LaTeX 编译 PDF: {compile_time*1000:.0f}ms")
     

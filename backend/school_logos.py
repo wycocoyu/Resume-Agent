@@ -253,23 +253,51 @@ def get_grouped_school_logos_with_urls() -> list[dict]:
     return []
 
 
+def _is_safe_school_logo_key(key: str) -> bool:
+    if not isinstance(key, str) or not key.strip():
+        return False
+    if "/" in key or "\\" in key or ".." in key or "\x00" in key:
+        return False
+    if Path(key).is_absolute():
+        return False
+    return True
+
+
+def _resolve_within_school_logo_dir(candidate: Path) -> Path | None:
+    try:
+        base_dir = LOCAL_SCHOOL_LOGO_DIR.resolve()
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(base_dir):
+        return None
+    return resolved if resolved.is_file() else None
+
+
 def get_school_logo_local_path(key: str) -> Path | None:
+    if not _is_safe_school_logo_key(key):
+        return None
     local_logos, _ = _scan_local_school_logos()
     if not local_logos:
         return None
     filename = _local_key_to_file.get(key)
     if filename:
-        p = LOCAL_SCHOOL_LOGO_DIR / filename
-        if p.is_file():
-            return p
-    for ext in LOCAL_SCHOOL_LOGO_EXTS:
-        for p in LOCAL_SCHOOL_LOGO_DIR.rglob(f"{key}{ext}"):
-            if p.is_file():
-                return p
+        found = _resolve_within_school_logo_dir(LOCAL_SCHOOL_LOGO_DIR / filename)
+        if found:
+            return found
+    for p in LOCAL_SCHOOL_LOGO_DIR.rglob("*"):
+        if p.stem == key and p.suffix.lower() in LOCAL_SCHOOL_LOGO_EXTS:
+            found = _resolve_within_school_logo_dir(p)
+            if found:
+                return found
     return None
 
 
-def is_school_logo_latex_supported(key: str) -> bool:
+def is_school_logo_latex_supported(key: str, *, offline: bool = False) -> bool:
+    if offline:
+        path = get_school_logo_local_path(key)
+        return bool(path and path.suffix.lower() in LATEX_SUPPORTED_EXTS)
+
     get_all_school_logos_with_urls()
     if _using_local:
         path = get_school_logo_local_path(key)
@@ -293,8 +321,14 @@ def get_school_logo_cos_url(key: str) -> str | None:
     return f"{COS_BASE_URL}/{urllib.request.quote(object_key, safe='/')}"
 
 
-def download_school_logos_to_dir(education_list: list, target_dir: str) -> dict[int, str]:
-    get_all_school_logos_with_urls()
+def download_school_logos_to_dir(
+    education_list: list,
+    target_dir: str,
+    *,
+    offline: bool = False,
+) -> dict[int, str]:
+    if not offline:
+        get_all_school_logos_with_urls()
     logos_dir = Path(target_dir) / "logos"
     logo_map: dict[int, str] = {}
 
@@ -304,7 +338,7 @@ def download_school_logos_to_dir(education_list: list, target_dir: str) -> dict[
             continue
 
         logos_dir.mkdir(parents=True, exist_ok=True)
-        if _using_local:
+        if offline or _using_local:
             src = get_school_logo_local_path(logo_key)
             if not src or not src.is_file():
                 continue

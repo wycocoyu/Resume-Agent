@@ -371,17 +371,42 @@ def get_logo_cos_url(key: str) -> str | None:
     return f"{COS_BASE_URL}/{urllib.request.quote(filename)}"
 
 
+def _is_safe_logo_key(key: str) -> bool:
+    """Reject empty keys, path separators, parent traversal, NUL bytes, and absolute paths."""
+    if not isinstance(key, str) or not key.strip():
+        return False
+    if "/" in key or "\\" in key or ".." in key or "\x00" in key:
+        return False
+    if Path(key).is_absolute():
+        return False
+    return True
+
+
+def _resolve_within_logo_dir(candidate: Path) -> Path | None:
+    try:
+        base_dir = LOCAL_LOGO_DIR.resolve()
+        resolved = candidate.resolve()
+    except OSError:
+        return None
+    if not resolved.is_relative_to(base_dir):
+        return None
+    return resolved if resolved.is_file() else None
+
+
 def get_logo_local_path(key: str) -> Path | None:
     """根据 key 返回本地 Logo 文件路径，供接口和 PDF 兜底复制使用。key 可为英文或中文。"""
+    if not _is_safe_logo_key(key):
+        return None
     _scan_local_logos()
     filename = _local_key_to_file.get(key)
     if filename:
-        p = LOCAL_LOGO_DIR / filename
-        return p if p.is_file() else None
+        found = _resolve_within_logo_dir(LOCAL_LOGO_DIR / filename)
+        if found:
+            return found
     for ext in LOCAL_LOGO_EXTS:
-        p = LOCAL_LOGO_DIR / f"{key}{ext}"
-        if p.is_file():
-            return p
+        found = _resolve_within_logo_dir(LOCAL_LOGO_DIR / f"{key}{ext}")
+        if found:
+            return found
     return None
 
 
@@ -394,10 +419,15 @@ def _download_url_to_path(url: str, local_path: Path, timeout: float = 15.0) -> 
 
 
 def download_logos_to_dir(
-    internships: list, target_dir: str, prefix: str = 'logo'
+    internships: list,
+    target_dir: str,
+    prefix: str = 'logo',
+    *,
+    offline: bool = False,
 ) -> dict[int, str]:
     """
-    将 internships 中用到的 Logo 写入目标目录：优先从 COS 下载，失败时回退本地复制
+    将 internships 中用到的 Logo 写入目标目录：优先从 COS 下载，失败时回退本地复制。
+    offline=True 时严格只读本地 images/logo/，绝不发起任何 COS/HTTP 网络请求。
 
     prefix 决定文件名（`{prefix}_{idx}.png`），必须与渲染端
     latex_sections.generate_section_internships 的 logo_prefix 一致。
@@ -405,7 +435,10 @@ def download_logos_to_dir(
 
     返回: { index: local_filename } 映射，如 { 0: 'logo_0.png', 2: 'logo_2.png' }
     """
-    get_all_logos_with_urls()
+    if offline:
+        _scan_local_logos()
+    else:
+        get_all_logos_with_urls()
 
     logos_dir = Path(target_dir) / 'logos'
     logo_map = {}
@@ -419,16 +452,17 @@ def download_logos_to_dir(
         local_filename = f'{prefix}_{idx}.png'
         local_path = logos_dir / local_filename
 
-        cos_url = get_logo_cos_url(logo_key)
-        if cos_url:
-            try:
-                print(f"[Logo] 下载: {cos_url} -> {local_path}")
-                _download_url_to_path(cos_url, local_path)
-                logo_map[idx] = local_filename
-                print(f"[Logo] 下载成功: {local_filename} ({local_path.stat().st_size} bytes)")
-                continue
-            except Exception as e:
-                print(f"[Logo] 下载失败 ({logo_key})，回退本地: {e}")
+        if not offline:
+            cos_url = get_logo_cos_url(logo_key)
+            if cos_url:
+                try:
+                    print(f"[Logo] 下载: {cos_url} -> {local_path}")
+                    _download_url_to_path(cos_url, local_path)
+                    logo_map[idx] = local_filename
+                    print(f"[Logo] 下载成功: {local_filename} ({local_path.stat().st_size} bytes)")
+                    continue
+                except Exception as e:
+                    print(f"[Logo] 下载失败 ({logo_key})，回退本地: {e}")
 
         src = get_logo_local_path(logo_key)
         if src:
@@ -439,6 +473,6 @@ def download_logos_to_dir(
             except Exception as e:
                 print(f"[Logo] 本地复制失败 ({logo_key}): {e}")
         else:
-            print(f"[Logo] COS 与本地均未找到 Logo key: {logo_key}")
+            print(f"[Logo] {'本地' if offline else 'COS 与本地'}均未找到 Logo key: {logo_key}")
 
     return logo_map
