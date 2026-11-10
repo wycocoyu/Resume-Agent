@@ -261,7 +261,6 @@ class ResumeDataModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Required top-level keys (R2)
     id: NonEmptyStrictStr
     title: StrictStr
     createdAt: StrictStr
@@ -281,7 +280,6 @@ class ResumeDataModel(BaseModel):
     menuSections: list[MenuSectionModel]
     globalSettings: GlobalSettingsModel
 
-    # Optional top-level keys (R2)
     templateType: Literal["latex", "html"] | None = None
     alias: StrictStr | None = None
     workExperience: list[ExperienceModel] | None = None

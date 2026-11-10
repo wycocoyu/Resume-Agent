@@ -7,10 +7,8 @@ from datetime import date
 from typing import Any
 
 from backend.cli.schema import ResumeDataModel
+from backend.latex_utils import strip_html_tags
 
-_BR_DIV_P_RE = re.compile(r"<\s*(?:br|div|p)\s*/?>", re.IGNORECASE)
-_ANY_TAG_RE = re.compile(r"<[^>]+>")
-_MULTI_SPACE_RE = re.compile(r"\s+")
 _BIRTH_DATE_RE = re.compile(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$")
 _COMPACT_TOKEN_RE = re.compile(r"[\s：:·\-]")
 _MIDDLE_DOT_SPLIT_RE = re.compile(r"\s*·\s*")
@@ -27,15 +25,6 @@ SECTION_ID_MAPPING: dict[str, str] = {
     "awards": "awards",
     "education": "education",
 }
-
-
-def strip_html_tags(text: str) -> str:
-    """Strip HTML tags and normalize whitespace identically to textUtils.ts:stripHtmlTags."""
-    if not text:
-        return text
-    result = _BR_DIV_P_RE.sub(" ", text)
-    result = _ANY_TAG_RE.sub("", result)
-    return _MULTI_SPACE_RE.sub(" ", result).strip()
 
 
 def _is_js_number(value: Any) -> bool:
