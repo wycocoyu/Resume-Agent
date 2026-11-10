@@ -4,6 +4,7 @@ LaTeX 简历生成模块
 """
 import os
 import re
+import struct
 import subprocess
 import tempfile
 import shutil
@@ -817,8 +818,8 @@ LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
         if not pdf_file.exists():
             raise RuntimeError("PDF 文件未生成")
 
-        # 读取 PDF
-        pdf_bytes = pdf_file.read_bytes()
+        # 读取 PDF 并补齐 CJK CIDFontType0 缺失的 ToUnicode CMap（避免无 cMapUrl 的 pdf.js 预览器丢失中文字形）
+        pdf_bytes = _ensure_cjk_tounicode_cmaps(pdf_file.read_bytes(), template_dir)
         print(f"PDF 生成成功，大小: {len(pdf_bytes)} 字节")
 
         pdf_io = BytesIO(pdf_bytes)
@@ -829,6 +830,203 @@ LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
     finally:
         """清理临时目录"""
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+_OTF_GID_UNICODE_CACHE: Dict[str, Dict[int, int]] = {}
+_CJK_FONT_FILES: Dict[str, str] = {
+    "AdobeHeitiStd-Regular": "AdobeHeitiStd-Regular.otf",
+    "AdobeSongStd-Light": "AdobeSongStd-Light.otf",
+    "AdobeKaitiStd-Regular": "AdobeKaitiStd-Regular.otf",
+    "AdobeFangsongStd-Regular": "AdobeFangsongStd-Regular.otf",
+}
+
+
+def _codepoint_priority(code: int) -> int:
+    """Prefer standard CJK Unified Ideographs (U+4E00..U+9FFF) over Kangxi/CJK radicals and compatibility blocks."""
+    if 0x4E00 <= code <= 0x9FFF:
+        return 3
+    if 0x2E80 <= code <= 0x2FDF or 0xF900 <= code <= 0xFAFF:
+        return 0
+    return 2
+
+
+def _parse_otf_gid_to_unicode(otf_path: Path) -> Dict[int, int]:
+    """Parse OpenType cmap (Format 12 / Format 4) mapping GID/CID -> canonical Unicode codepoint."""
+    cache_key = str(otf_path.resolve())
+    cached = _OTF_GID_UNICODE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    if not otf_path.is_file():
+        return {}
+
+    otf_bytes = otf_path.read_bytes()
+    _, num_tables = struct.unpack_from(">4sH", otf_bytes, 0)
+    tables: Dict[str, tuple[int, int]] = {}
+    for i in range(num_tables):
+        tag, _, offset, length = struct.unpack_from(">4sIII", otf_bytes, 12 + i * 16)
+        tables[tag.decode("latin1", errors="ignore")] = (offset, length)
+    if "cmap" not in tables:
+        return {}
+
+    cmap_off, _ = tables["cmap"]
+    _, num_sub = struct.unpack_from(">HH", otf_bytes, cmap_off)
+    sub_off: int | None = None
+    for i in range(num_sub):
+        _, _, rel_off = struct.unpack_from(">HHI", otf_bytes, cmap_off + 4 + i * 8)
+        fmt = struct.unpack_from(">H", otf_bytes, cmap_off + rel_off)[0]
+        if fmt == 12:
+            sub_off = cmap_off + rel_off
+            break
+        if fmt == 4 and sub_off is None:
+            sub_off = cmap_off + rel_off
+    if sub_off is None:
+        return {}
+
+    gid_to_uni: Dict[int, int] = {}
+    fmt = struct.unpack_from(">H", otf_bytes, sub_off)[0]
+    if fmt == 12:
+        _, _, num_groups = struct.unpack_from(">III", otf_bytes, sub_off + 4)
+        pos = sub_off + 16
+        for _ in range(num_groups):
+            start_code, end_code, start_gid = struct.unpack_from(">III", otf_bytes, pos)
+            pos += 12
+            for code in range(start_code, end_code + 1):
+                gid = start_gid + (code - start_code)
+                prev = gid_to_uni.get(gid)
+                if prev is None or _codepoint_priority(code) > _codepoint_priority(prev):
+                    gid_to_uni[gid] = code
+    elif fmt == 4:
+        seg_count_x2 = struct.unpack_from(">H", otf_bytes, sub_off + 6)[0]
+        seg_count = seg_count_x2 // 2
+        end_off = sub_off + 14
+        start_off = end_off + seg_count_x2 + 2
+        delta_off = start_off + seg_count_x2
+        range_off = delta_off + seg_count_x2
+        for i in range(seg_count):
+            end_c = struct.unpack_from(">H", otf_bytes, end_off + i * 2)[0]
+            start_c = struct.unpack_from(">H", otf_bytes, start_off + i * 2)[0]
+            delta = struct.unpack_from(">h", otf_bytes, delta_off + i * 2)[0]
+            r_off = struct.unpack_from(">H", otf_bytes, range_off + i * 2)[0]
+            if start_c == 0xFFFF:
+                break
+            for code in range(start_c, end_c + 1):
+                if r_off == 0:
+                    gid = (code + delta) & 0xFFFF
+                else:
+                    glyph_idx_off = range_off + i * 2 + r_off + (code - start_c) * 2
+                    gid = struct.unpack_from(">H", otf_bytes, glyph_idx_off)[0]
+                    if gid != 0:
+                        gid = (gid + delta) & 0xFFFF
+                if gid:
+                    prev = gid_to_uni.get(gid)
+                    if prev is None or _codepoint_priority(code) > _codepoint_priority(prev):
+                        gid_to_uni[gid] = code
+
+    _OTF_GID_UNICODE_CACHE[cache_key] = gid_to_uni
+    return gid_to_uni
+
+
+def _build_tounicode_cmap_stream(font_name: str, pairs: List[tuple[int, int]]) -> bytes:
+    lines = [
+        "/CIDInit /ProcSet findresource begin",
+        "12 dict begin",
+        "begincmap",
+        f"/CMapName /{font_name}-UTF16 def",
+        "/CMapType 2 def",
+        "/CIDSystemInfo <<",
+        "  /Registry (Adobe)",
+        "  /Ordering (UCS)",
+        "  /Supplement 0",
+        ">> def",
+        "1 begincodespacerange",
+        "<0000> <FFFF>",
+        "endcodespacerange",
+    ]
+    for i in range(0, len(pairs), 100):
+        chunk = pairs[i : i + 100]
+        lines.append(f"{len(chunk)} beginbfchar")
+        for cid, uni in chunk:
+            utf16_hex = chr(uni).encode("utf-16-be").hex().upper()
+            lines.append(f"<{cid:04X}> <{utf16_hex}>")
+        lines.append("endbfchar")
+    lines.extend(
+        [
+            "endcmap",
+            "CMapName currentdict /CMap defineresource pop",
+            "end",
+            "end",
+            "",
+        ]
+    )
+    return "\n".join(lines).encode("ascii")
+
+
+def _ensure_cjk_tounicode_cmaps(pdf_bytes: bytes, template_dir: Path) -> bytes:
+    """Attach embedded /ToUnicode CMap streams to Adobe-GB1 CIDFontType0 fonts when omitted by xdvipdfmx."""
+    try:
+        import fitz
+    except ImportError:
+        return pdf_bytes
+
+    cjk_dir = Path(template_dir) / "fonts" / "zh_CN-Adobe"
+    if not cjk_dir.is_dir():
+        return pdf_bytes
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    modified = False
+    try:
+        for xref in range(1, doc.xref_length()):
+            obj = doc.xref_object(xref)
+            if "/Subtype /Type0" not in obj or "/ToUnicode" in obj:
+                continue
+            m_desc = re.search(r"/DescendantFonts\s*\[\s*(\d+)\s+0\s+R\s*\]", obj)
+            if not m_desc:
+                continue
+            desc_obj = doc.xref_object(int(m_desc.group(1)))
+            matched_name: str | None = None
+            matched_file: str | None = None
+            for font_key, filename in _CJK_FONT_FILES.items():
+                if font_key in desc_obj or font_key in obj:
+                    matched_name = font_key
+                    matched_file = filename
+                    break
+            if not matched_name or not matched_file:
+                continue
+            gid_to_uni = _parse_otf_gid_to_unicode(cjk_dir / matched_file)
+            if not gid_to_uni:
+                continue
+            m_fdesc = re.search(r"/FontDescriptor\s+(\d+)\s+0\s+R", desc_obj)
+            if not m_fdesc:
+                continue
+            fdesc_obj = doc.xref_object(int(m_fdesc.group(1)))
+            m_cidset = re.search(r"/CIDSet\s+(\d+)\s+0\s+R", fdesc_obj)
+            if not m_cidset:
+                continue
+            cidset_bytes = doc.xref_stream(int(m_cidset.group(1)))
+            used_pairs: List[tuple[int, int]] = []
+            for byte_idx, bval in enumerate(cidset_bytes):
+                if bval == 0:
+                    continue
+                for bit in range(8):
+                    if bval & (0x80 >> bit):
+                        cid = byte_idx * 8 + bit
+                        uni = gid_to_uni.get(cid)
+                        if uni is not None and cid <= 0xFFFF:
+                            used_pairs.append((cid, uni))
+            if not used_pairs:
+                continue
+            cmap_bytes = _build_tounicode_cmap_stream(matched_name, used_pairs)
+            tu_xref = doc.get_new_xref()
+            doc.update_object(tu_xref, "<< >>")
+            doc.update_stream(tu_xref, cmap_bytes)
+            doc.xref_set_key(xref, "ToUnicode", f"{tu_xref} 0 R")
+            modified = True
+
+        if not modified:
+            return pdf_bytes
+        return doc.tobytes(garbage=1, deflate=True)
+    finally:
+        doc.close()
 
 
 """

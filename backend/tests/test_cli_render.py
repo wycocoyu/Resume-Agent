@@ -463,6 +463,14 @@ def test_special_char_urls_and_custom_section_reordering_compile_cleanly(
         text = doc[0].get_text()
         assert "陈九" in text
         assert text.index("OSDI") < text.index("云原生网关") < text.index("raft_kv")
+        type0_xrefs = [
+            xref
+            for xref in range(1, doc.xref_length())
+            if "/Subtype /Type0" in doc.xref_object(xref)
+        ]
+        assert type0_xrefs, "Expected Type0 fonts in rendered PDF"
+        for xref in type0_xrefs:
+            assert "/ToUnicode" in doc.xref_object(xref), f"Missing /ToUnicode on Type0 font XREF {xref}"
 
 
 def test_download_url_to_path_enforces_max_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
