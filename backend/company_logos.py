@@ -410,12 +410,23 @@ def get_logo_local_path(key: str) -> Path | None:
     return None
 
 
-def _download_url_to_path(url: str, local_path: Path, timeout: float = 15.0) -> None:
-    """带超时的 HTTP 下载，避免 PDF 编译阶段 urlretrieve 无限挂起。"""
+_MAX_REMOTE_ASSET_BYTES = 20 * 1024 * 1024
+
+
+def _download_url_to_path(
+    url: str,
+    local_path: Path,
+    timeout: float = 15.0,
+    max_bytes: int = _MAX_REMOTE_ASSET_BYTES,
+) -> None:
+    """带超时与最大字节上限的 HTTP 下载，避免 PDF 编译阶段无限挂起或超大响应撑爆内存。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     req = urllib.request.Request(url, headers={"User-Agent": "Resume-Agent/1.0"})
     with opener.open(req, timeout=timeout) as resp:
-        local_path.write_bytes(resp.read())
+        data = resp.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError(f"Remote asset exceeds {max_bytes} bytes limit: {url}")
+        local_path.write_bytes(data)
 
 
 def download_logos_to_dir(

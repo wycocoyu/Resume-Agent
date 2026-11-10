@@ -362,3 +362,127 @@ def test_render_failure_modes_leave_no_corrupt_pdf(
     assert code_tex == 1
     assert payload_tex["error"]["code"] == "render_failed"
     assert not out_no_tex.exists()
+
+
+def test_compile_latex_to_pdf_with_none_resume_data_still_embeds_local_photo_bytes() -> None:
+    template_dir = Path(__file__).resolve().parents[2] / "latex-resume-template"
+    tex = latex_generator.json_to_latex(
+        {"name": "无简历字典头像用户", "photo": "__cli_local_photo__", "contact": {}},
+        section_order=[],
+        offline=True,
+    )
+    pdf_io = latex_generator.compile_latex_to_pdf(
+        tex,
+        template_dir,
+        resume_data=None,
+        local_photo_bytes=(".png", _make_valid_png_bytes(10, 10)),
+        offline=True,
+    )
+    with fitz.open(stream=pdf_io.getvalue(), filetype="pdf") as doc:
+        assert len(doc[0].get_images()) >= 1
+        assert "无简历字典头像用户" in doc[0].get_text()
+
+
+@pytest.mark.parametrize("display_mode", ["below", "inline", "icon"])
+def test_special_char_urls_and_custom_section_reordering_compile_cleanly(
+    display_mode: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resume = build_initial_resume(title="复杂URL与排序测试")
+    resume["templateType"] = "html"
+    resume["basic"].update(
+        {
+            "name": "陈九",
+            "title": "分布式系统工程师",
+            "email": "chen_jiu@example.com",
+            "phone": "13500009999",
+            "location": "杭州",
+            "blog": "https://github.com/chen_jiu/~notes?tab=repos&pct=100%25#top_anchor",
+        }
+    )
+    resume["globalSettings"]["openSourceRepoDisplay"] = display_mode
+    resume["globalSettings"]["projectLinkDisplay"] = display_mode
+    # Reorder menuSections: custom_research first, then projects, then openSource
+    resume["menuSections"] = [
+        {"id": "basic", "title": "基本信息", "icon": "👤", "enabled": True, "order": 0},
+        {"id": "custom_research", "title": "科研成果", "icon": "🔬", "enabled": True, "order": 1},
+        {"id": "projects", "title": "核心项目", "icon": "🚀", "enabled": True, "order": 2},
+        {"id": "openSource", "title": "开源贡献", "icon": "🔗", "enabled": True, "order": 3},
+    ]
+    resume["customData"] = {
+        "custom_research": [
+            {
+                "id": "cr_1",
+                "title": "OSDI 论文一作",
+                "subtitle": "系统方向",
+                "dateRange": "2025.05",
+                "description": '<ul><li><p>延迟降低 40% &amp; 吞吐提升 2x</p><ol><li><p>子步骤 #1</p></li></ol></li></ul>',
+                "visible": True,
+            }
+        ]
+    }
+    resume["projects"] = [
+        {
+            "id": "p_1",
+            "name": "云原生网关",
+            "role": "负责人",
+            "date": "2024.03 - 2025.02",
+            "link": "https://github.com/chen_jiu/gw_core?x=1&y=2%20ok#arch_v2",
+            "description": '<p>文档：<a href="https://example.com/a_b?c=1&amp;d=2#sec_1">设计说明_v2</a></p>',
+            "visible": True,
+        }
+    ]
+    resume["openSource"] = [
+        {
+            "id": "os_1",
+            "name": "raft_kv",
+            "role": "Maintainer",
+            "repo": "https://github.com/chen_jiu/raft_kv?ref=v1_0&lang=zh%20CN#design",
+            "description": "<p>实现 Raft 选主与日志复制</p>",
+            "visible": True,
+        }
+    ]
+
+    in_json = _write_resume(tmp_path / f"urls_{display_mode}.json", resume)
+    out_pdf = tmp_path / f"urls_{display_mode}.pdf"
+
+    # Exercise human-readable render output on 'below', JSON mode on others
+    if display_mode == "below":
+        code = run_cli(["render", str(in_json), "-o", str(out_pdf)])
+        captured = capsys.readouterr()
+        assert code == 0, captured.err
+        assert "Rendered PDF to " in captured.out
+        assert "Warning:" in captured.err
+    else:
+        code = run_cli(["render", str(in_json), "-o", str(out_pdf), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0, payload
+
+    with fitz.open(out_pdf) as doc:
+        text = doc[0].get_text()
+        assert "陈九" in text
+        assert text.index("OSDI") < text.index("云原生网关") < text.index("raft_kv")
+
+
+def test_download_url_to_path_enforces_max_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, n: int = -1) -> bytes:
+            return b"x" * n
+
+    class _FakeOpener:
+        def open(self, req, timeout=None):
+            return _FakeResp()
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *a, **kw: _FakeOpener())
+    dest = tmp_path / "oversized.bin"
+    with pytest.raises(ValueError, match="exceeds"):
+        company_logos._download_url_to_path("https://example.com/big.png", dest, max_bytes=64)
+    assert not dest.exists()
+

@@ -282,3 +282,44 @@ def test_external_cwd_subprocess_smoke(tmp_path: Path) -> None:
     bad_obj = json.loads(res_bad.stdout)
     assert bad_obj["ok"] is False
     assert bad_obj["error"]["code"] == "usage_error"
+
+
+@pytest.mark.parametrize(
+    "help_argv",
+    [
+        ["--help", "--json"],
+        ["render", "--help", "--json"],
+        ["sync", "--help", "--json"],
+        ["sync", "list", "--help", "--json"],
+    ],
+)
+def test_help_with_json_flag_emits_single_valid_json_object(
+    help_argv: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code, payload, _ = _invoke_json(help_argv, capsys)
+    assert code == 0
+    assert payload["ok"] is True
+    assert "Usage:" in payload["help"]
+
+
+def test_human_mode_output_and_option_value_json_not_misdetected(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out_file = tmp_path / "human.json"
+    # "--json" here is the value of --title, NOT the --json flag
+    code_init = run_cli(["init", "-o", str(out_file), "--title", "--json"])
+    cap_init = capsys.readouterr()
+    assert code_init == 0
+    assert cap_init.out.startswith("Initialized resume skeleton at ")
+    assert not cap_init.out.lstrip().startswith("{")
+
+    raw = json.loads(out_file.read_text(encoding="utf-8"))
+    assert raw["title"] == "--json"
+
+    code_val = run_cli(["validate", str(out_file)])
+    cap_val = capsys.readouterr()
+    assert code_val == 0
+    assert cap_val.out.startswith("Valid ResumeData: ")
+

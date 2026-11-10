@@ -29,6 +29,9 @@ app = typer.Typer(
 def get_output_context(ctx: typer.Context, local_json: bool = False) -> tuple[bool, TextIO]:
     state: dict[str, Any] = ctx.ensure_object(dict)
     json_mode = bool(state.get("json_mode") or local_json)
+    if json_mode:
+        state["json_mode"] = True
+    state["command_entered"] = True
     stdout_stream: TextIO = state.get("stdout") or sys.stdout
     return json_mode, stdout_stream
 
@@ -209,23 +212,48 @@ _ABORT_EXC = tuple({click.exceptions.Abort, _typer_click.exceptions.Abort, typer
 
 def run_cli(argv: Sequence[str] | None = None) -> int:
     """Execute CLI with deterministic exit codes (0=ok, 1=runtime/business, 2=usage) and pure --json stdout."""
-    args = list(argv) if argv is not None else sys.argv[1:]
-    json_mode = has_json_flag(args)
-    real_stdout = sys.stdout
-    ctx_obj = {"json_mode": json_mode, "stdout": real_stdout}
+    import io
 
+    args = list(argv) if argv is not None else sys.argv[1:]
+    pre_json_mode = has_json_flag(args)
+    real_stdout = sys.stdout
+    ctx_obj: dict[str, Any] = {"json_mode": False, "stdout": real_stdout}
+
+    captured_stdout: io.StringIO | None = io.StringIO() if pre_json_mode else None
     redirect_ctx = (
-        contextlib.redirect_stdout(sys.stderr)
-        if json_mode
+        contextlib.redirect_stdout(captured_stdout)
+        if captured_stdout is not None
         else contextlib.nullcontext()
     )
 
     try:
         with redirect_ctx:
-            app(args=args, prog_name="resume-agent", standalone_mode=False, obj=ctx_obj)
-        return 0
+            ret_val = app(args=args, prog_name="resume-agent", standalone_mode=False, obj=ctx_obj)
+        exit_code = int(ret_val) if isinstance(ret_val, int) else 0
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json and not ctx_obj.get("command_entered"):
+            text_out = (captured_stdout.getvalue() if captured_stdout is not None else "").strip()
+            if exit_code == 0:
+                emit_json({"ok": True, "help": text_out}, stream=real_stdout)
+            else:
+                emit_json(
+                    {
+                        "ok": False,
+                        "error": {"code": "cli_exit", "message": text_out or f"Exited with code {exit_code}"},
+                    },
+                    stream=real_stdout,
+                )
+            return exit_code
+        if captured_stdout is not None and captured_stdout.getvalue():
+            sys.stderr.write(captured_stdout.getvalue())
+            sys.stderr.flush()
+        return exit_code
     except CLIError as exc:
-        if json_mode:
+        if captured_stdout is not None and captured_stdout.getvalue():
+            sys.stderr.write(captured_stdout.getvalue())
+            sys.stderr.flush()
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
             payload: dict[str, Any] = {"ok": False}
             payload.update(exc.extra)
             payload["error"] = {"code": exc.code, "message": exc.message}
@@ -238,7 +266,11 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             sys.stderr.flush()
         return exc.exit_code
     except _NO_ARGS_EXC:
-        if json_mode:
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
+            if captured_stdout is not None and captured_stdout.getvalue():
+                sys.stderr.write(captured_stdout.getvalue())
+                sys.stderr.flush()
             emit_json(
                 {
                     "ok": False,
@@ -252,8 +284,12 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             return 2
         return 0
     except _CLICK_EXC as exc:
+        if captured_stdout is not None and captured_stdout.getvalue():
+            sys.stderr.write(captured_stdout.getvalue())
+            sys.stderr.flush()
         exit_code = 2 if isinstance(exc, _USAGE_EXC) else (getattr(exc, "exit_code", 1) or 1)
-        if json_mode:
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
             emit_json(
                 {
                     "ok": False,
@@ -268,9 +304,27 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             exc.show(file=sys.stderr)
         return exit_code
     except _EXIT_EXC as exc:
-        return int(getattr(exc, "exit_code", 0))
+        exit_code = int(getattr(exc, "exit_code", 0))
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
+            text_out = (captured_stdout.getvalue() if captured_stdout is not None else "").strip()
+            if exit_code == 0:
+                emit_json({"ok": True, "help": text_out}, stream=real_stdout)
+            else:
+                emit_json(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "cli_exit",
+                            "message": text_out or f"Exited with code {exit_code}",
+                        },
+                    },
+                    stream=real_stdout,
+                )
+        return exit_code
     except _ABORT_EXC:
-        if json_mode:
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
             emit_json(
                 {"ok": False, "error": {"code": "aborted", "message": "Aborted"}},
                 stream=real_stdout,
@@ -280,7 +334,11 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             sys.stderr.flush()
         return 1
     except Exception as exc:  # pragma: no cover - unexpected crash safeguard
-        if json_mode:
+        if captured_stdout is not None and captured_stdout.getvalue():
+            sys.stderr.write(captured_stdout.getvalue())
+            sys.stderr.flush()
+        eff_json = bool(ctx_obj.get("json_mode") or pre_json_mode)
+        if eff_json:
             emit_json(
                 {
                     "ok": False,

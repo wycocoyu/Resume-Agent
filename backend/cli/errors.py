@@ -24,11 +24,39 @@ class CLIError(Exception):
         self.extra = dict(extra or {})
 
 
+_VALUE_TAKING_OPTIONS = frozenset(
+    {
+        "-o",
+        "--output",
+        "--title",
+        "--template-dir",
+        "--api-url",
+        "--token",
+        "--internal-secret",
+        "--user-id",
+        "--user-email",
+        "--user-name",
+        "--id",
+        "--name",
+        "--alias",
+        "--offset",
+        "--limit",
+    }
+)
+
+
 def has_json_flag(argv: Sequence[str]) -> bool:
-    """Detect --json anywhere before end-of-options '--'."""
+    """Detect standalone --json flag before '--', ignoring values passed to value-taking options."""
+    skip_next = False
     for token in argv:
+        if skip_next:
+            skip_next = False
+            continue
         if token == "--":
             break
+        if token in _VALUE_TAKING_OPTIONS:
+            skip_next = True
+            continue
         if token == "--json":
             return True
     return False

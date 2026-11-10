@@ -390,10 +390,10 @@ def generate_section_projects(resume_data: Dict[str, Any], section_titles: Dict[
                     link = project_link.strip()
                     display_link = escape_latex(link)
                     if link_display == 'icon' and (link.startswith("http://") or link.startswith("https://")):
-                        heading_title = f"{heading_title}\\hspace{{0.3em}}\\href{{{link}}}{{\\faGithub}}"
+                        heading_title = f"{heading_title}\\hspace{{0.3em}}\\href{{{escape_href(link)}}}{{\\faGithub}}"
                     elif link_display == 'inline':
                         if link.startswith("http://") or link.startswith("https://"):
-                            link_content = f"{label_prefix}\\textit{{\\href{{{link}}}{{{display_link}}}}}"
+                            link_content = f"{label_prefix}\\textit{{\\href{{{escape_href(link)}}}{{{display_link}}}}}"
                         else:
                             link_content = f"{label_prefix}\\textit{{{display_link}}}"
                         link_content = _apply_px_font_size(
@@ -417,7 +417,7 @@ def generate_section_projects(resume_data: Dict[str, Any], section_titles: Dict[
                     escaped_label = escape_latex(link_label) if link_label else ''
                     label_prefix = f"{escaped_label}: " if escaped_label else ''
                     if link.startswith("http://") or link.startswith("https://"):
-                        link_content = f"{label_prefix}\\textit{{\\href{{{link}}}{{{display_link}}}}}"
+                        link_content = f"{label_prefix}\\textit{{\\href{{{escape_href(link)}}}{{{display_link}}}}}"
                     else:
                         link_content = f"{label_prefix}\\textit{{{display_link}}}"
                     link_content = _apply_px_font_size(
@@ -791,7 +791,12 @@ def generate_section_opensource(resume_data: Dict[str, Any], section_titles: Dic
             elif repo_display == 'inline' and repo_url:
                 escaped_label = escape_latex(repo_label) if repo_label else ''
                 label_prefix = f"{escaped_label}: " if escaped_label else ''
-                visible_url = repo_url.replace('{', '%7B').replace('}', '%7D')
+                visible_url = (
+                    repo_url.replace('{', '%7B')
+                    .replace('}', '%7D')
+                    .replace('%', r'\%')
+                    .replace('#', r'\#')
+                )
                 repo_content = (
                     f"\\textit{{{label_prefix}\\href{{{escape_href(repo_url)}}}"
                     f"{{\\nolinkurl{{{visible_url}}}}}}}"
@@ -822,7 +827,12 @@ def generate_section_opensource(resume_data: Dict[str, Any], section_titles: Dic
                 escaped_label = escape_latex(repo_label) if repo_label else ''
                 label_prefix = f"{escaped_label}: " if escaped_label else ''
                 if repo_url.startswith("http://") or repo_url.startswith("https://"):
-                    visible_url = repo_url.replace('{', '%7B').replace('}', '%7D')
+                    visible_url = (
+                        repo_url.replace('{', '%7B')
+                        .replace('}', '%7D')
+                        .replace('%', r'\%')
+                        .replace('#', r'\#')
+                    )
                     repo_content = (
                         f"{label_prefix}\\href{{{escape_href(repo_url)}}}"
                         f"{{\\nolinkurl{{{visible_url}}}}}"

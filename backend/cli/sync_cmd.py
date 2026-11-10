@@ -54,15 +54,30 @@ def build_auth_headers(
     user_name: str | None = None,
 ) -> dict[str, str]:
     """Build request auth headers with strict isolation:
-    - When --token or RESUME_AGENT_TOKEN is present, send ONLY Authorization: Bearer <token>
+    - When --token or RESUME_AGENT_TOKEN is supplied, send ONLY Authorization: Bearer <token>
       (excluding FASTAPI_INTERNAL_AUTH_SECRET so internal headers never shadow Bearer auth).
+      Explicit empty/whitespace --token or RESUME_AGENT_TOKEN raises CLIError rather than
+      falling back to internal trusted headers.
     - Otherwise, send Trusted Headers iff BOTH secret and user_id are non-empty.
     """
-    resolved_token = (
-        token if token is not None else (os.getenv("RESUME_AGENT_TOKEN") or "")
-    ).strip()
-    if resolved_token:
+    if token is not None:
+        resolved_token = token.strip()
+        if not resolved_token:
+            raise CLIError(
+                "--token must not be empty when provided.",
+                code="invalid_token",
+            )
         return {"Authorization": f"Bearer {resolved_token}"}
+
+    env_token_raw = os.getenv("RESUME_AGENT_TOKEN")
+    if env_token_raw is not None:
+        resolved_env_token = env_token_raw.strip()
+        if not resolved_env_token:
+            raise CLIError(
+                "RESUME_AGENT_TOKEN must not be empty when set.",
+                code="invalid_token",
+            )
+        return {"Authorization": f"Bearer {resolved_env_token}"}
 
     resolved_secret = (
         internal_secret
@@ -131,6 +146,24 @@ def _raise_for_http_error(response: httpx.Response, *, command: str) -> None:
             "detail": detail,
         },
     )
+
+
+def _parse_json_object(response: httpx.Response, *, command: str) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise CLIError(
+            "Remote endpoint returned non-JSON content (check --api-url).",
+            code="invalid_remote_payload",
+            extra={"command": command, "status_code": response.status_code},
+        ) from exc
+    if not isinstance(payload, dict):
+        raise CLIError(
+            "Remote endpoint returned an unexpected JSON shape (expected object).",
+            code="invalid_remote_payload",
+            extra={"command": command, "status_code": response.status_code},
+        )
+    return payload
 
 
 def _atomic_write_json(output: Path, payload: dict[str, Any]) -> None:
@@ -252,8 +285,14 @@ def register_sync_commands(app: typer.Typer, get_output_context: Any) -> None:
             ) from exc
 
         _raise_for_http_error(resp, command="sync.list")
-        body = resp.json()
+        body = _parse_json_object(resp, command="sync.list")
         items = body.get("items") or []
+        if not isinstance(items, list):
+            raise CLIError(
+                "Remote summaries payload 'items' is not a list.",
+                code="invalid_remote_payload",
+                extra={"command": "sync.list"},
+            )
         total = int(body.get("total", len(items)))
 
         if json_mode:
@@ -312,7 +351,8 @@ def register_sync_commands(app: typer.Typer, get_output_context: Any) -> None:
             user_email=user_email,
             user_name=user_name,
         )
-        encoded_id = urllib.parse.quote(resume_id, safe="")
+        clean_resume_id = resume_id.strip()
+        encoded_id = urllib.parse.quote(clean_resume_id, safe="")
 
         try:
             with _open_http_client() as client:
@@ -321,21 +361,21 @@ def register_sync_commands(app: typer.Typer, get_output_context: Any) -> None:
             raise CLIError(
                 f"Network error contacting {base}/{encoded_id}: {exc}",
                 code="network_error",
-                extra={"command": "sync.pull", "id": resume_id},
+                extra={"command": "sync.pull", "id": clean_resume_id},
             ) from exc
 
         _raise_for_http_error(resp, command="sync.pull")
-        body = resp.json()
+        body = _parse_json_object(resp, command="sync.pull")
         raw_resume = body.get("data")
         if not isinstance(raw_resume, dict):
             raise CLIError(
                 "Remote resume payload does not contain a valid 'data' object.",
                 code="invalid_remote_payload",
-                extra={"command": "sync.pull", "id": resume_id},
+                extra={"command": "sync.pull", "id": clean_resume_id},
             )
 
         pulled = copy.deepcopy(raw_resume)
-        pulled["id"] = str(body.get("id") or resume_id)
+        pulled["id"] = str(body.get("id") or clean_resume_id)
         remote_alias = body.get("alias")
         if isinstance(remote_alias, str):
             pulled["alias"] = remote_alias
@@ -405,13 +445,15 @@ def register_sync_commands(app: typer.Typer, get_output_context: Any) -> None:
         assert raw_data is not None
         if resume_id is not None and not resume_id.strip():
             raise CLIError("--id must not be empty when provided.", code="invalid_resume_id")
+        if name is not None and not name.strip():
+            raise CLIError("--name must not be empty when provided.", code="invalid_name")
 
-        target_id = resume_id.strip() if (resume_id and resume_id.strip()) else raw_data["id"]
+        target_id = resume_id.strip() if resume_id is not None else raw_data["id"].strip()
         payload_data = copy.deepcopy(raw_data)
         payload_data["id"] = target_id
 
         basic_name = str((payload_data.get("basic") or {}).get("name") or "").strip()
-        cli_name = name.strip() if (name and name.strip()) else None
+        cli_name = name.strip() if name is not None else None
         resolved_name = cli_name or basic_name or "未命名简历"
 
         resolved_alias = alias if alias is not None else payload_data.get("alias")
@@ -449,7 +491,7 @@ def register_sync_commands(app: typer.Typer, get_output_context: Any) -> None:
             ) from exc
 
         _raise_for_http_error(resp, command="sync.push")
-        resp_json = resp.json()
+        resp_json = _parse_json_object(resp, command="sync.push")
 
         if json_mode:
             emit_json(

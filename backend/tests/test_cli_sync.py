@@ -562,3 +562,89 @@ def test_real_uvicorn_subprocess_sync_end_to_end(tmp_path: Path) -> None:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_empty_token_never_falls_back_to_internal_trusted_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("FASTAPI_INTERNAL_AUTH_SECRET", "poison-internal-secret")
+    monkeypatch.setenv("RESUME_AGENT_USER_ID", "victim_admin_user")
+
+    # Explicit empty or whitespace --token must fail closed with invalid_token, never leaking internal headers
+    for bad_token in ("", "   "):
+        code = run_cli(["sync", "list", "--token", bad_token, "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 1
+        assert payload["error"]["code"] == "invalid_token"
+
+    # Explicit whitespace RESUME_AGENT_TOKEN must also fail closed
+    monkeypatch.setenv("RESUME_AGENT_TOKEN", "   ")
+    code_env = run_cli(["sync", "list", "--json"])
+    payload_env = json.loads(capsys.readouterr().out)
+    assert code_env == 1
+    assert payload_env["error"]["code"] == "invalid_token"
+
+
+def test_sync_handles_non_json_or_non_dict_200_responses_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sync_cmd,
+        "_custom_httpx_transport",
+        httpx.MockTransport(
+            lambda req: httpx.Response(
+                200,
+                text="<!DOCTYPE html><html><body>Login</body></html>",
+                headers={"content-type": "text/html"},
+            )
+        ),
+    )
+    code_html = run_cli(["sync", "list", "--token", "tok", "--json"])
+    out_html = json.loads(capsys.readouterr().out)
+    assert code_html == 1
+    assert out_html["error"]["code"] == "invalid_remote_payload"
+
+    monkeypatch.setattr(
+        sync_cmd,
+        "_custom_httpx_transport",
+        httpx.MockTransport(lambda req: httpx.Response(200, json=[1, 2, 3])),
+    )
+    code_list = run_cli(["sync", "list", "--token", "tok", "--json"])
+    out_list = json.loads(capsys.readouterr().out)
+    assert code_list == 1
+    assert out_list["error"]["code"] == "invalid_remote_payload"
+
+
+def test_sync_human_readable_output_mode(
+    sync_test_env: dict[str, Any],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    src_json = tmp_path / "human_sync.json"
+    resume = build_initial_resume(title="人类可读测试")
+    resume["basic"]["name"] = "周十一"
+    src_json.write_text(json.dumps(resume, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    rc_push = run_cli(
+        ["sync", "push", str(src_json), "--alias", "可读版", "--token", "valid-token-alice"]
+    )
+    out_push = capsys.readouterr().out
+    assert rc_push == 0
+    assert "Pushed resume '" in out_push
+
+    rc_list = run_cli(["sync", "list", "--token", "valid-token-alice"])
+    out_list = capsys.readouterr().out
+    assert rc_list == 0
+    assert "Resumes (" in out_list
+    assert "[可读版]" in out_list
+
+    pulled = tmp_path / "human_pulled.json"
+    rc_pull = run_cli(
+        ["sync", "pull", resume["id"], "-o", str(pulled), "--token", "valid-token-alice"]
+    )
+    out_pull = capsys.readouterr().out
+    assert rc_pull == 0
+    assert "Pulled resume '" in out_pull
+

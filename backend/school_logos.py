@@ -361,7 +361,9 @@ def download_school_logos_to_dir(
         if not cos_url:
             continue
         try:
-            urllib.request.urlretrieve(cos_url, str(local_path))
+            from .company_logos import _download_url_to_path
+
+            _download_url_to_path(cos_url, local_path, timeout=15.0)
             logo_map[idx] = local_filename
         except Exception as e:
             print(f"[SchoolLogo] 下载失败 ({logo_key}): {e}")

@@ -17,6 +17,7 @@ from typing import Dict, Any, List
 from io import BytesIO
 from datetime import date
 
+from .html_to_latex import escape_href
 from .latex_utils import escape_latex, normalize_resume_data, resolve_xelatex_executable, subprocess_env_with_xelatex_bin
 from .latex_sections import (
     SECTION_GENERATORS,
@@ -555,7 +556,10 @@ def json_to_latex(
             blog_prefix = ''
         else:
             blog_prefix = r'\faGithub\hspace{0.3em}'
-        latex_content.append(f"\\blogLine{{{blog_prefix}}}{{{blog}}}")
+        latex_content.append(r"\vspace{-0.5ex}")
+        latex_content.append(
+            f"\\centerline{{\\sffamily\\footnotesize {blog_prefix}\\href{{{escape_href(blog)}}}{{{escape_latex(blog)}}}}}"
+        )
     if abs(header_bottom_gap_px) > 0.01:
         latex_content.append(f"\\vspace{{{_px_to_pt(header_bottom_gap_px):.2f}pt}}")
     latex_content.append("")
@@ -723,42 +727,42 @@ def compile_latex_to_pdf(
                     warnings_out=warnings_out,
                 )
 
-            photo_url = resume_data.get("photo")
-            if local_photo_bytes is not None:
-                _, raw_photo_bytes = local_photo_bytes
-                detected_ext = _detect_xelatex_image_ext(raw_photo_bytes)
-                if not detected_ext:
-                    _append_warning(
-                        warnings_out,
-                        "本地头像格式不受 XeLaTeX 支持（仅支持 PNG/JPEG/PDF），已自动降级为无照片渲染",
-                    )
-                    latex_content = _strip_photo_block_from_latex(latex_content)
-                else:
-                    logos_dir = Path(temp_dir) / "logos"
-                    logos_dir.mkdir(parents=True, exist_ok=True)
-                    local_photo = f"photo{detected_ext}"
-                    (logos_dir / local_photo).write_bytes(raw_photo_bytes)
-            elif photo_url:
-                if offline and isinstance(photo_url, str) and (
-                    photo_url.startswith("http://") or photo_url.startswith("https://")
-                ):
-                    _append_warning(
-                        warnings_out,
-                        f"离线模式已跳过远程头像下载，已降级为无照片渲染: {photo_url}",
-                    )
-                    local_photo = None
-                else:
-                    local_photo = _download_user_photo_to_dir(
-                        photo_url, temp_dir, offline=offline
-                    )
-                    if not local_photo:
-                        _append_warning(
-                            warnings_out,
-                            f"头像资源不可用或格式不支持，已降级为无照片渲染: {photo_url}",
-                        )
+        photo_url = resume_data.get("photo") if isinstance(resume_data, dict) else None
+        if local_photo_bytes is not None:
+            _, raw_photo_bytes = local_photo_bytes
+            detected_ext = _detect_xelatex_image_ext(raw_photo_bytes)
+            if not detected_ext:
+                _append_warning(
+                    warnings_out,
+                    "本地头像格式不受 XeLaTeX 支持（仅支持 PNG/JPEG/PDF），已自动降级为无照片渲染",
+                )
+                latex_content = _strip_photo_block_from_latex(latex_content)
+            else:
+                logos_dir = Path(temp_dir) / "logos"
+                logos_dir.mkdir(parents=True, exist_ok=True)
+                local_photo = f"photo{detected_ext}"
+                (logos_dir / local_photo).write_bytes(raw_photo_bytes)
+        elif photo_url:
+            if offline and isinstance(photo_url, str) and (
+                photo_url.startswith("http://") or photo_url.startswith("https://")
+            ):
+                _append_warning(
+                    warnings_out,
+                    f"离线模式已跳过远程头像下载，已降级为无照片渲染: {photo_url}",
+                )
+                local_photo = None
+            else:
+                local_photo = _download_user_photo_to_dir(
+                    photo_url, temp_dir, offline=offline
+                )
                 if not local_photo:
-                    print("[Photo] 下载失败，已自动降级为无照片渲染")
-                    latex_content = _strip_photo_block_from_latex(latex_content)
+                    _append_warning(
+                        warnings_out,
+                        f"头像资源不可用或格式不支持，已降级为无照片渲染: {photo_url}",
+                    )
+            if not local_photo:
+                print("[Photo] 下载失败，已自动降级为无照片渲染")
+                latex_content = _strip_photo_block_from_latex(latex_content)
 
         # 写入 LaTeX 文件
         tex_file = Path(temp_dir) / 'resume.tex'
