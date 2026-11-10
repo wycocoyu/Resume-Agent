@@ -441,15 +441,12 @@ def test_real_uvicorn_subprocess_sync_end_to_end(tmp_path: Path) -> None:
     proc = subprocess.Popen(
         [
             sys.executable,
-            "-m",
-            "uvicorn",
-            "backend.main:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(port),
-            "--log-level",
-            "warning",
+            "-c",
+            (
+                "import dotenv; dotenv.load_dotenv = lambda *a, **k: False; "
+                "import uvicorn; "
+                f"uvicorn.run('backend.main:app', host='127.0.0.1', port={port}, log_level='warning')"
+            ),
         ],
         cwd=str(repo_root),
         env=server_env,
