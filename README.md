@@ -2,7 +2,7 @@
 
 # 🤖 Resume-Agent
 
-### 一句话输入，AI 帮你生成可编辑、可诊断、可导出的专业简历
+### 帮你把经历聊成一份好简历：AI 生成、可解释诊断与 LaTeX 高清排版
 
 <p>
   <a href="https://cococv.cn"><img src="https://img.shields.io/badge/🌐_在线体验-cococv.cn-36BCF7?style=for-the-badge" alt="Live Demo" /></a>
@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/LaTeX-008080?logo=latex&logoColor=white" alt="LaTeX" />
 </p>
 
-<img src="assets/readme/2026-03-27-home.png" alt="首页" width="90%" />
+<img src="docs/readme/home.png" alt="Resume-Agent 首页" width="95%" />
 
 </div>
 
@@ -27,29 +27,45 @@
 
 ## 📖 项目简介
 
-**Resume-Agent** 是一个面向中文求职场景的全栈 AI 简历系统，覆盖 **智能导入 / 一句话生成 → AI 简历诊断与 ATS 检查 → 自然语言对话精修 → 可视化排版与 LaTeX PDF 导出** 的完整闭环。
+**Resume-Agent（[cococv.cn](https://cococv.cn)）** 是一个面向中文求职场景的全栈 AI 简历平台，打通了从 **一句话对话生成 / PDF 与图片导入 → 可解释简历诊断与 ATS 检查 → 自然语言增量改写 → 双栏可视化排版与 LaTeX PDF 导出** 的全流程，让你把精力放回经历打磨本身，告别深夜反复调格式。
 
 ## ✨ 核心特性（v3.6）
 
 | 模块 | 核心能力 |
 |:--|:---|
-| 🚀 **一键生成与 PDF/图片导入** | 支持一句话描述生成简历，或上传已有 PDF / 图片简历，通过 `glm-ocr` + `glm-4.6v` 视觉识别自动还原为结构化模块 |
-| 🔍 **可解释简历诊断与 ATS 检查** | 评分理由逐字引用简历原文；针对目标岗位 JD 输出 **ATS 兼容检查清单**，精准指出套话、空泛表达与技能掌握度缺口 |
-| 🛠️ **单条应用与缺口补齐** | 诊断建议支持逐条点击「帮我改这条」独立生效；需要补充真实数据（如量化指标）的条目支持弹窗「补充信息并修改」 |
-| 💬 **进程内 Agent 对话改写** | 自然语言增量修改，精准区分「工作经历」「实习经历」「项目经历」「开源经历」，改后自动保持分点列表层级 |
-| 🎨 **双栏可视化编辑与精细排版** | 左编辑右实时预览（支持一键收起预览、切换清新/深色皮肤）；支持独立工作经历板块、工作年限、项目名/仓库地址独立字号、正文蓝字重点高亮及学校/公司 Logo 展示 |
-| 📄 **LaTeX PDF 极速直连导出** | 服务端 XeLaTeX 高清编译，支持同源直连与 Base64 流式传输；导出时自动归一化中英混排引号与连接符，避免招聘系统（ATS）解析断词 |
+| 🚀 **三种起点自由开局** | 支持一句话自然语言引导生成、上传已有 PDF / 图片简历自动解析（`glm-ocr` + `glm-4.6v`），或直接套用内置 LaTeX 标准模板从零编辑 |
+| 💬 **AI 助手左聊右看** | 进程内 Agent 实时调用生成、诊断与修改工具，右侧同步渲染 PDF 预览，生成满意后一键「导入到编辑器」继续精修 |
+| 🔍 **可解释诊断与 ATS 清单** | 评分依据逐字引用简历原文；针对目标岗位 JD 输出 **ATS 兼容检查清单**，精准点出空泛套话、量化缺失与技能掌握度短板 |
+| 🛠️ **单条建议应用与缺口补齐** | 每条改进建议支持独立点击「帮我改这条」；涉及真实业务数据缺口的条目支持弹窗「补充信息并修改」 |
+| 🎨 **双栏可视化精细排版** | 涵盖基本信息、教育、工作、实习、项目、开源、技能、获奖、自评、科研 10 大板块（支持自定义模块）；支持公司/学校 Logo、工作年限、独立字号、正文蓝字重点高亮与多级列表 |
+| 📄 **LaTeX PDF 极速直连导出** | 服务端 XeLaTeX 高清编译，支持同源直连与 Base64 流式传输；导出时自动归一化中英混排引号与连接符，防止招聘系统（ATS）断词失败 |
 
-## 📸 界面预览
+## 📸 核心界面预览
 
 <table>
 <tr>
-<td width="50%"><b>Dashboard 简历管理</b><br/><img src="assets/readme/2026-03-27-dashboard.png" alt="Dashboard" /></td>
-<td width="50%"><b>双栏可视化工作区</b><br/><img src="assets/readme/2026-03-27-workspace.png" alt="工作区" /></td>
+<td width="50%">
+  <b>1. 双栏可视化编辑工作区（LaTeX 实时预览）</b><br/>
+  <sub>左侧 10 大模块化表单与排版控制，右侧实时编译高清多页 PDF（内置学校与大厂 Logo）</sub><br/><br/>
+  <img src="docs/readme/workspace.png" alt="双栏可视化编辑工作区" />
+</td>
+<td width="50%">
+  <b>2. AI 助手对话生成与实时预览</b><br/>
+  <sub>左侧自然语言对话驱动简历生成与诊断工具链，右侧同步渲染最新 PDF 简历</sub><br/><br/>
+  <img src="docs/readme/agent-chat.png" alt="AI 助手对话与诊断" />
+</td>
 </tr>
 <tr>
-<td width="50%"><b>AI 简历诊断与对话精修</b><br/><img src="assets/readme/2026-05-23-agent-chat.png" alt="AI 对话" /></td>
-<td width="50%" valign="middle" align="center">👉 <a href="https://cococv.cn"><b>立即体验在线版（cococv.cn）</b></a></td>
+<td width="50%">
+  <b>3. 多路径快速开始向导</b><br/>
+  <sub>支持 PDF/图片解析导入、AI 引导式问答创建、或直接以经典 LaTeX 模板起步</sub><br/><br/>
+  <img src="docs/readme/create-new.png" alt="新建简历向导" />
+</td>
+<td width="50%" valign="middle" align="center">
+  <b>🌐 在线即刻体验</b><br/><br/>
+  👉 <a href="https://cococv.cn"><b>访问 cococv.cn 体验完整功能</b></a><br/><br/>
+  <sub>支持深色模式与多套清新界面皮肤一键切换</sub>
+</td>
 </tr>
 </table>
 
@@ -57,11 +73,11 @@
 
 | 目录 / 层级 | 技术栈 | 职责说明 |
 |:--|:--|:--|
-| `frontend/` | React 18 · TypeScript · Vite · Tailwind | 简历工作区、双栏实时预览、AI 助手对话与 Dashboard |
+| `frontend/` | React 18 · TypeScript · Vite · Tailwind | 简历双栏可视化工作区、AI 助手对话流、多皮肤主题与简历管理 |
 | `backend/` | FastAPI · Python 3.12+ · SQLAlchemy | 主业务 API、进程内 `backend/agent/` 智能体引擎、PDF 编译路由 |
-| `web/` | Next.js 16 · BetterAuth · PostgreSQL | 统一身份认证服务（线上共享会话；本地单机体验可按需启用） |
-| **AI 模型层** | DeepSeek 官方（`deepseek-flash` / `deepseek-v4-pro`）· 智谱 GLM（`glm-ocr` / `glm-4.6v`） | DeepSeek 负责对话、诊断与结构化生成；智谱负责 PDF/图片 OCR 与版面识别 |
-| **PDF 引擎** | XeLaTeX · CTeX | 服务端中英混排编译、字体渲染与 ATS 字符归一化 |
+| `web/` | Next.js 16 · BetterAuth · PostgreSQL | 统一身份认证服务（线上共享登录态，本地单机体验可按需启用） |
+| **AI 模型层** | DeepSeek 官方（`deepseek-flash` / `deepseek-v4-pro`）· 智谱 GLM（`glm-ocr` / `glm-4.6v`） | DeepSeek 负责对话、诊断与结构化生成，智谱负责 PDF/图片 OCR 与版面识别 |
+| **PDF 引擎** | XeLaTeX · CTeX | 服务端中英混排编译、Logo 嵌入渲染与 ATS 字符归一化 |
 
 ## 🚀 本地快速启动
 
