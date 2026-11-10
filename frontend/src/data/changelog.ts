@@ -15,6 +15,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.7.0',
+    date: '2026-11-10',
+    added: [
+      '支持通过命令行工具与 Codex 技能直接创建、校验并导出 PDF 简历，也可与网页端同步简历',
+    ],
+    fixed: [
+      '修复导出的 PDF 简历在部分阅读器中无法显示或复制中文的问题',
+    ],
+  },
+  {
     version: '3.6.1',
     date: '2026-10-10',
     fixed: [
