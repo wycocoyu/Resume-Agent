@@ -78,12 +78,8 @@
 ```bash
 git clone https://github.com/wycocoyu/Resume-Agent.git
 cd Resume-Agent
-
-# 1) 安装后端依赖
 pip install uv
 uv pip install -r requirements.txt
-
-# 2) 安装前端依赖
 cd frontend && npm install && cd ..
 ```
 
@@ -95,30 +91,33 @@ cd frontend && npm install && cd ..
 cp .env.example .env
 ```
 
-在 `.env` 中填入以下核心配置（[`config.toml`](config.toml) 与 [`backend/llm.py`](backend/llm.py) 默认从环境变量读取）：
+在 `.env` 中填入以下核心配置：
 
 ```ini
-# 必填：DeepSeek 官方 API Key（驱动 AI 对话、简历诊断与结构化生成）
-# 申请地址：https://platform.deepseek.com/
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
-
-# 推荐：智谱 GLM API Key（PDF / 图片简历上传导入的 OCR 与视觉识别必需）
-# 申请地址：https://open.bigmodel.cn/
 ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# 本地安全密钥（任意随机字符串即可）
 JWT_SECRET_KEY=replace-with-any-random-string
 ```
 
-> 💡 数据库默认使用本地 SQLite，开箱即用；如需切换 PostgreSQL，可在 `.env` 中启用 `USE_POSTGRESQL=true` 与 `POSTGRESQL_URL`。前端默认连接 `http://127.0.0.1:9000`，如需自定义可执行 `cp frontend/.env.example frontend/.env.local`。
+| 变量名 | 是否必填 | 用途与获取地址 |
+|:--|:--|:--|
+| `DEEPSEEK_API_KEY` | 必填 | 驱动 AI 对话、简历诊断与结构化生成（[DeepSeek 开放平台](https://platform.deepseek.com/)） |
+| `ZHIPU_API_KEY` | 推荐 | PDF / 图片简历上传导入的 OCR 与视觉识别（[智谱开放平台](https://open.bigmodel.cn/)） |
+| `JWT_SECRET_KEY` | 必填 | 本地签名密钥，填入任意随机字符串即可 |
+
+> 💡 数据库默认使用本地 SQLite，开箱即用。如需切换 PostgreSQL，可在 `.env` 中启用 `USE_POSTGRESQL=true` 与 `POSTGRESQL_URL`。前端默认连接 `http://127.0.0.1:9000`，如需自定义可执行 `cp frontend/.env.example frontend/.env.local`。
 
 ### 4. 启动前后端服务
 
-```bash
-# 终端 1：启动后端 API 与内置 Agent（端口 9000）
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 9000
+启动后端 API 与内置 Agent（端口 `9000`）：
 
-# 终端 2：启动前端开发服务器（端口 5173）
+```bash
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 9000
+```
+
+另起终端启动前端开发服务器（端口 `5173`）：
+
+```bash
 cd frontend && npm run dev
 ```
 
@@ -132,11 +131,15 @@ cd frontend && npm run dev
 
 ### 5. 构建与测试校验
 
-```bash
-# 前端类型检查与生产构建
-cd frontend && npm run build
+前端类型检查与生产构建：
 
-# 后端单元测试
+```bash
+cd frontend && npm run build
+```
+
+后端单元测试：
+
+```bash
 python -m pytest backend/tests/ -q
 ```
 
