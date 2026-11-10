@@ -159,6 +159,12 @@ cd frontend && npm run build
 python -m pytest backend/tests/ -q
 ```
 
+## ⭐ Star History
+
+<div align="center">
+  <img src="docs/readme/star-history.svg" alt="Star History" width="85%" />
+</div>
+
 ## 🤝 参与贡献
 
 欢迎通过 [Issues](https://github.com/wycocoyu/Resume-Agent/issues) 反馈问题或提交 [Pull Requests](https://github.com/wycocoyu/Resume-Agent/pulls)。如果本项目对你有帮助，欢迎点亮右上角 ⭐ **Star** 支持！
