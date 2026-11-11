@@ -15,7 +15,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.7.2',
+    version: '3.7.3',
     date: '2026-11-10',
     added: [
       '支持通过命令行工具与 Codex 技能直接创建、校验并导出 PDF 简历，也可与网页端同步简历',
@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
     fixed: [
       '修复导出的 PDF 简历在内置预览器与部分阅读器中中文显示空白或无法复制的问题',
+      '修复设置页配置 API 密钥时未拦截跨平台错填以及多进程热更新延迟的问题',
     ],
   },
   {

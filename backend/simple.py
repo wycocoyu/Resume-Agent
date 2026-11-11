@@ -184,6 +184,23 @@ def _deepseek_thinking_off(model: str) -> dict:
     return {"thinking": {"type": "disabled"}} if (model or "").startswith("deepseek") else {}
 
 
+def _get_live_deepseek_key() -> str:
+    """读取最新 DEEPSEEK_API_KEY（支持多 Worker 进程感知 .env 热更新）。"""
+    global DEEPSEEK_API_KEY
+    try:
+        try:
+            from backend.env_keys import get_live_api_key
+        except ImportError:
+            from env_keys import get_live_api_key
+        live = get_live_api_key("deepseek")
+        if live:
+            DEEPSEEK_API_KEY = live
+            return live
+    except Exception:
+        pass
+    return (os.getenv("DEEPSEEK_API_KEY", "") or DEEPSEEK_API_KEY or os.getenv("DASHSCOPE_API_KEY", "")).strip()
+
+
 def call_deepseek_api(prompt: str, model: str = None) -> str:
     """
     调用 DeepSeek API
@@ -195,8 +212,9 @@ def call_deepseek_api(prompt: str, model: str = None) -> str:
     返回:
         API 返回的响应内容
     """
+    live_key = _get_live_deepseek_key()
     # 检查 API Key 是否配置
-    if not DEEPSEEK_API_KEY:
+    if not live_key:
         raise Exception("DEEPSEEK_API_KEY 未配置。请在本地 .env 或系统环境中设置 DEEPSEEK_API_KEY")
     
     if model is None:
@@ -221,7 +239,7 @@ def call_deepseek_api(prompt: str, model: str = None) -> str:
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        "Authorization": f"Bearer {live_key}"
     }
 
     """使用复用的 HTTP Session"""
@@ -323,9 +341,10 @@ def call_deepseek_api_stream(prompt: str, model: str = None):
         **_deepseek_thinking_off(model),
     }
 
+    live_key = _get_live_deepseek_key()
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        "Authorization": f"Bearer {live_key}"
     }
 
     # 使用复用的 HTTP Session

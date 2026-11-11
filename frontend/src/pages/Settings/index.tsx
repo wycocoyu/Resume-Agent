@@ -210,6 +210,25 @@ export default function SettingsPage() {
       toast.error('请先输入新的 API Key 再点击保存')
       return
     }
+    if (provider === 'deepseek') {
+      if (raw.includes('.') && !raw.startsWith('sk-')) {
+        toast.error('检测到这是智谱 GLM-OCR 密钥格式（含点号 .），请粘贴到下方「2. 智谱 GLM-OCR API Key」输入框')
+        return
+      }
+      if (!raw.startsWith('sk-')) {
+        toast.error('DeepSeek 官方 API Key 必须以 sk- 开头，请检查是否填错输入框')
+        return
+      }
+    } else if (provider === 'zhipu') {
+      if (raw.startsWith('sk-')) {
+        toast.error('检测到这是 sk- 开头的模型密钥，请勿将 DeepSeek 密钥填入智谱输入框')
+        return
+      }
+      if (!raw.includes('.')) {
+        toast.error('智谱 GLM-OCR API Key 格式应为 id.secret（中间含英文点号 .）')
+        return
+      }
+    }
     setSavingProvider(provider)
     try {
       const payload =
@@ -587,6 +606,8 @@ export default function SettingsPage() {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
                       <input
+                        name="deepseek_api_key_input"
+                        autoComplete="new-password"
                         type={showDeepseekKey ? 'text' : 'password'}
                         value={deepseekInput}
                         onChange={(e) => setDeepseekInput(e.target.value)}
@@ -719,6 +740,8 @@ export default function SettingsPage() {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
                       <input
+                        name="zhipu_api_key_input"
+                        autoComplete="new-password"
                         type={showZhipuKey ? 'text' : 'password'}
                         value={zhipuInput}
                         onChange={(e) => setZhipuInput(e.target.value)}

@@ -125,8 +125,12 @@ def _get_client(model_name: Optional[str] = None) -> OpenAI:
 
     # ---- DeepSeek 官方通道 ----
     global _deepseek_client, _last_key
+    try:
+        from backend.env_keys import get_live_api_key
+    except ImportError:
+        from env_keys import get_live_api_key
     # 2026-09-16 起以 DEEPSEEK_API_KEY 为准；DASHSCOPE_API_KEY 仅作旧部署兜底。
-    key = (os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("DASHSCOPE_API_KEY", "")).strip()
+    key = get_live_api_key("deepseek")
     if not key:
         raise ValueError("DEEPSEEK_API_KEY 未配置")
     if _deepseek_client is None or _last_key != key:

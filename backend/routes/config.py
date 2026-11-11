@@ -139,6 +139,16 @@ def _sync_runtime_keys(deepseek_key: Optional[str] = None, zhipu_key: Optional[s
         except Exception as e:
             print(f"[警告] 同步 simple.DEEPSEEK_API_KEY 失败: {e}")
 
+        try:
+            try:
+                from backend.services import resume_assembler
+            except ImportError:
+                from services import resume_assembler
+            resume_assembler._deepseek_client = None
+            resume_assembler._last_key = None
+        except Exception:
+            pass
+
         # 同步 Agent Config 单例（若已初始化）
         try:
             from backend.agent.config import Config as AgentConfig
@@ -265,6 +275,19 @@ async def save_keys(body: SaveKeysRequest, _current_user=Depends(require_config_
 
         if not deepseek_val and not zhipu_val:
             raise HTTPException(status_code=400, detail="请至少填写一个需要保存的 API Key")
+
+        try:
+            from backend.env_keys import validate_provider_api_key
+        except ImportError:
+            from env_keys import validate_provider_api_key
+
+        try:
+            if deepseek_val is not None:
+                deepseek_val = validate_provider_api_key("deepseek", deepseek_val)
+            if zhipu_val is not None:
+                zhipu_val = validate_provider_api_key("zhipu", zhipu_val)
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
 
         env_path = ROOT_DIR / ".env"
         existing_lines = []

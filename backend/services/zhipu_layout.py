@@ -48,7 +48,14 @@ _last_key: Optional[str] = None
 
 def _get_client(api_key: Optional[str] = None) -> ZhipuAI:
     global _zhipu_client, _last_key, ZHIPU_API_KEY
-    key = (api_key or os.getenv("ZHIPU_API_KEY", "") or ZHIPU_API_KEY).strip()
+    if api_key:
+        key = api_key.strip()
+    else:
+        try:
+            from backend.env_keys import get_live_api_key
+        except ImportError:
+            from env_keys import get_live_api_key
+        key = (get_live_api_key("zhipu") or ZHIPU_API_KEY).strip()
     if not key:
         raise ValueError("ZHIPU_API_KEY 未配置")
     ZHIPU_API_KEY = key
