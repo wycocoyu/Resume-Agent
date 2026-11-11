@@ -14,20 +14,20 @@ Run `resume-agent schema` at any time to inspect the live JSON Schema generated 
 
 | Key | Type | Notes |
 | :--- | :--- | :--- |
-| `id` | `string` | e.g. `resume_1730000000000` or a UUID; must be non-empty |
+| `id` | `string` (non-empty) | e.g. `"resume_1730000000000"` or UUID |
 | `title` | `string` | Workspace document title, e.g. `"我的简历"` |
 | `createdAt` | `string` | ISO-8601 timestamp |
 | `updatedAt` | `string` | ISO-8601 timestamp |
-| `templateId` | `string \| null` | Keep `null` for the standard LaTeX template |
-| `basic` | `BasicInfo` | Candidate header and contact info |
-| `education` | `Education[]` | Education entries (`教育经历`) |
+| `templateId` | `string \| null` | Keep `null` for standard LaTeX template |
+| `basic` | `BasicInfo` | Candidate header & contact info |
+| `education` | `Education[]` | Education entries |
 | `experience` | `Experience[]` | Internship entries (`实习经历`) |
 | `projects` | `Project[]` | Project entries (`项目经历`) |
 | `openSource` | `OpenSource[]` | Open-source entries (`开源经历`) |
-| `awards` | `Award[]` | Honors and awards (`荣誉奖项`) |
+| `awards` | `Award[]` | Honors & awards (`荣誉奖项`) |
 | `customData` | `Record<string, CustomItem[]>` | Keyed by `custom_*` section ID (e.g. `custom_research`) |
-| `selfEvaluation` | `string` | Summary / self-evaluation (`自我评价`); HTML rich text |
-| `skillContent` | `string` | Technical skills (`专业技能`); HTML rich text |
+| `selfEvaluation` | `string` (HTML) | Summary / self-evaluation (`自我评价`) |
+| `skillContent` | `string` (HTML) | Technical skills (`专业技能`) |
 | `activeSection` | `string` | Active UI tab, default `"basic"` |
 | `draggingProjectId` | `string \| null` | Keep `null` |
 | `menuSections` | `MenuSection[]` | Controls section titles, enabled flags, and PDF section order |
@@ -37,7 +37,7 @@ Run `resume-agent schema` at any time to inspect the live JSON Schema generated 
 
 | Key | Type | Notes |
 | :--- | :--- | :--- |
-| `templateType` | `"latex" \| "html" \| null` | Default `"latex"`. The CLI always renders via LaTeX and emits a warning for `"html"` |
+| `templateType` | `"latex" \| "html" \| null` | Default `"latex"`. Note: CLI always renders via LaTeX and emits a warning if `"html"` |
 | `alias` | `string \| null` | Optional workspace remark/tag |
 | `workExperience` | `Experience[] \| null` | Full-time work experience (`工作经历`), separate from `experience` (`实习经历`) |
 
@@ -113,12 +113,11 @@ All title and header fields below must be plain strings, with no HTML tags:
 ### `education[*]` (`Education`)
 - Required: `id` (non-empty `string`), `school`, `major`, `degree`, `startDate`, `endDate`.
 - Optional: `gpa`, `description` (HTML), `visible` (`boolean`), `schoolNameFontSize` (`number`), `schoolLogo` (Chinese school name key, e.g. `"北京大学"`), `schoolLogoSize` (`number`).
-- School logo keys are discovered at runtime from the school logo library (COS or local `images/school_logo/`), not from a fixed dictionary.
 
 ### `workExperience[*]` and `experience[*]` (`Experience`)
 - Required: `id`, `company`, `position`, `date`, `details` (HTML).
 - Optional: `visible` (`boolean`), `companyNameFontSize` (`number`), `companyLogo` (`string`), `companyLogoSize` (`number`).
-- Built-in `companyLogo` keys: `bytedance`, `tencent`, `tencentcloud`, `alibaba`, `meituan`, `kuaishou`, `baidu`, `jd`, `huawei`, `xiaohongshu`, `netease`, `xiaomi`, `didi`, `pinduoduo`, `bilibili`, `antgroup`, `microsoft`, `google`, `apple`, `deeplang`
+- Built-in `companyLogo` keys: `bytedance`, `tencent`, `tencentcloud`, `alibaba`, `meituan`, `kuaishou`, `baidu`, `jd`, `huawei`, `xiaohongshu`, `netease`, `xiaomi`, `didi`, `pinduoduo`, `bilibili`, `antgroup`, `microsoft`, `google`, `apple`, `deeplang`.
 
 ### `projects[*]` (`Project`)
 - Required: `id`, `name`, `role`, `date`, `description` (HTML).

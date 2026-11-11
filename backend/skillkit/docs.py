@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import types
 from pathlib import Path
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
@@ -36,6 +36,17 @@ def _schema() -> Any:
 
         _schema_module = module
     return _schema_module
+
+
+_annotations_cache: dict[str, Any] | None = None
+
+
+def _annotations() -> dict[str, Any]:
+    """Resolved annotations that keep ``Annotated`` metadata (validators included)."""
+    global _annotations_cache
+    if _annotations_cache is None:
+        _annotations_cache = get_type_hints(_schema().ResumeDataModel, include_extras=True)
+    return _annotations_cache
 
 
 class SkillRenderError(RuntimeError):
@@ -97,10 +108,22 @@ def _check_notes(notes: dict[str, str]) -> None:
         )
 
 
+def _annotation_tags(name: str) -> str:
+    """Extra type qualifiers kept inline with the type, e.g. ``(HTML)``."""
+    hint = _annotations().get(name)
+    for item in getattr(hint, "__metadata__", ()):
+        if getattr(getattr(item, "func", None), "__name__", "") == "_require_non_empty":
+            return " (non-empty)"
+    if name in set(_schema().FIELD_CONVENTIONS["html_rich_text_fields"]):
+        return " (HTML)"
+    return ""
+
+
 def _table(fields: list[tuple[str, Any]], notes: dict[str, str]) -> str:
     rows = ["| Key | Type | Notes |", "| :--- | :--- | :--- |"]
     for name, info in fields:
-        rows.append(f"| `{name}` | `{_cell(_format_type(info.annotation))}` | {_cell(notes[name])} |")
+        type_cell = f"`{_cell(_format_type(_annotations().get(name, info.annotation)))}`" + _annotation_tags(name)
+        rows.append(f"| `{name}` | {type_cell} | {_cell(notes[name])} |")
     return "\n".join(rows)
 
 

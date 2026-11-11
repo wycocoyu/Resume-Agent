@@ -58,12 +58,11 @@ All title and header fields below must be plain strings, with no HTML tags:
 ### `education[*]` (`Education`)
 - Required: `id` (non-empty `string`), `school`, `major`, `degree`, `startDate`, `endDate`.
 - Optional: `gpa`, `description` (HTML), `visible` (`boolean`), `schoolNameFontSize` (`number`), `schoolLogo` (Chinese school name key, e.g. `"北京大学"`), `schoolLogoSize` (`number`).
-- School logo keys are discovered at runtime from the school logo library (COS or local `images/school_logo/`), not from a fixed dictionary.
 
 ### `workExperience[*]` and `experience[*]` (`Experience`)
 - Required: `id`, `company`, `position`, `date`, `details` (HTML).
 - Optional: `visible` (`boolean`), `companyNameFontSize` (`number`), `companyLogo` (`string`), `companyLogoSize` (`number`).
-- Built-in `companyLogo` keys: <!-- gen:company-logos -->
+- Built-in `companyLogo` keys: <!-- gen:company-logos -->.
 
 ### `projects[*]` (`Project`)
 - Required: `id`, `name`, `role`, `date`, `description` (HTML).

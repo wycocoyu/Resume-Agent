@@ -182,11 +182,3 @@ CONTEXT.md
 
 # --- 竞品调研文档（含产品设计/调研记录）---
 reference/
-
-# --- Local build/maintenance artifacts (not part of upstream) ---
-.venv.bak*/
-*.egg-info/
-resume_agent.egg-info/
-.tools/
-*.db-shm
-*.db-wal

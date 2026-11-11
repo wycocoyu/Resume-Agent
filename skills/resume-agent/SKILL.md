@@ -61,7 +61,7 @@ resume-agent validate resume.json --json
 ```
 
 - Exit code `0` (`"valid": true`) is required before rendering or pushing.
-- If validation fails, inspect `errors[*].path` (for example `menuSections[0].enabled` or `education[0].school`) and repair the JSON.
+- If exit code is `1`, inspect `errors[*].path` (for example `menuSections[0].enabled` or `education[0].school`) and repair the JSON.
 
 ### 4. Render Local XeLaTeX PDF
 
