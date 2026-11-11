@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 开发者与架构文档 / Developer Docs
+    url: https://github.com/wycocoyu/Resume-Agent/blob/main/docs/README.md
+    about: 提交前可先查阅项目架构、流式协议、数据库表结构与 PDF 中文排印说明。
+  - name: 安全漏洞私密上报 / Security Advisory
+    url: https://github.com/wycocoyu/Resume-Agent/blob/main/SECURITY.md
+    about: 涉及鉴权绕过、密钥泄漏等安全风险请勿公开建单，请按 SECURITY.md 私密上报。

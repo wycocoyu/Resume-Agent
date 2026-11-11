@@ -1,0 +1,79 @@
+name: "新功能提案 / Feature Request"
+description: "提议从零新增的产品能力、工作流或生态集成"
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认 / Preflight Check
+      options:
+        - label: 我已检索现有 Issues，确认尚无相同提案。
+          required: true
+        - label: 正文与配图中不包含个人简历敏感隐私或 API Key 明文。
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 所属模块 / Area
+      options:
+        - 工作台与界面设计
+        - Agent 运行时与流式对话
+        - LaTeX 与 HTML 模板渲染导出
+        - CLI、Skill 与 MCP 工具链
+        - 隐私脱敏、密钥设置与鉴权
+        - 工程基建与其它
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需求背景与用户痛点 / Problem & Motivation
+      description: 你在什么求职或开发场景下遇到了什么阻碍？现有能力为什么无法满足？
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_outcome
+    attributes:
+      label: 预期效果 / Expected Outcome
+      description: 必填。站在用户或系统视角描述最终期望效果（交互表现、解决程度或量化指标），不绑定具体代码实现。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference_approach
+    attributes:
+      label: 候选参考方案（选填） / Proposed Reference Approach
+      description: 选填。如果你有设想的解决思路或参考实现方式可在此给出（仅作实现参考，最终方案以维护者架构评审为准）。
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围边界（包含与不包含） / Scope
+      description: 选填。说明建议覆盖的核心范围，以及明确不做的内容（防止需求发散）
+
+  - type: textarea
+    id: research_references
+    attributes:
+      label: 同类开源调研与外部参考（选填） / External Research & Benchmarks
+      description: 选填。同类开源项目（如 Reactive-Resume、Claude Artifacts 等）是怎么做的？有哪些优缺点对比？
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 界面截图或参考原型（选填） / UI Screenshots & Mockups
+      description: 选填。涉及前端交互或视觉时，欢迎附上现状问题图、参考竞品截图或草图（请遮挡个人隐私与 API Key）
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准 / Acceptance Criteria
+      description: 列出可客观核验的交付清单
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true

@@ -1,0 +1,37 @@
+name: PR Template Check
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate-pr-body:
+    name: Validate PR Description & UI Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout base check script
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch changed files in PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files" --jq '.[].filename' > /tmp/changed_files.txt
+
+      - name: Validate PR body against template rules
+        run: |
+          python3 scripts/check_pr_template.py \
+            --event-path "${GITHUB_EVENT_PATH}" \
+            --changed-files-file /tmp/changed_files.txt
