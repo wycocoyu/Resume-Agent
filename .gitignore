@@ -112,11 +112,12 @@ knowledge-base/specs/2026-07-09-域名迁移resumegenkk-to-cococv.md
 feishu-clipper/
 
 # 项目根目录
-README.md
+/README.md
+!docs/README.md
 
-# 文档目录（AI 工具配置 + 内部架构文档；symlink → internal）
-docs
-docs/
+# 公开开发者文档在 docs/ 下受 Git 追踪；仅忽略内部 AI 编排草稿
+docs/agents/
+docs/openmanus
 
 # Local-only files
 config/
