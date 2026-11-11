@@ -29,7 +29,7 @@
 
 **Resume-Agent（[cococv.cn](https://cococv.cn)）** 是一个面向中文求职场景的全栈 AI 简历平台，打通了从 **一句话对话生成 / PDF 与图片导入 → 可解释简历诊断与 ATS 检查 → 自然语言增量改写 → 双栏可视化排版与 LaTeX PDF 导出** 的全流程，让你把精力放回经历打磨本身，告别深夜反复调格式。
 
-## ✨ 核心特性（v3.6）
+## ✨ 核心特性（v3.7）
 
 | 模块 | 核心能力 |
 |:--|:---|
@@ -38,7 +38,8 @@
 | 🔍 **可解释诊断与 ATS 清单** | 评分依据逐字引用简历原文；针对目标岗位 JD 输出 **ATS 兼容检查清单**，精准点出空泛套话、量化缺失与技能掌握度短板 |
 | 🛠️ **单条建议应用与缺口补齐** | 每条改进建议支持独立点击「帮我改这条」；涉及真实业务数据缺口的条目支持弹窗「补充信息并修改」 |
 | 🎨 **双栏可视化精细排版** | 涵盖基本信息、教育、工作、实习、项目、开源、技能、获奖、自评、科研 10 大板块（支持自定义模块）；支持公司/学校 Logo、工作年限、独立字号、正文蓝字重点高亮与多级列表 |
-| 📄 **LaTeX PDF 极速直连导出** | 服务端 XeLaTeX 高清编译，支持同源直连与 Base64 流式传输；导出时自动归一化中英混排引号与连接符，防止招聘系统（ATS）断词失败 |
+| 📄 **LaTeX PDF 极速直连导出** | 服务端 XeLaTeX 高清编译，自动嵌入中文字体 `/ToUnicode` CMap（兼容无外部字映射的内置 PDF.js 阅读器），并归一化中英混排引号与连接符保障 ATS 解析 |
+| 🔑 **可视化密钥配置与防呆热更新** | `/settings` 页面内置 DeepSeek 与智谱 GLM-OCR 密钥管理面板，支持一键连通性检测、跨平台格式防呆拦截与多 Worker 进程零重启热加载 |
 
 ## 📸 核心界面预览
 
@@ -107,18 +108,18 @@ cd frontend && npm install && cd ..
 cp .env.example .env
 ```
 
-在 `.env` 中填入以下核心配置：
+在 `.env` 中填入以下核心配置（也可先启动服务，再打开 `http://localhost:5173/settings` 在「AI 与 OCR 服务配置」面板可视化保存并一键检测连通性）：
 
 ```ini
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
-ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 JWT_SECRET_KEY=replace-with-any-random-string
 ```
 
-| 变量名 | 是否必填 | 用途与获取地址 |
+| 变量名 | 是否必填 | 格式与用途说明 |
 |:--|:--|:--|
-| `DEEPSEEK_API_KEY` | 必填 | 驱动 AI 对话、简历诊断与结构化生成（[DeepSeek 开放平台](https://platform.deepseek.com/)） |
-| `ZHIPU_API_KEY` | 推荐 | PDF / 图片简历上传导入的 OCR 与视觉识别（[智谱开放平台](https://open.bigmodel.cn/)） |
+| `DEEPSEEK_API_KEY` | 必填 | 以 `sk-` 开头；驱动 AI 对话、简历诊断与导入后的 JSON 结构化组装（[DeepSeek 开放平台](https://platform.deepseek.com/api_keys)） |
+| `ZHIPU_API_KEY` | 推荐 | 格式为 `id.secret`（含英文点号 `.`）；驱动 PDF / 图片简历导入的 `glm-ocr` 版面识别，单份简历 OCR 成本约 `¥0.001`（[智谱开放平台](https://open.bigmodel.cn/usercenter/apikeys)） |
 | `JWT_SECRET_KEY` | 必填 | 本地签名密钥，填入任意随机字符串即可 |
 
 > 💡 数据库默认使用本地 SQLite，开箱即用。如需切换 PostgreSQL，可在 `.env` 中启用 `USE_POSTGRESQL=true` 与 `POSTGRESQL_URL`。前端默认连接 `http://127.0.0.1:9000`，如需自定义可执行 `cp frontend/.env.example frontend/.env.local`。
