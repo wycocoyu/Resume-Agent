@@ -26,7 +26,8 @@ services:
     environment:
       # SQLite 落在挂载卷 /app/data 内，容器重建后数据不丢
       DATABASE_URL: sqlite:////app/data/resume.db
-      LOG_DIR: /app/logs/backend
+      # 日志根目录指向挂载卷；logger 按 backend/agent/latex/other 子目录分类落盘
+      LOG_DIR: /app/logs
       # 根目录 .env（compose 自动读取做变量替换）中的密钥注入
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
