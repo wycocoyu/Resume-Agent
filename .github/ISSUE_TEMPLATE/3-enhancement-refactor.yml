@@ -51,29 +51,27 @@ body:
     id: expected_outcome
     attributes:
       label: 预期效果 / Expected Outcome
-      description: 必填。改造完成后用户感知或工程指标达到什么效果？（例如：PDF 预览延迟降至 1s 内、设置页无布局跳动、移除冗余继承链）
+      description: 必填。改造完成后用户感知或工程指标达到什么效果？（例如：PDF 预览延迟降至 1s 内、设置页无布局跳动）
     validations:
       required: true
 
   - type: textarea
-    id: proposed_behavior
+    id: reference_approach
     attributes:
-      label: 目标方案与架构设计 / Proposed Design
-      description: 核心改造动作、模块边界与技术实现路径是什么？
-    validations:
-      required: true
+      label: 候选参考方案（选填） / Proposed Reference Approach
+      description: 选填。提供你建议的改造思路、模块拆分或参考路径（仅作评审前的候选参考方案，不锁定最终实现）。
 
   - type: textarea
     id: research_references
     attributes:
-      label: 调研与参考方案（选填） / Research & References
-      description: 选填。参考的开源仓库源码、设计系统标杆或候选方案权衡对比表
+      label: 同类开源调研与外部参考（选填） / External Research & Benchmarks
+      description: 选填。参考的外部开源仓库源码、设计系统标杆或候选路线权衡对比表
 
   - type: textarea
     id: breaking_changes
     attributes:
-      label: 兼容性、风险与迁移方案（选填） / Compatibility & Migration
-      description: 选填。是否影响现有简历 JSON、SSE 协议、本地缓存或环境变量？如有请说明平滑迁移方式
+      label: 兼容性、风险与迁移说明（选填） / Compatibility & Migration
+      description: 选填。是否影响现有简历 JSON、SSE 协议、本地缓存或环境变量？如有请说明平滑兼容思路
 
   - type: textarea
     id: screenshots

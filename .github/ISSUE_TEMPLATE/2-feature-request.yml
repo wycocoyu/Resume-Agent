@@ -39,29 +39,27 @@ body:
     id: expected_outcome
     attributes:
       label: 预期效果 / Expected Outcome
-      description: 必填。站在用户或系统视角描述上线后的最终效果（交互长什么样、解决到什么程度或达到什么量化指标）。
+      description: 必填。站在用户或系统视角描述最终期望效果（交互表现、解决程度或量化指标），不绑定具体代码实现。
     validations:
       required: true
 
   - type: textarea
-    id: solution
+    id: reference_approach
     attributes:
-      label: 期望方案与核心设计 / Proposed Solution
-      description: 描述拟采用的功能模块拆分、交互流程或技术方案（若尚未确定具体实现，可简要写思路）
-    validations:
-      required: true
+      label: 候选参考方案（选填） / Proposed Reference Approach
+      description: 选填。如果你有设想的解决思路或参考实现方式可在此给出（仅作实现参考，最终方案以维护者架构评审为准）。
 
   - type: textarea
     id: scope
     attributes:
       label: 范围边界（包含与不包含） / Scope
-      description: 选填。说明本期覆盖的核心范围，以及明确不做的内容（防止需求发散）
+      description: 选填。说明建议覆盖的核心范围，以及明确不做的内容（防止需求发散）
 
   - type: textarea
     id: research_references
     attributes:
-      label: 调研与参考方案（选填） / Research & References
-      description: 选填。同类开源项目（如 Reactive-Resume、Claude Artifacts 等）是怎么做的？有哪些备选方案对比？
+      label: 同类开源调研与外部参考（选填） / External Research & Benchmarks
+      description: 选填。同类开源项目（如 Reactive-Resume、Claude Artifacts 等）是怎么做的？有哪些优缺点对比？
 
   - type: textarea
     id: screenshots

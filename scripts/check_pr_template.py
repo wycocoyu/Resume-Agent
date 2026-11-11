@@ -2,9 +2,10 @@
 """Validate GitHub Pull Request descriptions against CocoCV's PR template rules.
 
 Enforces:
-1. All 5 core sections exist in the PR body.
-2. Required items (including `预期效果`) contain substantive content rather than empty template placeholders.
-3. Optional items (`调研对比与参考方案`, `明确不包含`, etc.) may be omitted or left blank without failing CI.
+1. All 5 core sections exist in the PR body, framing Section 2 explicitly as the contributor's
+   Proposed Reference Approach (`候选参考方案与边界`) rather than an authoritative final "Solution".
+2. Required items (including `预期效果`, `候选参考方案`, and `架构取舍`) contain substantive content.
+3. Optional items (`同类开源调研与外部参考`, `放弃的其他候选思路`, `明确不包含`, etc.) may be left blank.
 4. When changed files touch `frontend/` or `web/` (excluding test-only files and changelog.ts), Section 5
    must include either visual media (image/video link) or an explicit `不涉及视觉变化：<reason>` declaration.
 """
@@ -20,8 +21,8 @@ from pathlib import Path
 
 REQUIRED_SECTIONS: list[tuple[str, str]] = [
     ("## 1. 需求与预期效果", "1. 需求与预期效果（What, Why & Expected Outcome）"),
-    ("## 2. 方案是什么", "2. 方案是什么（Solution & Scope）"),
-    ("## 3. 架构取舍与参考方案", "3. 架构取舍与参考方案（Trade-offs & References）"),
+    ("## 2. 候选参考方案与边界", "2. 候选参考方案与边界（Proposed Reference Approach & Scope）"),
+    ("## 3. 架构取舍与外部调研", "3. 架构取舍与外部调研（Trade-offs & External Benchmarks）"),
     ("## 4. 验证结果", "4. 验证结果（Verification & Evidence）"),
     ("## 5. 前端 UI 变化与截图", "5. 前端 UI 变化与截图（UI Screenshots & Screen Recording）"),
 ]
@@ -42,12 +43,13 @@ PLACEHOLDER_LINES = {
     "- **需求背景与现状痛点**：",
     "- **预期效果（必填）**：",
     "- **预期效果**：",
-    "- **本 PR 包含的核心改动**：",
+    "- **本 PR 提交的参考方案**：",
     "- **明确不包含（Out of Scope，选填）**：",
     "- **明确不包含（Out of Scope）**：",
     "- **变更类型**：",
-    "- **架构取舍与决策（必填）**：",
-    "- **调研对比与参考方案（选填）**：",
+    "- **参考方案的取舍与权衡（必填）**：",
+    "- **放弃的其他候选思路（选填）**：",
+    "- **同类开源调研与外部参考（选填）**：",
     "- **数据兼容、风险与回滚（选填）**：",
     "- **手工验证路径与未覆盖盲区（选填）**：",
     "# 实际运行的构建或测试命令及结果",
@@ -138,6 +140,11 @@ def validate_pr_body(body: str, changed_files: list[str] | None = None) -> list[
     errors: list[str] = []
     if not (body or "").strip():
         return ["PR 描述为空，请使用 .github/PULL_REQUEST_TEMPLATE.md 填写完整说明。"]
+
+    if re.search(r"^##\s*2\.\s*(?:方案是什么|解决方案|实现方案)", body, flags=re.MULTILINE):
+        errors.append(
+            "第 2 节请使用标准标题 `## 2. 候选参考方案与边界（Proposed Reference Approach & Scope）`（PR 实现在合入前仅作为候选参考方案，不能自称最终解决方案）。"
+        )
 
     sections = extract_sections(body)
     for prefix, label in REQUIRED_SECTIONS:
