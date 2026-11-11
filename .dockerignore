@@ -1,0 +1,60 @@
+# ============================================================
+# Resume-Agent Docker 构建忽略清单（仓库根构建上下文）
+# 作用对象：docker-compose.yml 中 context 为仓库根的服务
+# （backend 以仓库根为 context，因为依赖根目录 requirements.txt、
+#   latex-resume-template/ 与 config.toml；
+#   frontend / web 镜像使用各自目录内独立的 .dockerignore）
+# ============================================================
+
+# --- 版本控制 / 本地 IDE / 索引缓存 ---
+.git
+.github
+.vscode
+.claude
+.codegraph
+.playwright-mcp
+.pytest_cache
+.cursorrules
+.DS_Store
+
+# --- Python 缓存与本地虚拟环境 ---
+.venv
+__pycache__
+*.pyc
+*.pyo
+
+# --- Node 依赖与前端构建产物（后端镜像不需要）---
+node_modules
+frontend/node_modules
+frontend/dist
+web/node_modules
+web/.next
+
+# --- 运行期数据与日志（由宿主机挂载卷提供，严禁打进镜像层）---
+data
+logs
+!logs/.gitkeep
+*.db
+
+# --- 本地密钥与内部文档（严禁进入镜像）---
+.env
+.env.local
+.env.*.local
+auth-stack.env
+*.local.md
+
+# --- 与镜像构建无关的本地资料目录 ---
+测试样本
+RM 截图
+简历测试
+knowledge-base
+LeetCode
+remote
+rollback
+reference
+assets
+images
+docs
+ai-config
+skills
+scripts

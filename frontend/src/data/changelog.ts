@@ -15,6 +15,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.8.0',
+    date: '2026-11-11',
+    added: [
+      '新增 Docker 与 Docker Compose 一键容器化部署支持，免去本地安装配置环境即可开箱使用',
+      '后端镜像预置 XeLaTeX 中文排版编译环境与数据持久化目录，支持重启零数据丢失',
+    ],
+  },
+  {
     version: '3.7.3',
     date: '2026-11-10',
     added: [

@@ -162,6 +162,72 @@ cd frontend && npm run build
 python -m pytest backend/tests/ -q
 ```
 
+## 🐳 Docker 容器化一键部署
+
+> 无需本地安装 Python / Node / XeLaTeX，一条命令拉起完整服务（后端镜像内置 XeLaTeX 中文编译环境与 Adobe 中文字体）。
+
+### 1. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+在 `.env` 中填入 `DEEPSEEK_API_KEY`（必填）、`ZHIPU_API_KEY`（推荐，PDF/图片导入）与 `JWT_SECRET_KEY`，Docker Compose 会自动读取并注入后端容器；也可启动后在 `http://localhost/settings` 页面可视化配置并热更新。
+
+### 2. 一键启动基础栈
+
+```bash
+docker compose up -d --build
+```
+
+启动完成后访问：
+
+| 服务 | 地址 |
+|:--|:--|
+| 🖥️ **前端应用** | http://localhost |
+| ⚙️ **后端 API** | http://localhost:9000（`BACKEND_PORT` 可改） |
+| 📖 **Swagger 接口文档** | http://localhost:9000/docs |
+
+前端 Nginx 已配置 `/api/` 反向代理与 SSE 流式透传（`proxy_buffering off`），AI 对话与 PDF 渲染进度实时输出，无需任何额外配置。
+
+### 3. 数据持久化说明
+
+| 宿主机目录 | 容器挂载点 | 内容 |
+|:--|:--|:--|
+| `./data/` | `/app/data` | SQLite 数据库（`resume.db`）与用户数据 |
+| `./logs/` | `/app/logs` | 后端 / LaTeX 编译 / 前端日志 |
+
+容器重建（`docker compose down && up`）后数据与日志不丢失；彻底清空数据请手动删除 `./data` 与 `./logs` 目录。
+
+### 4. 多用户认证栈（可选）
+
+需要统一身份认证（Next.js BetterAuth + PostgreSQL）时，以 auth profile 启动：
+
+```bash
+docker compose --profile auth up -d --build
+```
+
+将额外拉起 `postgres:16-alpine`（数据落在 `pgdata` 卷）与 `web` 认证服务（http://localhost:3000），并在 `.env` 中补充共享密钥：
+
+```ini
+FASTAPI_INTERNAL_AUTH_SECRET=与-web-一致的内部签名密钥
+BETTER_AUTH_SECRET=BetterAuth-Cookie-签名密钥
+```
+
+### 5. 常用环境变量
+
+| 变量 | 默认值 | 说明 |
+|:--|:--|:--|
+| `FRONTEND_PORT` | `80` | 前端（Nginx）对外端口 |
+| `BACKEND_PORT` | `9000` | 后端 API 对外端口 |
+| `WEB_PORT` | `3000` | 认证服务对外端口（auth profile） |
+| `POSTGRES_PASSWORD` | `resume_auth_password` | 认证库密码（auth profile，生产环境务必修改） |
+| `DEEPSEEK_API_KEY` | 空 | AI 对话 / 诊断 / 结构化生成 |
+| `ZHIPU_API_KEY` | 空 | PDF / 图片简历 OCR 导入 |
+| `JWT_SECRET_KEY` | 占位值 | 本地签名密钥 |
+
+其他后端环境变量（`RUOLI_API_KEY`、`COS_SECRET_KEY` 等）同样在 `.env` 中配置后自动透传进容器；完整清单见 `.env.example`。
+
 ## ⭐ Star History
 
 <div align="center">
