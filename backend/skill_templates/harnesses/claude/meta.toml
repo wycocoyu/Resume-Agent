@@ -1,0 +1,36 @@
+schema_version = 1
+id = "claude"
+display_name = "Claude Code"
+# experimental: the discovery path and skill frontmatter are implemented from the
+# documented layout, but have not been validated against a running Claude CLI in
+# this repository. Flip to "verified" only after an end-to-end run.
+status = "experimental"
+invoke_syntax = "/resume-agent"
+cli_min_version = "0.1.0"
+
+[frontmatter]
+name = "resume-agent"
+description = "long"
+
+[frontmatter.extra]
+allowed-tools = ["Bash(resume-agent:*)", "Read", "Write", "Edit"]
+
+[constraints]
+description_min = 20
+description_max = 1024
+
+[[assets]]
+from = "core/body.md"
+to = "SKILL.md"
+mode = "skill"
+
+[[assets]]
+from = "core/references/schema.md"
+to = "references/schema.md"
+mode = "schema"
+
+[install]
+scope_default = "user"
+strategy = "copy"
+user_paths = ["~/.claude/skills"]
+project_paths = [".claude/skills"]

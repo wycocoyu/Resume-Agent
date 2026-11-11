@@ -1,0 +1,98 @@
+# ResumeData Schema & Field Conventions
+
+Run `resume-agent schema` at any time to inspect the live JSON Schema generated from `backend/cli/schema.py:ResumeDataModel`.
+
+> Generated document. Field names, types, required/optional status, the eight
+> HTML rich-text fields, the plain-text field list and the built-in company logo
+> keys are rendered from code by `resume-agent skill build`. Edit
+> `core/references/schema.md.in` (prose) or `core/references/field_notes.toml`
+> (per-field wording) instead of editing the output.
+
+## 1. Top-Level `ResumeData` Keys
+
+### Required Keys (all <!-- gen:required-count --> must be present)
+
+<!-- gen:top-required -->
+
+### Optional Top-Level Keys
+
+<!-- gen:top-optional -->
+
+---
+
+## 2. Rich-Text HTML vs Plain-Text Convention
+
+### Exactly <!-- gen:rich-text-count --> HTML Rich-Text Fields
+
+Use `<p>`, `<ul class="custom-list"><li><p>...</p></li></ul>`, `<ol>`, `<strong>`, `<em>`, `<a href="...">`, `<br>` ONLY in these <!-- gen:rich-text-count --> paths:
+
+<!-- gen:rich-text -->
+
+Recommended bullet pattern:
+```html
+<ul class="custom-list"><li><p><strong>高并发网关</strong>：重构核心限流链路，峰值吞吐提升 45%，P99 延迟降至 12ms</p></li></ul>
+```
+
+### Plain-Text Fields (No HTML Tags!)
+
+- **`awards[*].description` is PLAIN TEXT ONLY.** The LaTeX awards generator escapes it directly via `escape_latex`; HTML tags like `<p>` will appear literally in the rendered PDF.
+
+All title and header fields below must be plain strings, with no HTML tags:
+
+<!-- gen:plain-text -->
+
+---
+
+## 3. Sub-Object Schemas
+
+### `basic` (`BasicInfo`)
+- Required: `name`, `title` (target role), `email`, `phone`, `location` (`string`, use `""` when omitted).
+- Optional:
+  - `birthDate`: `"YYYY-MM"` or `"YYYY-MM-DD"`
+  - `employementStatus`: e.g. `"26届应届"` or `"在职-考虑机会"` (note spelling `employementStatus` with `e`)
+  - `workYears`: e.g. `"3年经验"`
+  - `blog`: URL string, e.g. `"https://github.com/username"`
+  - `photo`: CLI accepts local PNG/JPEG/PDF file path or `data:image/png;base64,...` (or `https://...` with `--online`). WebP and SVG are rejected by magic-byte check.
+  - `photoOffsetX`, `photoOffsetY`, `photoWidthCm`, `photoHeightCm`: `number`
+
+### `education[*]` (`Education`)
+- Required: `id` (non-empty `string`), `school`, `major`, `degree`, `startDate`, `endDate`.
+- Optional: `gpa`, `description` (HTML), `visible` (`boolean`), `schoolNameFontSize` (`number`), `schoolLogo` (Chinese school name key, e.g. `"北京大学"`), `schoolLogoSize` (`number`).
+- School logo keys are discovered at runtime from the school logo library (COS or local `images/school_logo/`), not from a fixed dictionary.
+
+### `workExperience[*]` and `experience[*]` (`Experience`)
+- Required: `id`, `company`, `position`, `date`, `details` (HTML).
+- Optional: `visible` (`boolean`), `companyNameFontSize` (`number`), `companyLogo` (`string`), `companyLogoSize` (`number`).
+- Built-in `companyLogo` keys: <!-- gen:company-logos -->
+
+### `projects[*]` (`Project`)
+- Required: `id`, `name`, `role`, `date`, `description` (HTML).
+- Optional: `visible` (`boolean`, default `true`), `link` (`string`), `projectNameFontSize` (`number`), `projectLinkFontSize` (`number`).
+
+### `openSource[*]` (`OpenSource`)
+- Required: `id`, `name`, `description` (HTML).
+- Optional: `repo` (URL `string`), `role`, `date`, `visible` (`boolean`), `projectNameFontSize` (`number`), `repoUrlFontSize` (`number`).
+
+### `awards[*]` (`Award`)
+- Required: `id`, `title`.
+- Optional: `issuer`, `date`, `description` (**plain text only**), `visible` (`boolean`).
+
+### `customData[sectionId][*]` (`CustomItem`)
+- `sectionId` must start with `custom_` (for example `"custom_research"`) and match an entry in `menuSections` with `"id": sectionId` and `"enabled": true`.
+- Required per item: `id`, `title`, `subtitle`, `dateRange`, `description` (HTML).
+- Optional: `visible` (`boolean`, default `true`).
+
+### `menuSections[*]` (`MenuSection`)
+- Required: `id`, `title`, `icon`, `enabled` (`boolean`), `order` (`integer`).
+- Standard IDs: `basic`, `education`, `workExperience`, `experience`, `projects`, `openSource`, `skills`, `awards`, `selfEvaluation`, `custom_research`.
+- PDF section rendering follows the order of enabled non-`basic` entries in `menuSections`.
+
+### `globalSettings` (`GlobalSettings`)
+- Key LaTeX options:
+  - `latexFontSize`: integer `8`..`12` (default `11`)
+  - `latexMargin`: `"tight" | "compact" | "standard" | "relaxed" | "wide"` (default `"standard"`)
+  - `latexLineSpacing`: `0.8`..`2.0` (default `1.15`)
+  - `experienceListType`: `"none" | "unordered" | "ordered"`
+  - `awardsListType`: `"unordered" | "ordered"`
+  - `birthDateDisplayMode`: `"birthDate" | "age"`
+  - `fieldLabelModes`: map of `title | birthDate | email | phone | location | blog | workYears` to `"icon" | "text" | "none"`

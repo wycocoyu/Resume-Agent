@@ -1,0 +1,33 @@
+schema_version = 1
+id = "pi"
+display_name = "pi"
+# experimental: path follows the documented ~/.pi/agent/skills layout but has not
+# been validated against a running pi coding agent in this repository.
+status = "experimental"
+invoke_syntax = "/resume-agent"
+cli_min_version = "0.1.0"
+notes = "Path follows ~/.pi/agent/skills; frontmatter requirements unverified."
+
+[frontmatter]
+name = "resume-agent"
+description = "long"
+
+[constraints]
+description_min = 20
+description_max = 1024
+
+[[assets]]
+from = "core/body.md"
+to = "SKILL.md"
+mode = "skill"
+
+[[assets]]
+from = "core/references/schema.md"
+to = "references/schema.md"
+mode = "schema"
+
+[install]
+scope_default = "user"
+strategy = "copy"
+user_paths = ["~/.pi/agent/skills"]
+project_paths = []
