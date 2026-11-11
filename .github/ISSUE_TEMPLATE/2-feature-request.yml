@@ -1,7 +1,7 @@
-name: "✨ 新功能提案 / Feature Request"
+name: "新功能提案 / Feature Request"
 description: "提议从零新增的产品能力、工作流或生态集成"
 title: "feat: "
-labels: ["feature", "enhancement"]
+labels: ["enhancement"]
 body:
   - type: checkboxes
     id: preflight
@@ -18,12 +18,12 @@ body:
     attributes:
       label: 所属模块 / Area
       options:
-        - 工作台与界面设计 (area: ui)
-        - Agent 运行时与流式对话 (area: agent)
-        - LaTeX 与 HTML 模板渲染导出 (area: templates)
-        - CLI、Skill 与 MCP 工具链 (area: cli-mcp)
-        - 隐私脱敏、密钥设置与鉴权 (area: security-privacy)
-        - 工程基建与其它 (area: infra)
+        - 工作台与界面设计
+        - Agent 运行时与流式对话
+        - LaTeX 与 HTML 模板渲染导出
+        - CLI、Skill 与 MCP 工具链
+        - 隐私脱敏、密钥设置与鉴权
+        - 工程基建与其它
     validations:
       required: true
 

@@ -1,7 +1,7 @@
-name: "🛠 体验改进、性能与架构重构 / Enhancement & Refactor"
+name: "改进与重构 / Enhancement & Refactor"
 description: "针对现有功能的界面打磨、渲染性能优化、架构重构或工程规范治理"
 title: "refactor: "
-labels: ["enhancement", "refactor"]
+labels: ["refactor"]
 body:
   - type: checkboxes
     id: preflight
@@ -18,10 +18,10 @@ body:
     attributes:
       label: 改进类型 / Category
       options:
-        - 架构重构与代码治理 (refactor)
-        - 体验与界面打磨 (enhancement)
-        - 性能优化与渲染提速 (performance)
-        - 工程基建、文档与仓库维护 (chore)
+        - 架构重构与代码治理
+        - 体验与界面打磨
+        - 性能优化与渲染提速
+        - 工程基建、文档与仓库维护
     validations:
       required: true
 
@@ -30,12 +30,12 @@ body:
     attributes:
       label: 所属模块 / Area
       options:
-        - 工作台与界面设计 (area: ui)
-        - Agent 运行时与流式对话 (area: agent)
-        - LaTeX 与 HTML 模板渲染导出 (area: templates)
-        - CLI、Skill 与 MCP 工具链 (area: cli-mcp)
-        - 隐私脱敏、密钥设置与鉴权 (area: security-privacy)
-        - 工程基建与其它 (area: infra)
+        - 工作台与界面设计
+        - Agent 运行时与流式对话
+        - LaTeX 与 HTML 模板渲染导出
+        - CLI、Skill 与 MCP 工具链
+        - 隐私脱敏、密钥设置与鉴权
+        - 工程基建与其它
     validations:
       required: true
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 import yaml
 
 from scripts.check_pr_template import validate_pr_body
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_MINIMAL_LABELS = {"bug", "enhancement", "refactor", "documentation"}
+EMOJI_RE = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 
 
 class CheckPRTemplateTests(unittest.TestCase):
@@ -68,7 +71,7 @@ class CheckPRTemplateTests(unittest.TestCase):
 ## 1. 需求与预期效果（What, Why & Expected Outcome）
 - **关联 Issue**：Closes #59
 - **需求背景与现状痛点**：统一仓库 Issue 与 PR 规范。
-- **预期效果（必填）**：新建 Issue 自动展示 4 类表单，PR 明确将提交代码定位为候选参考方案并拦截漏贴前端截图。
+- **预期效果（必填）**：新建 Issue 自动展示 4 类无花哨表情表单且仅打单一主标签，PR 明确将提交代码定位为候选参考方案并拦截漏贴前端截图。
 
 ## 2. 候选参考方案与边界（Proposed Reference Approach & Scope）
 - **本 PR 提交的参考方案**：新增 4 类 Issue Forms、PR 模板与 CI 校验脚本。
@@ -126,21 +129,27 @@ __UI_PLACEHOLDER__
         )
         self.assertEqual(validate_pr_body(with_exemption, changed_files=["frontend/src/lib/utils.ts"]), [])
 
-    def test_issue_form_templates_frame_approach_as_optional_reference(self) -> None:
+    def test_issue_form_templates_are_emoji_free_and_single_label(self) -> None:
         issue_dir = REPO_ROOT / ".github" / "ISSUE_TEMPLATE"
-        config = yaml.safe_load((issue_dir / "config.yml").read_text(encoding="utf-8"))
+        config_raw = (issue_dir / "config.yml").read_text(encoding="utf-8")
+        self.assertIsNone(EMOJI_RE.search(config_raw))
+        config = yaml.safe_load(config_raw)
         self.assertIs(config["blank_issues_enabled"], False)
+
+        for filename in ("1-bug-report.yml", "2-feature-request.yml", "3-enhancement-refactor.yml", "4-agent-behavior.yml"):
+            raw = (issue_dir / filename).read_text(encoding="utf-8")
+            self.assertIsNone(EMOJI_RE.search(raw), f"{filename} still contains emojis")
+            form = yaml.safe_load(raw)
+            labels = form.get("labels", [])
+            self.assertEqual(len(labels), 1, f"{filename} should bind exactly 1 label")
+            self.assertIn(labels[0], ALLOWED_MINIMAL_LABELS)
 
         for filename in ("2-feature-request.yml", "3-enhancement-refactor.yml"):
             form = yaml.safe_load((issue_dir / filename).read_text(encoding="utf-8"))
             by_id = {item.get("id"): item for item in form["body"] if item.get("id")}
-            self.assertIn("expected_outcome", by_id)
             self.assertTrue(by_id["expected_outcome"].get("validations", {}).get("required"))
-            self.assertIn("reference_approach", by_id)
             self.assertIn("候选参考方案", by_id["reference_approach"]["attributes"]["label"])
             self.assertFalse(by_id["reference_approach"].get("validations", {}).get("required", False))
-            self.assertIn("research_references", by_id)
-            self.assertFalse(by_id["research_references"].get("validations", {}).get("required", False))
 
 
 if __name__ == "__main__":

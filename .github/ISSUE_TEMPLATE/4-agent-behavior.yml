@@ -1,7 +1,7 @@
-name: "🤖 Agent 改写与模型行为异常 / Agent Behavior"
+name: "Agent 行为异常 / Agent Behavior"
 description: "反馈 AI 简历润色幻觉、漏改模块、破坏排版语法或 Prompt 策略越界（非服务崩溃报错）"
 title: "fix(agent): "
-labels: ["bug", "agent-behavior", "area: agent"]
+labels: ["bug"]
 body:
   - type: checkboxes
     id: preflight
