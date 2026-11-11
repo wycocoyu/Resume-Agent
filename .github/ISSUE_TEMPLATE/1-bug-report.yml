@@ -1,0 +1,81 @@
+name: "🐞 缺陷报告 / Bug Report"
+description: "报告可复现的功能报错、界面渲染异常或导出故障"
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认 / Preflight Check
+      options:
+        - label: 我已检索现有 Issues，确认这不是重复报告。
+          required: true
+        - label: 我已抹除日志、截图与正文中的个人简历隐私（姓名/电话/邮箱）及 API Key 明文。
+          required: true
+
+  - type: dropdown
+    id: variant
+    attributes:
+      label: 运行环境 / Deployment
+      options:
+        - cococv.cn 线上云端版
+        - 本地自建部署 (Self-hosted Web)
+        - CLI / Agent Skill 本地命令行
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 所属模块 / Area
+      options:
+        - 工作台与界面设计 (area: ui)
+        - Agent 运行时与流式对话 (area: agent)
+        - LaTeX 与 HTML 模板渲染导出 (area: templates)
+        - CLI、Skill 与 MCP 工具链 (area: cli-mcp)
+        - 隐私脱敏、密钥设置与鉴权 (area: security-privacy)
+        - 工程基建与其它 (area: infra)
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 系统与浏览器版本 / Environment
+      description: 请填写操作系统、浏览器版本或 Commit SHA / CLI 版本
+      placeholder: "macOS 15.2 / Chrome 134 / commit 071372d7"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述与实际表现 / Actual Behavior
+      description: 清晰说明发生了什么异常、报错信息是什么、影响了什么操作
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望表现 / Expected Behavior
+      description: 正常情况下这里应该如何表现
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤 / Steps to Reproduce
+      placeholder: |
+        1. 打开 ...
+        2. 点击 / 输入 ...
+        3. 观察到 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志与截图（请先脱敏） / Logs & Screenshots
+      description: 附上浏览器控制台报错、后端日志片段或界面截图（严禁包含真实 API Key 与身份证/手机号）

@@ -1,0 +1,58 @@
+name: "🤖 Agent 改写与模型行为异常 / Agent Behavior"
+description: "反馈 AI 简历润色幻觉、漏改模块、破坏排版语法或 Prompt 策略越界（非服务崩溃报错）"
+title: "fix(agent): "
+labels: ["bug", "agent-behavior", "area: agent"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认 / Preflight Check
+      options:
+        - label: 这是模型回复质量、工具调用决策或改写策略问题（接口 500 或页面白屏请选「缺陷报告」）。
+          required: true
+        - label: 我已将输入简历中的真实姓名、电话、邮箱、公司名与 API Key 替换为匿名占位符。
+          required: true
+
+  - type: dropdown
+    id: behavior_type
+    attributes:
+      label: 异常行为分类 / Behavior Type
+      options:
+        - 编造经历数据或事实幻觉
+        - 未按用户指令修改或漏改指定模块
+        - 破坏富文本 HTML / LaTeX 格式或字段边界
+        - 工具调用死循环、抢跑或输出截断
+        - 追问卡片 (ask_user_question) 触发时机不当
+        - 其它模型行为异常
+    validations:
+      required: true
+
+  - type: input
+    id: model_info
+    attributes:
+      label: 使用的模型与模式 / Model & Mode
+      placeholder: "例如：deepseek-chat / 简历诊断转定向改写"
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_prompt
+    attributes:
+      label: 触发指令与输入上下文（脱敏） / Prompt & Context
+      description: 提供你输入的原话指令及相关的匿名简历片段
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_vs_expected
+    attributes:
+      label: 实际输出 vs 期望输出 / Actual vs Expected
+      description: 对比 Agent 实际生成的补丁/回复，与你期望它做出的正确修改
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 会话截图或事件流片段 / Screenshots & Stream Logs
+      description: 可附上脱敏后的 Diff 审批卡截图或 SSE 事件流片段

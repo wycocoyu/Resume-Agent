@@ -1,0 +1,81 @@
+name: "✨ 新功能提案 / Feature Request"
+description: "提议从零新增的产品能力、工作流或生态集成"
+title: "feat: "
+labels: ["feature", "enhancement"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认 / Preflight Check
+      options:
+        - label: 我已检索现有 Issues，确认尚无相同提案。
+          required: true
+        - label: 正文与配图中不包含个人简历敏感隐私或 API Key 明文。
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 所属模块 / Area
+      options:
+        - 工作台与界面设计 (area: ui)
+        - Agent 运行时与流式对话 (area: agent)
+        - LaTeX 与 HTML 模板渲染导出 (area: templates)
+        - CLI、Skill 与 MCP 工具链 (area: cli-mcp)
+        - 隐私脱敏、密钥设置与鉴权 (area: security-privacy)
+        - 工程基建与其它 (area: infra)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 需求背景与用户痛点 / Problem & Motivation
+      description: 你在什么求职或开发场景下遇到了什么阻碍？现有能力为什么无法满足？
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_outcome
+    attributes:
+      label: 预期效果 / Expected Outcome
+      description: 必填。站在用户或系统视角描述上线后的最终效果（交互长什么样、解决到什么程度或达到什么量化指标）。
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望方案与核心设计 / Proposed Solution
+      description: 描述拟采用的功能模块拆分、交互流程或技术方案（若尚未确定具体实现，可简要写思路）
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围边界（包含与不包含） / Scope
+      description: 选填。说明本期覆盖的核心范围，以及明确不做的内容（防止需求发散）
+
+  - type: textarea
+    id: research_references
+    attributes:
+      label: 调研与参考方案（选填） / Research & References
+      description: 选填。同类开源项目（如 Reactive-Resume、Claude Artifacts 等）是怎么做的？有哪些备选方案对比？
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 界面截图或参考原型（选填） / UI Screenshots & Mockups
+      description: 选填。涉及前端交互或视觉时，欢迎附上现状问题图、参考竞品截图或草图（请遮挡个人隐私与 API Key）
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准 / Acceptance Criteria
+      description: 列出可客观核验的交付清单
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true

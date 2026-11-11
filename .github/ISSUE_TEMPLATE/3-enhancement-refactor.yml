@@ -1,0 +1,93 @@
+name: "🛠 体验改进、性能与架构重构 / Enhancement & Refactor"
+description: "针对现有功能的界面打磨、渲染性能优化、架构重构或工程规范治理"
+title: "refactor: "
+labels: ["enhancement", "refactor"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认 / Preflight Check
+      options:
+        - label: 我已检索现有 Issues，确认尚无相同改进单。
+          required: true
+        - label: 正文与配图中不包含个人简历敏感隐私或 API Key 明文。
+          required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 改进类型 / Category
+      options:
+        - 架构重构与代码治理 (refactor)
+        - 体验与界面打磨 (enhancement)
+        - 性能优化与渲染提速 (performance)
+        - 工程基建、文档与仓库维护 (chore)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 所属模块 / Area
+      options:
+        - 工作台与界面设计 (area: ui)
+        - Agent 运行时与流式对话 (area: agent)
+        - LaTeX 与 HTML 模板渲染导出 (area: templates)
+        - CLI、Skill 与 MCP 工具链 (area: cli-mcp)
+        - 隐私脱敏、密钥设置与鉴权 (area: security-privacy)
+        - 工程基建与其它 (area: infra)
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: 现状与问题根因 / Current Behavior & Root Cause
+      description: 当前系统怎么工作？具体痛点、视觉问题、性能瓶颈或代码根因（建议附文件路径与行号）是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_outcome
+    attributes:
+      label: 预期效果 / Expected Outcome
+      description: 必填。改造完成后用户感知或工程指标达到什么效果？（例如：PDF 预览延迟降至 1s 内、设置页无布局跳动、移除冗余继承链）
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: 目标方案与架构设计 / Proposed Design
+      description: 核心改造动作、模块边界与技术实现路径是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: research_references
+    attributes:
+      label: 调研与参考方案（选填） / Research & References
+      description: 选填。参考的开源仓库源码、设计系统标杆或候选方案权衡对比表
+
+  - type: textarea
+    id: breaking_changes
+    attributes:
+      label: 兼容性、风险与迁移方案（选填） / Compatibility & Migration
+      description: 选填。是否影响现有简历 JSON、SSE 协议、本地缓存或环境变量？如有请说明平滑迁移方式
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 现状问题图或参考视觉（选填） / UI Screenshots & Visuals
+      description: 选填。涉及前端样式或体验改进时，建议贴出现状截图与参考标杆截图（请先脱敏）
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 实施路线与验收标准 / Roadmap & Acceptance Criteria
+      description: 分期计划与可客观核验的完成定义
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
