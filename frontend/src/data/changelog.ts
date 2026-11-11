@@ -15,14 +15,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.7.1',
+    version: '3.7.2',
     date: '2026-11-10',
     added: [
       '支持通过命令行工具与 Codex 技能直接创建、校验并导出 PDF 简历，也可与网页端同步简历',
       '设置页新增「AI 与 OCR 服务配置」，支持可视化配置与一键检测 DeepSeek 及智谱 GLM-OCR 密钥状态',
     ],
     fixed: [
-      '修复导出的 PDF 简历在部分阅读器中无法显示或复制中文的问题',
+      '修复导出的 PDF 简历在内置预览器与部分阅读器中中文显示空白或无法复制的问题',
     ],
   },
   {

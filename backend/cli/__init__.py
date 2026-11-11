@@ -202,12 +202,33 @@ register_render_command(app, get_output_context)
 register_sync_commands(app, get_output_context)
 
 
+def _collect_exc_types(*candidates: Any) -> tuple[type[BaseException], ...]:
+    return tuple({c for c in candidates if isinstance(c, type) and issubclass(c, BaseException)})
+
+
 _typer_click = getattr(typer, "_click", click)
-_NO_ARGS_EXC = tuple({click.exceptions.NoArgsIsHelpError, _typer_click.exceptions.NoArgsIsHelpError})
-_USAGE_EXC = tuple({click.UsageError, _typer_click.exceptions.UsageError})
-_CLICK_EXC = tuple({click.ClickException, _typer_click.exceptions.ClickException})
-_EXIT_EXC = tuple({click.exceptions.Exit, _typer_click.exceptions.Exit, typer.Exit})
-_ABORT_EXC = tuple({click.exceptions.Abort, _typer_click.exceptions.Abort, typer.Abort})
+_NO_ARGS_EXC = _collect_exc_types(
+    getattr(click.exceptions, "NoArgsIsHelpError", None),
+    getattr(_typer_click.exceptions, "NoArgsIsHelpError", None),
+)
+_USAGE_EXC = _collect_exc_types(
+    getattr(click, "UsageError", None),
+    getattr(_typer_click, "UsageError", None),
+)
+_CLICK_EXC = _collect_exc_types(
+    getattr(click, "ClickException", None),
+    getattr(_typer_click, "ClickException", None),
+)
+_EXIT_EXC = _collect_exc_types(
+    getattr(click.exceptions, "Exit", None),
+    getattr(_typer_click.exceptions, "Exit", None),
+    typer.Exit,
+)
+_ABORT_EXC = _collect_exc_types(
+    getattr(click.exceptions, "Abort", None),
+    getattr(_typer_click.exceptions, "Abort", None),
+    typer.Abort,
+)
 
 
 def run_cli(argv: Sequence[str] | None = None) -> int:

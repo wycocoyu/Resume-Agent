@@ -494,3 +494,79 @@ def test_download_url_to_path_enforces_max_bytes(tmp_path: Path, monkeypatch: py
         company_logos._download_url_to_path("https://example.com/big.png", dest, max_bytes=64)
     assert not dest.exists()
 
+
+def test_cjk_tounicode_stdlib_fallback_when_pymupdf_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard: even when pymupdf/fitz is absent at runtime, CJK Type0 fonts still get /ToUnicode CMaps."""
+    import sys
+    import tomllib
+
+    # 1. pyproject.toml must declare PyMuPDF so `pip install .` / `uv run` includes it
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    pyproject_data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    deps = [d.lower() for d in pyproject_data["project"]["dependencies"]]
+    assert any(d.startswith("pymupdf") for d in deps), f"PyMuPDF missing from pyproject.toml: {deps}"
+
+    # 2. Produce a raw xelatex PDF WITHOUT post-processing by temporarily bypassing _ensure_cjk_tounicode_cmaps
+    template_dir = Path(__file__).resolve().parents[2] / "latex-resume-template"
+    resume = {
+        "name": "尹昕雨",
+        "contact": {"phone": "19854081014", "email": "test@example.com", "location": "深圳"},
+        "education": [
+            {
+                "title": "深圳大学",
+                "subtitle": "播音与主持艺术",
+                "degree": "本科",
+                "date": "2022.9-2026.7",
+                "details": ["主修课程：视听语言、非线性编辑"],
+            }
+        ],
+    }
+    latex_code = latex_generator.json_to_latex(resume, ["education"])
+
+    orig_helper = latex_generator._ensure_cjk_tounicode_cmaps
+    monkeypatch.setattr(latex_generator, "_ensure_cjk_tounicode_cmaps", lambda b, _t: b)
+    raw_pdf_bytes = latex_generator.compile_latex_to_pdf(
+        latex_code, template_dir, resume_data=resume, offline=True
+    ).getvalue()
+    monkeypatch.setattr(latex_generator, "_ensure_cjk_tounicode_cmaps", orig_helper)
+
+    # Confirm raw xelatex PDF lacks /ToUnicode on CJK Type0 fonts
+    with fitz.open(stream=raw_pdf_bytes, filetype="pdf") as raw_doc:
+        raw_missing = [
+            xref
+            for xref in range(1, raw_doc.xref_length())
+            if "/Subtype /Type0" in raw_doc.xref_object(xref)
+            and "/ToUnicode" not in raw_doc.xref_object(xref)
+        ]
+        assert raw_missing, "Expected raw xelatex CJK Type0 fonts to lack /ToUnicode"
+        # Save a classic ASCII xref variant (garbage=0, deflate=True, no ObjStm) to test classic xref branch too
+        classic_xref_raw = raw_doc.tobytes(garbage=1, deflate=True)
+
+    # 3. Block both pymupdf and fitz and run _ensure_cjk_tounicode_cmaps -> exercises stdlib incremental updater
+    monkeypatch.setitem(sys.modules, "pymupdf", None)
+    monkeypatch.setitem(sys.modules, "fitz", None)
+    fixed_objstm_pdf = orig_helper(raw_pdf_bytes, template_dir)
+    fixed_classic_pdf = orig_helper(classic_xref_raw, template_dir)
+    monkeypatch.undo()
+
+    for variant_name, pdf_blob in [("xref_stream_objstm", fixed_objstm_pdf), ("classic_xref", fixed_classic_pdf)]:
+        assert len(pdf_blob) > len(raw_pdf_bytes) or variant_name == "classic_xref"
+        with fitz.open(stream=pdf_blob, filetype="pdf") as fixed_doc:
+            extracted = fixed_doc[0].get_text()
+            assert "尹昕雨" in extracted, f"{variant_name} failed to extract 尹昕雨: {extracted!r}"
+            assert "深圳大学" in extracted, f"{variant_name} failed to extract 深圳大学: {extracted!r}"
+            type0_xrefs = [
+                xref
+                for xref in range(1, fixed_doc.xref_length())
+                if "/Subtype /Type0" in fixed_doc.xref_object(xref)
+            ]
+            assert type0_xrefs
+            for xref in type0_xrefs:
+                assert "/ToUnicode" in fixed_doc.xref_object(xref), (
+                    f"{variant_name}: Type0 font XREF {xref} still missing /ToUnicode"
+                )
+
+

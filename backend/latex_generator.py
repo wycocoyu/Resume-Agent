@@ -11,6 +11,7 @@ import shutil
 import time
 import hashlib
 import json
+import zlib
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -961,18 +962,339 @@ def _build_tounicode_cmap_stream(font_name: str, pairs: List[tuple[int, int]]) -
     return "\n".join(lines).encode("ascii")
 
 
-def _ensure_cjk_tounicode_cmaps(pdf_bytes: bytes, template_dir: Path) -> bytes:
-    """Attach embedded /ToUnicode CMap streams to Adobe-GB1 CIDFontType0 fonts when omitted by xdvipdfmx."""
-    try:
-        import fitz
-    except ImportError:
+def _extract_used_cid_unicode_pairs(
+    cidset_bytes: bytes,
+    gid_to_uni: Dict[int, int],
+) -> List[tuple[int, int]]:
+    used_pairs: List[tuple[int, int]] = []
+    for byte_idx, bval in enumerate(cidset_bytes):
+        if bval == 0:
+            continue
+        for bit in range(8):
+            if bval & (0x80 >> bit):
+                cid = byte_idx * 8 + bit
+                uni = gid_to_uni.get(cid)
+                if uni is not None and cid <= 0xFFFF:
+                    used_pairs.append((cid, uni))
+    return used_pairs
+
+
+def _undo_png_predictor(raw: bytes, columns: int, predictor: int) -> bytes:
+    if predictor < 10 or columns <= 0:
+        return raw
+    stride = columns + 1
+    if len(raw) % stride != 0:
+        return raw
+    out = bytearray()
+    prev = bytearray(columns)
+    for pos in range(0, len(raw), stride):
+        filt = raw[pos]
+        row = bytearray(raw[pos + 1 : pos + stride])
+        if filt == 1:  # Sub
+            for i in range(columns):
+                left = row[i - 1] if i > 0 else 0
+                row[i] = (row[i] + left) & 0xFF
+        elif filt == 2:  # Up
+            for i in range(columns):
+                row[i] = (row[i] + prev[i]) & 0xFF
+        out.extend(row)
+        prev = row
+    return bytes(out)
+
+
+def _ensure_cjk_tounicode_cmaps_stdlib(pdf_bytes: bytes, cjk_dir: Path) -> bytes:
+    """Pure-stdlib PDF 1.4/1.7 incremental updater that attaches /ToUnicode CMaps when PyMuPDF is absent."""
+    m_sx = re.search(rb"startxref\s+(\d+)\s+%%EOF", pdf_bytes[-512:])
+    if not m_sx:
+        return pdf_bytes
+    orig_startxref = int(m_sx.group(1))
+    tail = pdf_bytes[orig_startxref:]
+
+    xref_entries: Dict[int, tuple[int, int, int]] = {}
+    is_xref_stream = False
+    root_ref = b""
+    info_ref = b""
+    id_array = b""
+    orig_size = 0
+
+    if tail.lstrip().startswith(b"xref"):
+        m_tr = re.search(rb"trailer\s*<<(.*?)>>", tail, re.S)
+        if not m_tr:
+            return pdf_bytes
+        tr_dict = m_tr.group(1)
+        m_size = re.search(rb"/Size\s+(\d+)", tr_dict)
+        m_root = re.search(rb"/Root\s+(\d+\s+\d+\s+R)", tr_dict)
+        if not m_size or not m_root:
+            return pdf_bytes
+        orig_size = int(m_size.group(1))
+        root_ref = m_root.group(1)
+        m_info = re.search(rb"/Info\s+(\d+\s+\d+\s+R)", tr_dict)
+        if m_info:
+            info_ref = m_info.group(1)
+        m_id = re.search(rb"/ID\s*(\[[^\]]*\])", tr_dict)
+        if m_id:
+            id_array = m_id.group(1)
+
+        xref_body = tail[: m_tr.start()].splitlines()
+        idx = 0
+        while idx < len(xref_body):
+            line = xref_body[idx].strip()
+            idx += 1
+            if not line or line == b"xref":
+                continue
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                start_id, count = int(parts[0]), int(parts[1])
+                for k in range(count):
+                    if idx >= len(xref_body):
+                        break
+                    elen = xref_body[idx].strip().split()
+                    idx += 1
+                    if len(elen) >= 3 and elen[2] == b"n":
+                        xref_entries[start_id + k] = (1, int(elen[0]), int(elen[1]))
+    else:
+        is_xref_stream = True
+        m_xo = re.match(rb"\s*(\d+)\s+\d+\s+obj\s*<<(.*?)>>\s*stream(?:\r\n|\n)", tail, re.S)
+        if not m_xo:
+            return pdf_bytes
+        xr_dict = m_xo.group(2)
+        m_size = re.search(rb"/Size\s+(\d+)", xr_dict)
+        m_root = re.search(rb"/Root\s+(\d+\s+\d+\s+R)", xr_dict)
+        m_w = re.search(rb"/W\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s*\]", xr_dict)
+        if not m_size or not m_root or not m_w:
+            return pdf_bytes
+        orig_size = int(m_size.group(1))
+        root_ref = m_root.group(1)
+        m_info = re.search(rb"/Info\s+(\d+\s+\d+\s+R)", xr_dict)
+        if m_info:
+            info_ref = m_info.group(1)
+        m_id = re.search(rb"/ID\s*(\[[^\]]*\])", xr_dict)
+        if m_id:
+            id_array = m_id.group(1)
+
+        w1, w2, w3 = int(m_w.group(1)), int(m_w.group(2)), int(m_w.group(3))
+        entry_len = w1 + w2 + w3
+        end_pos = tail.find(b"endstream", m_xo.end())
+        if end_pos == -1:
+            return pdf_bytes
+        raw_xr = tail[m_xo.end() : end_pos]
+        if raw_xr.endswith(b"\r\n"):
+            raw_xr = raw_xr[:-2]
+        elif raw_xr.endswith(b"\n"):
+            raw_xr = raw_xr[:-1]
+        if b"/FlateDecode" in xr_dict:
+            raw_xr = zlib.decompress(raw_xr)
+            m_pred = re.search(rb"/Predictor\s+(\d+)", xr_dict)
+            if m_pred:
+                m_cols = re.search(rb"/Columns\s+(\d+)", xr_dict)
+                cols = int(m_cols.group(1)) if m_cols else entry_len
+                raw_xr = _undo_png_predictor(raw_xr, cols, int(m_pred.group(1)))
+
+        m_idx = re.search(rb"/Index\s*\[([^\]]+)\]", xr_dict)
+        if m_idx:
+            nums = [int(x) for x in m_idx.group(1).split()]
+            subsections = [(nums[i], nums[i + 1]) for i in range(0, len(nums) - 1, 2)]
+        else:
+            subsections = [(0, orig_size)]
+
+        pos = 0
+        for sub_start, sub_count in subsections:
+            for k in range(sub_count):
+                if pos + entry_len > len(raw_xr):
+                    break
+                t = int.from_bytes(raw_xr[pos : pos + w1], "big") if w1 else 1
+                f2 = int.from_bytes(raw_xr[pos + w1 : pos + w1 + w2], "big") if w2 else 0
+                f3 = int.from_bytes(raw_xr[pos + w1 + w2 : pos + entry_len], "big") if w3 else 0
+                pos += entry_len
+                if t in (1, 2):
+                    xref_entries[sub_start + k] = (t, f2, f3)
+
+    objstm_cache: Dict[int, Dict[int, bytes]] = {}
+
+    def _read_direct_obj(offset: int) -> tuple[bytes, bytes | None]:
+        chunk = pdf_bytes[offset:]
+        m_head = re.match(rb"\s*\d+\s+\d+\s+obj\s*", chunk)
+        if not m_head:
+            return b"", None
+        endobj_pos = chunk.find(b"endobj", m_head.end())
+        if endobj_pos == -1:
+            return b"", None
+        body = chunk[m_head.end() : endobj_pos]
+        m_st = re.search(rb"stream(?:\r\n|\n)", body)
+        if not m_st:
+            return body.strip(), None
+        dict_bytes = body[: m_st.start()].strip()
+        endst_pos = body.find(b"endstream", m_st.end())
+        if endst_pos == -1:
+            return dict_bytes, None
+        st_bytes = body[m_st.end() : endst_pos]
+        if st_bytes.endswith(b"\r\n"):
+            st_bytes = st_bytes[:-2]
+        elif st_bytes.endswith(b"\n"):
+            st_bytes = st_bytes[:-1]
+        if b"/FlateDecode" in dict_bytes:
+            st_bytes = zlib.decompress(st_bytes)
+        return dict_bytes, st_bytes
+
+    def _get_obj_bytes(obj_num: int) -> tuple[bytes, bytes | None]:
+        ent = xref_entries.get(obj_num)
+        if not ent:
+            return b"", None
+        etype, f2, _ = ent
+        if etype == 1:
+            return _read_direct_obj(f2)
+        if etype == 2:
+            if f2 not in objstm_cache:
+                stm_dict, stm_data = _get_obj_bytes(f2)
+                parsed: Dict[int, bytes] = {}
+                m_n = re.search(rb"/N\s+(\d+)", stm_dict)
+                m_first = re.search(rb"/First\s+(\d+)", stm_dict)
+                if stm_data and m_n and m_first:
+                    n_cnt, first_off = int(m_n.group(1)), int(m_first.group(1))
+                    tokens = stm_data[:first_off].split()
+                    pairs = [
+                        (int(tokens[2 * i]), first_off + int(tokens[2 * i + 1]))
+                        for i in range(min(n_cnt, len(tokens) // 2))
+                    ]
+                    for idx_p, (oid, start_p) in enumerate(pairs):
+                        end_p = pairs[idx_p + 1][1] if idx_p + 1 < len(pairs) else len(stm_data)
+                        parsed[oid] = stm_data[start_p:end_p].strip()
+                objstm_cache[f2] = parsed
+            return objstm_cache[f2].get(obj_num, b""), None
+        return b"", None
+
+    next_obj_num = orig_size
+    updated_objects: Dict[int, bytes] = {}
+
+    for obj_num in sorted(xref_entries.keys()):
+        raw_dict, _ = _get_obj_bytes(obj_num)
+        if not raw_dict:
+            continue
+        obj_str = raw_dict.decode("latin1", errors="ignore")
+        if not re.search(r"/Subtype\s*/Type0\b", obj_str) or "/ToUnicode" in obj_str:
+            continue
+        m_desc = re.search(r"/DescendantFonts\s*\[\s*(\d+)\s+0\s+R\s*\]", obj_str)
+        if not m_desc:
+            continue
+        desc_raw, _ = _get_obj_bytes(int(m_desc.group(1)))
+        desc_str = desc_raw.decode("latin1", errors="ignore")
+        matched_name: str | None = None
+        matched_file: str | None = None
+        for font_key, filename in _CJK_FONT_FILES.items():
+            if font_key in desc_str or font_key in obj_str:
+                matched_name = font_key
+                matched_file = filename
+                break
+        if not matched_name or not matched_file:
+            continue
+        gid_to_uni = _parse_otf_gid_to_unicode(cjk_dir / matched_file)
+        if not gid_to_uni:
+            continue
+        m_fdesc = re.search(r"/FontDescriptor\s+(\d+)\s+0\s+R", desc_str)
+        if not m_fdesc:
+            continue
+        fdesc_raw, _ = _get_obj_bytes(int(m_fdesc.group(1)))
+        fdesc_str = fdesc_raw.decode("latin1", errors="ignore")
+        m_cidset = re.search(r"/CIDSet\s+(\d+)\s+0\s+R", fdesc_str)
+        if not m_cidset:
+            continue
+        _, cidset_bytes = _get_obj_bytes(int(m_cidset.group(1)))
+        if not cidset_bytes:
+            continue
+        used_pairs = _extract_used_cid_unicode_pairs(cidset_bytes, gid_to_uni)
+        if not used_pairs:
+            continue
+
+        cmap_bytes = _build_tounicode_cmap_stream(matched_name, used_pairs)
+        comp_cmap = zlib.compress(cmap_bytes)
+        tu_obj_num = next_obj_num
+        next_obj_num += 1
+
+        updated_objects[tu_obj_num] = (
+            f"<< /Filter /FlateDecode /Length {len(comp_cmap)} >>\nstream\n".encode("ascii")
+            + comp_cmap
+            + b"\nendstream"
+        )
+        end_idx = raw_dict.rfind(b">>")
+        if end_idx == -1:
+            continue
+        updated_objects[obj_num] = (
+            raw_dict[:end_idx] + f" /ToUnicode {tu_obj_num} 0 R >>".encode("ascii")
+        )
+
+    if not updated_objects:
         return pdf_bytes
 
+    out = bytearray(pdf_bytes)
+    if not out.endswith(b"\n"):
+        out.extend(b"\n")
+
+    new_offsets: Dict[int, int] = {}
+    for oid in sorted(updated_objects.keys()):
+        new_offsets[oid] = len(out)
+        out.extend(f"{oid} 0 obj\n".encode("ascii"))
+        out.extend(updated_objects[oid])
+        out.extend(b"\nendobj\n")
+
+    xref_pos = len(out)
+    if is_xref_stream:
+        xr_oid = next_obj_num
+        next_obj_num += 1
+        new_offsets[xr_oid] = xref_pos
+        index_parts = ["0 1"]
+        xr_raw = bytearray(b"\x00\x00\x00\x00\x00\xff\xff")
+        for oid in sorted(new_offsets.keys()):
+            index_parts.append(f"{oid} 1")
+            xr_raw.append(1)
+            xr_raw.extend(new_offsets[oid].to_bytes(4, "big"))
+            xr_raw.extend((0).to_bytes(2, "big"))
+        comp_xr = zlib.compress(bytes(xr_raw))
+        info_part = f" /Info {info_ref.decode('ascii')}" if info_ref else ""
+        id_part = f" /ID {id_array.decode('latin1')}" if id_array else ""
+        xr_header = (
+            f"{xr_oid} 0 obj\n<< /Type /XRef /Size {next_obj_num}"
+            f" /Root {root_ref.decode('ascii')}{info_part}{id_part}"
+            f" /Prev {orig_startxref} /Index [ {' '.join(index_parts)} ]"
+            f" /W [ 1 4 2 ] /Filter /FlateDecode /Length {len(comp_xr)} >>\nstream\n"
+        ).encode("latin1")
+        out.extend(xr_header)
+        out.extend(comp_xr)
+        out.extend(f"\nendstream\nendobj\nstartxref\n{xref_pos}\n%%EOF\n".encode("ascii"))
+    else:
+        out.extend(b"xref\n0 1\n0000000000 65535 f \n")
+        for oid in sorted(new_offsets.keys()):
+            out.extend(f"{oid} 1\n{new_offsets[oid]:010d} 00000 n \n".encode("ascii"))
+        info_part = f" /Info {info_ref.decode('ascii')}" if info_ref else ""
+        id_part = f" /ID {id_array.decode('latin1')}" if id_array else ""
+        out.extend(
+            (
+                f"trailer\n<< /Size {next_obj_num} /Root {root_ref.decode('ascii')}"
+                f"{info_part}{id_part} /Prev {orig_startxref} >>\n"
+                f"startxref\n{xref_pos}\n%%EOF\n"
+            ).encode("latin1")
+        )
+    return bytes(out)
+
+
+def _ensure_cjk_tounicode_cmaps(pdf_bytes: bytes, template_dir: Path) -> bytes:
+    """Attach embedded /ToUnicode CMap streams to Adobe-GB1 CIDFontType0 fonts when omitted by xdvipdfmx."""
     cjk_dir = Path(template_dir) / "fonts" / "zh_CN-Adobe"
     if not cjk_dir.is_dir():
         return pdf_bytes
 
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    fitz_mod = None
+    try:
+        import pymupdf as fitz_mod
+    except ImportError:
+        try:
+            import fitz as fitz_mod
+        except ImportError:
+            fitz_mod = None
+
+    if fitz_mod is None:
+        return _ensure_cjk_tounicode_cmaps_stdlib(pdf_bytes, cjk_dir)
+
+    doc = fitz_mod.open(stream=pdf_bytes, filetype="pdf")
     modified = False
     try:
         for xref in range(1, doc.xref_length()):
@@ -1003,16 +1325,7 @@ def _ensure_cjk_tounicode_cmaps(pdf_bytes: bytes, template_dir: Path) -> bytes:
             if not m_cidset:
                 continue
             cidset_bytes = doc.xref_stream(int(m_cidset.group(1)))
-            used_pairs: List[tuple[int, int]] = []
-            for byte_idx, bval in enumerate(cidset_bytes):
-                if bval == 0:
-                    continue
-                for bit in range(8):
-                    if bval & (0x80 >> bit):
-                        cid = byte_idx * 8 + bit
-                        uni = gid_to_uni.get(cid)
-                        if uni is not None and cid <= 0xFFFF:
-                            used_pairs.append((cid, uni))
+            used_pairs = _extract_used_cid_unicode_pairs(cidset_bytes, gid_to_uni)
             if not used_pairs:
                 continue
             cmap_bytes = _build_tounicode_cmap_stream(matched_name, used_pairs)
