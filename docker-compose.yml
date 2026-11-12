@@ -1,0 +1,117 @@
+# ============================================================
+# Resume-Agent 一键容器化部署
+#
+# 基础栈（前端 Nginx + FastAPI 后端 + XeLaTeX 编译环境）：
+#   docker compose up -d
+#   访问 http://localhost（FRONTEND_PORT 可改）
+#
+# 多用户认证栈（Next.js BetterAuth + PostgreSQL，可选）：
+#   docker compose --profile auth up -d
+#
+# 环境变量：复制 .env.example 为 .env 后，密钥经下方变量替换
+# 自动注入 backend / web 容器（详见 README「Docker 容器化一键部署」）
+# ============================================================
+
+services:
+  # ---------- FastAPI 后端（含进程内 Agent 与 XeLaTeX 编译）----------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: resume-agent-backend:latest
+    container_name: resume-agent-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-9000}:9000"
+    environment:
+      # SQLite 落在挂载卷 /app/data 内，容器重建后数据不丢
+      DATABASE_URL: sqlite:////app/data/resume.db
+      # 日志根目录指向挂载卷；logger 按 backend/agent/latex/other 子目录分类落盘
+      LOG_DIR: /app/logs
+      # 根目录 .env（compose 自动读取做变量替换）中的密钥注入
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      RUOLI_API_KEY: ${RUOLI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-to-a-random-string}
+      EMAIL_CREDENTIAL_ENC_KEY: ${EMAIL_CREDENTIAL_ENC_KEY:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      AGENT_ASKING_MODE_ENABLED: ${AGENT_ASKING_MODE_ENABLED:-false}
+      # 认证栈启用时（--profile auth）后端经 compose 内网访问 web
+      BETTER_AUTH_INTERNAL_URL: ${BETTER_AUTH_INTERNAL_URL:-http://web:3000}
+      FASTAPI_INTERNAL_AUTH_SECRET: ${FASTAPI_INTERNAL_AUTH_SECRET:-}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ---------- 前端（Nginx 托管 Vite 产物 + /api/ 反代与 SSE 透传）----------
+  frontend:
+    build:
+      context: ./frontend
+    image: resume-agent-frontend:latest
+    container_name: resume-agent-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ---------- PostgreSQL（仅 --profile auth 启用）----------
+  postgres:
+    image: postgres:16-alpine
+    container_name: resume-agent-postgres
+    profiles: ["auth"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resume_auth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resume_auth_password}
+      POSTGRES_DB: ${POSTGRES_DB:-resume_auth}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resume_auth} -d ${POSTGRES_DB:-resume_auth}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------- Next.js BetterAuth 认证服务（仅 --profile auth 启用）----------
+  web:
+    build:
+      context: ./web
+    image: resume-agent-web:latest
+    container_name: resume-agent-web
+    profiles: ["auth"]
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      # BetterAuth 会话库（PostgreSQL）
+      DATABASE_URL: postgresql://${POSTGRES_USER:-resume_auth}:${POSTGRES_PASSWORD:-resume_auth_password}@postgres:5432/${POSTGRES_DB:-resume_auth}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      # 经 compose 内网访问 FastAPI 后端
+      FASTAPI_INTERNAL_BASE_URL: http://backend:9000
+      FASTAPI_INTERNAL_AUTH_SECRET: ${FASTAPI_INTERNAL_AUTH_SECRET:-}
+      # 登录后回跳地址（默认回基础栈前端）
+      AUTH_DEFAULT_RETURN_TO: ${AUTH_DEFAULT_RETURN_TO:-http://localhost/workspace}
+      AUTH_PROXY_ALLOWED_ORIGINS: ${AUTH_PROXY_ALLOWED_ORIGINS:-http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

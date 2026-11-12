@@ -1,0 +1,12 @@
+# web 镜像构建上下文忽略清单（构建上下文 = web/ 目录）
+node_modules
+.next
+.DS_Store
+.env
+.env.local
+.env.*.local
+tsconfig.tsbuildinfo
+*.log
+Dockerfile
+AGENTS.md
+CLAUDE.md
