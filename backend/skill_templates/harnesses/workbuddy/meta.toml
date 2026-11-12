@@ -1,12 +1,17 @@
 schema_version = 1
 id = "workbuddy"
 display_name = "WorkBuddy"
-# experimental: WorkBuddy's skill discovery directory and metadata format are not
-# confirmed. Generation works, installation requires an explicit --path.
+# experimental: WorkBuddy (Tencent, CodeBuddy family) discovers user-level skills
+# in ~/.codebuddy/skills and project-level skills in .codebuddy/skills; each skill
+# is a standalone directory with a SKILL.md (Agent Skills format, confirmed by the
+# official docs at intl.cloud.tencent.com/document/product/1316/84446 and by the
+# layout of real installed skills). The WorkBuddy desktop client can also import
+# a skill package via its GUI ("Skills" -> "Upload Skill"). Flip to "verified"
+# only after an end-to-end run inside WorkBuddy/CodeBuddy.
 status = "experimental"
-invoke_syntax = "/resume-agent"
+invoke_syntax = "conversation (auto-invoked)"
 cli_min_version = "0.1.0"
-notes = "Discovery directory unverified; pass --path <dir> to skill install."
+notes = "Skills are auto-invoked in conversation; manage installed skills via the WorkBuddy Skills panel (or /skills in CodeBuddy Code CLI)."
 
 [frontmatter]
 name = "resume-agent"
@@ -29,5 +34,5 @@ mode = "schema"
 [install]
 scope_default = "user"
 strategy = "copy"
-user_paths = []
-project_paths = []
+user_paths = ["~/.codebuddy/skills"]
+project_paths = [".codebuddy/skills"]

@@ -23,6 +23,7 @@ from backend.skillkit import (
 from backend.skillkit.adapters import AdapterError, load_adapter
 from backend.skillkit.install import (
     install as install_skill,
+    resolve_target,
     status_entries,
     uninstall as uninstall_skill,
 )
@@ -116,6 +117,63 @@ def test_codex_skill_matches_adapter_constraints() -> None:
     assert 25 <= len(short.group(1)) <= 64
     assert "$resume-agent" in skill
     assert files["agents/openai.yaml"].strip()
+
+
+def test_pi_adapter_matches_pi_dev_docs() -> None:
+    """pi.dev/docs/latest/skills: skills are invoked as /skill:<name>; user skills
+    live under the agent directory (~/.pi/agent/skills) and pi also discovers
+    the Agent Skills location ~/.agents/skills (project: .agents/skills)."""
+    adapter = _adapters()["pi"]
+    assert adapter.invoke_syntax == "/skill:resume-agent"
+    assert adapter.user_paths == ("~/.pi/agent/skills", "~/.agents/skills")
+    assert adapter.project_paths == (".pi/skills", ".agents/skills")
+    meta = _frontmatter(render_harness(adapter)["SKILL.md"])
+    assert meta["name"] == "resume-agent"
+    assert len(meta["description"]) <= 1024
+
+
+def test_workbuddy_adapter_uses_codebuddy_discovery_paths() -> None:
+    """WorkBuddy (CodeBuddy family): user-level skills in ~/.codebuddy/skills,
+    project-level in .codebuddy/skills - each a directory with a SKILL.md."""
+    adapter = _adapters()["workbuddy"]
+    assert adapter.user_paths == ("~/.codebuddy/skills",)
+    assert adapter.project_paths == (".codebuddy/skills",)
+    # With a confirmed discovery path, install must no longer require --path.
+    target = resolve_target(adapter, scope="user", override=None)
+    assert target == Path("~/.codebuddy/skills").expanduser() / "resume-agent"
+
+
+def test_claude_frontmatter_declares_allowed_tools() -> None:
+    """Claude Code skills are description-driven (no slash command), so the
+    generated skill must not advertise one and must declare allowed-tools."""
+    adapter = _adapters()["claude"]
+    skill = render_harness(adapter)["SKILL.md"]
+    assert "allowed-tools:" in skill
+    assert "Bash(resume-agent:*)" in skill
+    assert "/resume-agent" not in skill
+
+
+def test_generated_frontmatter_is_agent_skills_compliant() -> None:
+    """Every harness ships the portable Agent Skills shape: lowercase hyphenated
+    name (<= 64 chars) and a routing description (<= 1024 chars)."""
+    for adapter in _adapters().values():
+        meta = _frontmatter(render_harness(adapter)["SKILL.md"])
+        name = meta["name"]
+        assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name), f"{adapter.id}: invalid name {name}"
+        assert len(name) <= 64
+        assert len(meta["description"]) <= 1024
+
+
+def test_every_harness_skill_documents_pdf_pipeline() -> None:
+    """The shared body must carry the full PDF chain for every harness:
+    skeleton init, validate before render, then a local XeLaTeX render."""
+    for adapter in _adapters().values():
+        skill = render_harness(adapter)["SKILL.md"]
+        assert "resume-agent init" in skill, f"{adapter.id}: init step missing"
+        assert "resume-agent validate" in skill, f"{adapter.id}: validate step missing"
+        assert "resume-agent render" in skill, f"{adapter.id}: render step missing"
+        assert "-o resume.pdf" in skill, f"{adapter.id}: PDF output missing"
+        assert "references/schema.md" in skill, f"{adapter.id}: schema reference missing"
 
 
 def test_committed_skill_tree_is_in_sync_with_templates() -> None:

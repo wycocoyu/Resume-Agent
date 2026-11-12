@@ -1,11 +1,13 @@
 schema_version = 1
 id = "claude"
 display_name = "Claude Code"
-# experimental: the discovery path and skill frontmatter are implemented from the
-# documented layout, but have not been validated against a running Claude CLI in
-# this repository. Flip to "verified" only after an end-to-end run.
+# experimental: the discovery paths (~/.claude/skills, .claude/skills) and the
+# frontmatter (name/description/allowed-tools) follow the official Claude Code
+# Skills docs. Claude Code has no slash command for skills: the model loads the
+# skill automatically when the request matches its description. Flip to
+# "verified" only after an end-to-end run.
 status = "experimental"
-invoke_syntax = "/resume-agent"
+invoke_syntax = "its description (or say \"use the resume-agent skill\")"
 cli_min_version = "0.1.0"
 
 [frontmatter]

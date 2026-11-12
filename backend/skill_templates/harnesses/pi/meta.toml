@@ -1,12 +1,18 @@
 schema_version = 1
 id = "pi"
 display_name = "pi"
-# experimental: path follows the documented ~/.pi/agent/skills layout but has not
-# been validated against a running pi coding agent in this repository.
+# experimental: paths and the /skill:<name> command syntax follow the official
+# docs (https://pi.dev/docs/latest/skills) and were cross-checked against the
+# pi 1.5.2 source (user skills = <agentDir>/skills with agentDir = ~/.pi/agent;
+# project = <cwd>/.pi/skills). Discovery, SKILL.md parsing, and the authoring
+# workflow were verified live (loadSkills API + interactive skill listing +
+# a pi-driven resume.json that passed validate); the in-session render step is
+# pending a non-rate-limited run. pi implements the Agent Skills specification:
+# name <= 64 chars (lowercase/numbers/hyphens), description <= 1024 chars.
 status = "experimental"
-invoke_syntax = "/resume-agent"
+invoke_syntax = "/skill:resume-agent"
 cli_min_version = "0.1.0"
-notes = "Path follows ~/.pi/agent/skills; frontmatter requirements unverified."
+notes = "pi also discovers the Agent Skills location ~/.agents/skills (and project .agents/skills) natively."
 
 [frontmatter]
 name = "resume-agent"
@@ -29,5 +35,5 @@ mode = "schema"
 [install]
 scope_default = "user"
 strategy = "copy"
-user_paths = ["~/.pi/agent/skills"]
-project_paths = []
+user_paths = ["~/.pi/agent/skills", "~/.agents/skills"]
+project_paths = [".pi/skills", ".agents/skills"]
