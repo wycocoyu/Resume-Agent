@@ -14,6 +14,7 @@ from backend.agent.pi_core import (
     run_agent_loop,
     transform_context,
 )
+from backend.agent.llm_streaming.tool_call_assembler import ToolCallAssembler
 
 
 def _collect(coro):
@@ -132,3 +133,17 @@ def test_superseded_tool_output_is_compacted_without_mutating_history():
     assert history[0].content == "old resume"
     assert transformed[0].content == "[Superseded by a newer read/edit]"
     assert transformed[1].content == "new resume"
+
+
+def test_tool_assembler_does_not_mark_length_as_safe():
+    assembler = ToolCallAssembler()
+    assembler.ingest(
+        [
+            {
+                "index": 0,
+                "id": "call-1",
+                "function": {"name": "cv_editor_agent", "arguments": "{\"x\":"},
+            }
+        ]
+    )
+    assert assembler.is_ready("length") is False

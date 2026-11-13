@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import os
-from typing import Awaitable, Callable, Dict, List, Optional, Union
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Union
 
 import tiktoken
 import httpx
@@ -28,6 +29,7 @@ from backend.agent.bedrock import BedrockClient
 from backend.agent.config import LLMSettings, NetworkConfig, config
 from backend.agent.exceptions import TokenLimitExceeded
 from backend.agent.llm_streaming.tool_call_assembler import ToolCallAssembler
+from backend.agent.pi_core.types import AssistantChunk, ModelTurn, ToolCall as CoreToolCall
 from backend.core.logger import get_logger  # Assuming a logger is set up in your app
 
 logger = get_logger(__name__)
@@ -977,6 +979,147 @@ class LLM:
         except AttributeError:
             return ChatCompletionMessage(**payload)
 
+    async def stream_tool_response(
+        self,
+        messages: List[Union[dict, Message]],
+        system_msgs: Optional[List[Union[dict, Message]]] = None,
+        timeout: int = 300,
+        tools: Optional[List[dict]] = None,
+        tool_choice: TOOL_CHOICE_TYPE = ToolChoice.AUTO,  # type: ignore
+        temperature: Optional[float] = None,
+        cancel_event: Optional[asyncio.Event] = None,
+        **kwargs,
+    ) -> AsyncIterator[AssistantChunk]:
+        """Yield provider-neutral assistant chunks without an intermediary queue."""
+        try:
+            if tool_choice not in TOOL_CHOICE_VALUES:
+                raise ValueError(f"Invalid tool_choice: {tool_choice}")
+
+            supports_images = self.model in MULTIMODAL_MODELS
+            if system_msgs:
+                system_msgs = self.format_messages(system_msgs, supports_images)
+                messages = system_msgs + self.format_messages(messages, supports_images)
+            else:
+                messages = self.format_messages(messages, supports_images)
+
+            input_tokens = self.count_message_tokens(messages)
+            if tools:
+                for tool in tools:
+                    if not isinstance(tool, dict) or "type" not in tool:
+                        raise ValueError("Each tool must be a dict with 'type' field")
+                    input_tokens += self.count_tokens(str(tool))
+
+            if not self.check_token_limit(input_tokens):
+                raise TokenLimitExceeded(self.get_limit_error_message(input_tokens))
+
+            params = {
+                "model": self.model,
+                **({"extra_body": self.extra_body} if self.extra_body else {}),
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+                "timeout": timeout,
+                "stream": True,
+                **kwargs,
+            }
+            if tools and _one_tool_per_step_enabled():
+                params["parallel_tool_calls"] = False
+
+            if self.model in REASONING_MODELS:
+                params["max_completion_tokens"] = self.max_tokens
+            else:
+                params["max_tokens"] = self.max_tokens
+                params["temperature"] = (
+                    temperature if temperature is not None else self.temperature
+                )
+
+            self.update_token_count(input_tokens)
+            stream = await self.client.chat.completions.create(**params)
+
+            finish_reason: Optional[str] = None
+            content = ""
+            thinking = ""
+            assembler = ToolCallAssembler()
+
+            async for chunk in stream:
+                if cancel_event and cancel_event.is_set():
+                    raise asyncio.CancelledError("Cancelled while streaming tool response")
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+
+                delta = choice.delta
+                if delta is None:
+                    continue
+
+                piece = getattr(delta, "content", None)
+                if piece:
+                    content += piece
+                    yield AssistantChunk(kind="text_delta", content=piece)
+
+                thinking_piece = (
+                    getattr(delta, "reasoning_content", None)
+                    or getattr(delta, "reasoning", None)
+                    or getattr(delta, "thinking", None)
+                )
+                if thinking_piece:
+                    thinking += thinking_piece
+                    yield AssistantChunk(kind="thinking_delta", content=thinking_piece)
+
+                tool_call_deltas = getattr(delta, "tool_calls", None)
+                if tool_call_deltas:
+                    assembler.ingest(tool_call_deltas)
+
+            raw_tool_calls = assembler.build()
+            if raw_tool_calls and not assembler.is_ready(finish_reason):
+                logger.warning(
+                    "Tool calls streamed but assembler is incomplete; "
+                    "the execution layer must reject them"
+                )
+
+            completion_tokens = self.count_tokens(content) + self.count_tool_calls(raw_tool_calls)
+            self.total_completion_tokens += completion_tokens
+
+            core_tool_calls: list[CoreToolCall] = []
+            for raw_call in raw_tool_calls:
+                raw_arguments = raw_call["function"].get("arguments", "{}")
+                try:
+                    arguments = json.loads(raw_arguments)
+                    if not isinstance(arguments, dict):
+                        arguments = {"_raw": raw_arguments}
+                except json.JSONDecodeError:
+                    arguments = {"_raw": raw_arguments}
+                core_tool_calls.append(
+                    CoreToolCall(
+                        id=raw_call.get("id", ""),
+                        name=raw_call["function"].get("name", ""),
+                        arguments=arguments,
+                    )
+                )
+
+            yield AssistantChunk(
+                kind="done",
+                turn=ModelTurn(
+                    content=content,
+                    thinking=thinking,
+                    tool_calls=tuple(core_tool_calls),
+                    stop_reason=finish_reason,
+                ),
+            )
+        except asyncio.CancelledError:
+            logger.info("stream_tool_response cancelled")
+            raise
+        except (TokenLimitExceeded, ValueError):
+            raise
+        except OpenAIError:
+            raise
+        except Exception as exc:
+            logger.error(f"Unexpected error in stream_tool_response: {exc}")
+            raise
+
     @retry(
         wait=wait_random_exponential(min=1, max=10),
         stop=stop_after_attempt(3),
@@ -994,114 +1137,40 @@ class LLM:
         cancel_event: Optional[asyncio.Event] = None,
         **kwargs,
     ) -> ChatCompletionMessage | None:
-        """Stream tool-enabled completions and return final message."""
-        try:
-            if tool_choice not in TOOL_CHOICE_VALUES:
-                raise ValueError(f"Invalid tool_choice: {tool_choice}")
+        """Backward-compatible wrapper around :meth:`stream_tool_response`."""
+        completed: ModelTurn | None = None
+        async for chunk in self.stream_tool_response(
+            messages=messages,
+            system_msgs=system_msgs,
+            timeout=timeout,
+            tools=tools,
+            tool_choice=tool_choice,
+            temperature=temperature,
+            cancel_event=cancel_event,
+            **kwargs,
+        ):
+            if chunk.kind == "text_delta" and on_content_delta:
+                await on_content_delta(chunk.content)
+            elif chunk.kind == "done":
+                completed = chunk.turn
 
-            supports_images = self.model in MULTIMODAL_MODELS
-            if system_msgs:
-                system_msgs = self.format_messages(system_msgs, supports_images)
-                messages = system_msgs + self.format_messages(messages, supports_images)
-            else:
-                messages = self.format_messages(messages, supports_images)
-
-            input_tokens = self.count_message_tokens(messages)
-            tools_tokens = 0
-            if tools:
-                for tool in tools:
-                    tools_tokens += self.count_tokens(str(tool))
-            input_tokens += tools_tokens
-
-            if not self.check_token_limit(input_tokens):
-                raise TokenLimitExceeded(self.get_limit_error_message(input_tokens))
-
-            if tools:
-                for tool in tools:
-                    if not isinstance(tool, dict) or "type" not in tool:
-                        raise ValueError("Each tool must be a dict with 'type' field")
-
-            params = {
-                "model": self.model,
-                **({"extra_body": self.extra_body} if self.extra_body else {}),
-                "messages": messages,
-                "tools": tools,
-                "tool_choice": tool_choice,
-                "timeout": timeout,
-                "stream": True,
-                **kwargs,
-            }
-            # ReAct 一步一工具:机制级保证,不靠 prompt(见 _one_tool_per_step_enabled)
-            if tools and _one_tool_per_step_enabled():
-                params["parallel_tool_calls"] = False
-
-            if self.model in REASONING_MODELS:
-                params["max_completion_tokens"] = self.max_tokens
-            else:
-                params["max_tokens"] = self.max_tokens
-                params["temperature"] = (
-                    temperature if temperature is not None else self.temperature
-                )
-
-            self.update_token_count(input_tokens)
-            stream = await self.client.chat.completions.create(**params)
-
-            finish_reason: Optional[str] = None
-            content = ""
-            assembler = ToolCallAssembler()
-
-            async for chunk in stream:
-                if cancel_event and cancel_event.is_set():
-                    raise asyncio.CancelledError("Cancelled while streaming tool response")
-
-                if not chunk.choices:
-                    continue
-
-                choice = chunk.choices[0]
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-
-                delta = choice.delta
-                if delta is None:
-                    continue
-
-                piece = getattr(delta, "content", None)
-                if piece:
-                    content += piece
-                    if on_content_delta:
-                        # Emit incremental chunk for lower latency streaming.
-                        await on_content_delta(piece)
-
-                tool_call_deltas = getattr(delta, "tool_calls", None)
-                if tool_call_deltas:
-                    assembler.ingest(tool_call_deltas)
-
-            tool_calls = assembler.build()
-            if tool_calls and not assembler.is_ready(finish_reason):
-                logger.warning("Tool calls streamed but assembler not fully ready; using best-effort result")
-            completion_tokens = self.count_tokens(content) + self.count_tool_calls(tool_calls)
-            self.total_completion_tokens += completion_tokens
-
-            payload: dict = {
-                "role": "assistant",
-                "content": content if content else None,
-            }
-            if tool_calls:
-                payload["tool_calls"] = tool_calls
-
-            return self._build_chat_completion_message(payload)
-
-        except asyncio.CancelledError:
-            logger.info("ask_tool_stream cancelled")
-            raise
-        except TokenLimitExceeded:
-            raise
-        except ValueError as ve:
-            logger.error(f"Validation error in ask_tool_stream: {ve}")
-            raise
-        except OpenAIError as oe:
-            logger.error(f"OpenAI API error in ask_tool_stream: {oe}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in ask_tool_stream: {e}")
-            raise
+        if completed is None:
+            return None
+        payload: dict = {
+            "role": "assistant",
+            "content": completed.content if completed.content else None,
+            "finish_reason": completed.stop_reason,
+        }
+        if completed.tool_calls:
+            payload["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {
+                        "name": call.name,
+                        "arguments": json.dumps(call.arguments, ensure_ascii=False),
+                    },
+                }
+                for call in completed.tool_calls
+            ]
+        return self._build_chat_completion_message(payload)

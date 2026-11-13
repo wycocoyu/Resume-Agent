@@ -9,6 +9,9 @@
 - 通过 `supersede_key` 在发送给模型前裁剪过期工具输出；
 - 不依赖 OpenManus 继承链，也不依赖 Web/SSE 层。
 
+同时增加了 `resume_adapter.py`，负责把现有 `Message`、DeepSeek 流和 Manus 工具
+转换为内核协议。它现在可以被独立调用和测试，但还没有默认接管生产 SSE。
+
 ## 当前边界
 
 这一步是**可独立测试的新执行内核**，尚未把生产入口
@@ -19,8 +22,8 @@
 下一阶段应增加一个 Resume-Agent 业务适配器：
 
 1. 将现有 `Message`/`ToolCall` 转成 `AgentMessage`/`ToolCall`；
-2. 将 DeepSeek 的流式响应暴露为 `AssistantChunk`；
-3. 将现有简历工具包装成 `ToolResult` 与 `tool_execution_update`；
+2. 通过 `LLM.stream_tool_response()` 将 DeepSeek 的流式响应暴露为 `AssistantChunk`；
+3. 通过 `resume_adapter.execute_resume_tool()` 将现有简历工具包装成 `ToolResult`；
 4. 在薄 SSE 适配层把内核事件映射回现有前端事件；
 5. 在独立回归通过后，再删除旧 Queue、Future 和轮询逻辑。
 

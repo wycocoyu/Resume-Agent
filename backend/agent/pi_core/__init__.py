@@ -7,6 +7,13 @@ the internal message representation to an LLM provider.
 
 from .context import convert_to_llm, transform_context
 from .loop import AgentHooks, run_agent_loop
+from .resume_adapter import (
+    build_resume_hooks,
+    execute_resume_tool,
+    stream_resume_model,
+    to_core_messages,
+    to_legacy_messages,
+)
 from .types import (
     AgentEvent,
     AgentMessage,
@@ -32,5 +39,10 @@ __all__ = [
     "ToolResult",
     "convert_to_llm",
     "run_agent_loop",
+    "build_resume_hooks",
+    "execute_resume_tool",
+    "stream_resume_model",
+    "to_core_messages",
+    "to_legacy_messages",
     "transform_context",
 ]

@@ -66,7 +66,10 @@ class ToolCallAssembler:
         if not self._states:
             return False
 
-        if finish_reason in {"tool_calls", "stop", "length"}:
+        # ``length`` means the provider stopped before the tool payload was
+        # guaranteed complete.  The execution layer must treat it as a
+        # truncated call and never run a potentially partial mutation.
+        if finish_reason in {"tool_calls", "stop"}:
             return True
 
         for item in self.build():
