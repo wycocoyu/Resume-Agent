@@ -14,6 +14,7 @@ from .resume_adapter import (
     to_core_messages,
     to_legacy_messages,
 )
+from .sse_adapter import to_legacy_stream_event
 from .types import (
     AgentEvent,
     AgentMessage,
@@ -44,5 +45,6 @@ __all__ = [
     "stream_resume_model",
     "to_core_messages",
     "to_legacy_messages",
+    "to_legacy_stream_event",
     "transform_context",
 ]

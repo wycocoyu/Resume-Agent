@@ -26,7 +26,29 @@ from backend.agent.web.streaming.agent_state import (
     StateTransitionError,
 )
 from backend.agent.web.streaming.state_machine import AgentStateMachine
-from backend.agent.web.streaming.agent_stream import AgentStream, StreamProcessor, EventSender
+
+# ``agent_stream`` imports the legacy Manus/LLM stack, which requires logging
+# to be initialized before import.  Keep the lightweight event package usable
+# on its own (for example from the pi-core SSE adapter) and load the heavy
+# runtime classes only when callers explicitly request them.
+_LAZY_STREAMING_EXPORTS = {"AgentStream", "StreamProcessor", "EventSender"}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_STREAMING_EXPORTS:
+        from backend.agent.web.streaming.agent_stream import (
+            AgentStream,
+            EventSender,
+            StreamProcessor,
+        )
+
+        exports = {
+            "AgentStream": AgentStream,
+            "StreamProcessor": StreamProcessor,
+            "EventSender": EventSender,
+        }
+        return exports[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # Events
