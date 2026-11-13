@@ -472,6 +472,42 @@ class Manus(ToolCallAgent):
             system_prompt = f"{system_prompt}\n\n{VIEW_SUGGESTIONS_PROMPT}"
         return system_prompt, next_step_prompt
 
+    async def prepare_pi_core_turn(self, user_input: str) -> None:
+        """Prepare Manus policy state before the experimental pi-core loop.
+
+        The legacy ``step()`` path performs this work inside ``think()``.  The
+        pi-core adapter must do it once up front so the new scheduler can call
+        the same dynamic prompt and safety rules without invoking the legacy
+        queue-based step loop.
+        """
+
+        self._sync_turn_read_only_flag(user_input)
+        self._sync_resume_loaded_state()
+        self._ensure_conversation_state_llm()
+        route = await self._intent_router.decide(
+            user_input,
+            RoutingContext(
+                recent_messages=self.memory.messages[-5:],
+                last_ai_message=self._get_last_ai_message(),
+            ),
+        )
+        self._last_intent = route.intent
+        self._store_intent_info(route.intent, route.intent_source)
+        if route.compound_hint:
+            self.memory.add_message(
+                Message.system_message(
+                    "用户这条请求包含多个子任务，请逐个完成全部子任务，"
+                    "全部完成后再结束。"
+                )
+            )
+        self._maybe_init_optimize_progress(user_input)
+        self.system_prompt, self.next_step_prompt = await self._generate_dynamic_prompts(
+            user_input, route.intent
+        )
+        self.system_prompt = apply_visible_action_narration_guidance(
+            self.system_prompt
+        )
+
     def should_auto_terminate(self, content: str, tool_calls: list) -> bool:
         """自定义自动终止逻辑
 

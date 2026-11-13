@@ -15,6 +15,7 @@ from .resume_adapter import (
     to_legacy_messages,
 )
 from .sse_adapter import to_legacy_stream_event
+from .stream import PiCoreAgentStream
 from .types import (
     AgentEvent,
     AgentMessage,
@@ -46,5 +47,6 @@ __all__ = [
     "to_core_messages",
     "to_legacy_messages",
     "to_legacy_stream_event",
+    "PiCoreAgentStream",
     "transform_context",
 ]

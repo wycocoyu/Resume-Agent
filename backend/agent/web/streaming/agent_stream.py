@@ -247,6 +247,7 @@ from backend.agent.utils.optimize_progress import (
     strip_module_done_markers,
     verify_facts_coverage,
 )
+from backend.agent.feature_flags import is_pi_core_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -1892,7 +1893,28 @@ class StreamProcessor:
         Yields:
             StreamEvent instances during execution
         """
-        stream = AgentStream(agent, session_id, state_machine, event_sender, chat_history_manager)
+        if is_pi_core_enabled():
+            from backend.agent.pi_core.stream import PiCoreAgentStream
+
+            stream = PiCoreAgentStream(
+                agent,
+                session_id,
+                state_machine,
+                chat_history_manager,
+            )
+            logger.info(
+                "[StreamProcessor] RESUME_AGENT_PI_CORE=true; "
+                "using linear pi-core adapter for session %s",
+                session_id,
+            )
+        else:
+            stream = AgentStream(
+                agent,
+                session_id,
+                state_machine,
+                event_sender,
+                chat_history_manager,
+            )
 
         async with self._lock:
             self._active_streams[session_id] = stream

@@ -18,6 +18,18 @@ def is_asking_mode_enabled() -> bool:
     )
 
 
+def is_pi_core_enabled() -> bool:
+    """Whether the experimental linear pi-core stream is enabled.
+
+    The legacy OpenManus stream remains the default until the new adapter has
+    completed end-to-end regression (approval, resume patches and PDF flows).
+    """
+
+    return (
+        os.getenv("RESUME_AGENT_PI_CORE", "false").strip().lower() in _TRUE_VALUES
+    )
+
+
 ASKING_MODE_DISABLED_PROMPT = """
 ## Asking 模式当前关闭（运行时强制）
 

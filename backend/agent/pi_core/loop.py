@@ -115,7 +115,15 @@ async def run_agent_loop(
         )
         messages.append(assistant)
         # Commit the complete assistant message before exposing message_end.
-        yield AgentEvent("message_end", {"stop_reason": completed_turn.stop_reason})
+        yield AgentEvent(
+            "message_end",
+            {
+                "stop_reason": completed_turn.stop_reason,
+                "content": completed_turn.content,
+                "thinking": completed_turn.thinking,
+                "tool_calls": completed_turn.tool_calls,
+            },
+        )
 
         if completed_turn.stop_reason == "length" and completed_turn.tool_calls:
             for call in completed_turn.tool_calls:

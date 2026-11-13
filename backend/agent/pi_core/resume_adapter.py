@@ -144,7 +144,15 @@ def build_resume_hooks(agent: Any) -> AgentHooks:
         _result: ToolResult,
         _messages: list[AgentMessage],
     ) -> ToolDecision:
-        return ToolDecision(terminate=call.name in {"ask_user_question", "show_resume"})
+        pending_approval = bool(getattr(agent, "_halt_for_pending_approval", False))
+        pending_question = bool(getattr(agent, "_halt_for_ask_question", False))
+        return ToolDecision(
+            terminate=(
+                call.name in {"ask_user_question", "show_resume"}
+                or pending_approval
+                or pending_question
+            )
+        )
 
     async def finish_turn(
         turn: Any,
