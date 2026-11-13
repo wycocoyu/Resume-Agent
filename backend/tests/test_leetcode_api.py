@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import shutil
+
+import pytest
 from fastapi.testclient import TestClient
 from pathlib import Path
 
 from backend.core.logger import setup_logging
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("go") is None, reason="Go toolchain not installed"
+)
 
 setup_logging(is_production=False, log_level="INFO", log_dir="logs/test")
 

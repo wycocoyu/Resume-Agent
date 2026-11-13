@@ -16,14 +16,18 @@ def _patch(monkeypatch):
         return f"第{calls['n']}张文本"
 
     monkeypatch.setattr(resume_routes, "image_to_text", fake_image_to_text)
-    monkeypatch.setattr(
-        resume_routes,
-        "assemble_resume_data",
-        lambda raw_text, layout, ocr_text, model: {"name": "王宇", "_raw": ocr_text},
-    )
-    monkeypatch.setattr(
-        resume_routes, "normalize_resume_json", lambda d: d
-    )
+    canned = {"name": "王宇", "_raw": None}
+
+    async def fake_assemble_fast(raw_text, model=None):
+        # 路由当前走 assemble_resume_data_fast（分段并行版），必须一并替换
+        return {**canned, "_raw": raw_text}
+
+    monkeypatch.setattr(resume_routes, "assemble_resume_data", lambda *a, **k: canned)
+    monkeypatch.setattr(resume_routes, "assemble_resume_data_fast", fake_assemble_fast)
+    # 路由在函数内部 `from backend.json_normalizer import normalize_resume_json`，
+    # 因此必须 patch 源模块，patch resume_routes 上的同名属性无效。
+    import backend.json_normalizer as json_normalizer
+    monkeypatch.setattr(json_normalizer, "normalize_resume_json", lambda d: d)
     return calls
 
 

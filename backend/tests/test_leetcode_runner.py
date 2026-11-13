@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import shutil
+
+import pytest
 from pathlib import Path
 
 from backend.services.leetcode_runner import LeetCodeRunner
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("go") is None, reason="Go toolchain not installed"
+)
 
 
 def make_problem() -> dict:
