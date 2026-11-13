@@ -9,23 +9,25 @@
 - 通过 `supersede_key` 在发送给模型前裁剪过期工具输出；
 - 不依赖 OpenManus 继承链，也不依赖 Web/SSE 层。
 
-同时增加了 `resume_adapter.py`，负责把现有 `Message`、DeepSeek 流和 Manus 工具
-转换为内核协议。它现在可以被独立调用和测试，但还没有默认接管生产 SSE。
+同时增加了 `resume_adapter.py` 和 `sse_adapter.py`，负责把现有 `Message`、DeepSeek
+流、Manus 工具和旧 SSE 事件互相转换。`StreamProcessor` 已提供一个**默认关闭的
+灰度入口**：
+
+```powershell
+$env:RESUME_AGENT_PI_CORE = "true"
+```
+
+开启后单次请求只走 `PiCoreAgentStream`；未开启时仍走原来的
+`AgentStream`。这样可以按会话/环境做回退，不会同时执行两套模型调用。
 
 ## 当前边界
 
-这一步是**可独立测试的新执行内核**，尚未把生产入口
-`backend/agent/web/streaming/agent_stream.py` 切换到新内核。原因是现有前端仍依赖
-旧的 SSE 事件字段、旁白归位、审批卡和 `resume_patch` 语义，直接替换会把多个行为变更
-混在一次提交里。
+这一步已经把生产入口接成**显式 opt-in**，但不建议在没有端到端回归前默认打开。现有
+前端仍依赖旧的 SSE 事件字段、旁白归位、审批卡和 `resume_patch` 语义；新适配器已做
+兼容映射，但 PDF 上传、审批、自动续跑等真实链路仍需在目标环境验证。
 
-下一阶段应增加一个 Resume-Agent 业务适配器：
-
-1. 将现有 `Message`/`ToolCall` 转成 `AgentMessage`/`ToolCall`；
-2. 通过 `LLM.stream_tool_response()` 将 DeepSeek 的流式响应暴露为 `AssistantChunk`；
-3. 通过 `resume_adapter.execute_resume_tool()` 将现有简历工具包装成 `ToolResult`；
-4. 在薄 SSE 适配层把内核事件映射回现有前端事件；
-5. 在独立回归通过后，再删除旧 Queue、Future 和轮询逻辑。
+下一阶段应继续做灰度回归，并在确认所有旧语义等价后，再删除旧
+Queue、Future 和 `0.01s` 轮询逻辑。
 
 ## 验证
 
@@ -35,4 +37,5 @@ C:\Users\DKF\Downloads\Resume-Agent-main\Resume-Agent-main\.venv\Scripts\python.
   -m pytest backend/tests/test_pi_core_loop.py -q
 ```
 
-当前内核测试覆盖事件顺序、截断工具熔断、Hook 阻断/早停和 supersede 裁剪。
+当前测试覆盖事件顺序、截断工具熔断、Hook 阻断/早停、supersede 裁剪、旧 SSE 映射
+以及 opt-in stream 的旁白→工具卡顺序。
