@@ -2,6 +2,12 @@
 
 Run `resume-agent schema` at any time to inspect the live JSON Schema generated from `backend/cli/schema.py:ResumeDataModel`.
 
+> Generated document. Field names, types, required/optional status, the eight
+> HTML rich-text fields, the plain-text field list and the built-in company logo
+> keys are rendered from code by `resume-agent skill build`. Edit
+> `core/references/schema.md.in` (prose) or `core/references/field_notes.toml`
+> (per-field wording) instead of editing the output.
+
 ## 1. Top-Level `ResumeData` Keys
 
 ### Required Keys (all 18 must be present)
@@ -31,9 +37,9 @@ Run `resume-agent schema` at any time to inspect the live JSON Schema generated 
 
 | Key | Type | Notes |
 | :--- | :--- | :--- |
-| `workExperience` | `Experience[] \| null` | Full-time work experience (`工作经历`), separate from `experience` (`实习经历`) |
 | `templateType` | `"latex" \| "html" \| null` | Default `"latex"`. Note: CLI always renders via LaTeX and emits a warning if `"html"` |
 | `alias` | `string \| null` | Optional workspace remark/tag |
+| `workExperience` | `Experience[] \| null` | Full-time work experience (`工作经历`), separate from `experience` (`实习经历`) |
 
 ---
 
@@ -60,7 +66,35 @@ Recommended bullet pattern:
 ### Plain-Text Fields (No HTML Tags!)
 
 - **`awards[*].description` is PLAIN TEXT ONLY.** The LaTeX awards generator escapes it directly via `escape_latex`; HTML tags like `<p>` will appear literally in the rendered PDF.
-- All title/header fields (`basic.*`, `education[*].school/major/degree`, `workExperience[*].company/position`, `experience[*].company/position`, `projects[*].name/role`, `openSource[*].name/role`, `awards[*].title/issuer`, `customData[*][*].title/subtitle`) must be plain strings.
+
+All title and header fields below must be plain strings, with no HTML tags:
+
+- `awards[*].description`
+- `awards[*].title`
+- `awards[*].issuer`
+- `awards[*].date`
+- `basic.name`
+- `basic.title`
+- `basic.email`
+- `basic.phone`
+- `basic.location`
+- `basic.employementStatus`
+- `basic.workYears`
+- `basic.birthDate`
+- `basic.blog`
+- `education[*].school`
+- `education[*].major`
+- `education[*].degree`
+- `workExperience[*].company`
+- `workExperience[*].position`
+- `experience[*].company`
+- `experience[*].position`
+- `projects[*].name`
+- `projects[*].role`
+- `openSource[*].name`
+- `openSource[*].role`
+- `customData[*][*].title`
+- `customData[*][*].subtitle`
 
 ---
 

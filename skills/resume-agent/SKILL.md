@@ -1,13 +1,15 @@
 ---
-name: resume-agent
-description: Create, edit, validate, and render Resume-Agent JSON resumes into local XeLaTeX PDFs, or sync resumes with the Resume-Agent Web workspace via the resume-agent CLI. Use when the user asks to draft a new resume, tailor or update a ResumeData JSON file, export a resume PDF locally, or pull and push resumes to Resume-Agent.
+name: "resume-agent"
+description: "Create, edit, validate, and render Resume-Agent JSON resumes into local XeLaTeX PDFs, or sync resumes with the Resume-Agent Web workspace via the resume-agent CLI. Use when the user asks to draft a new resume, tailor or update a ResumeData JSON file, export a resume PDF locally, or pull and push resumes to Resume-Agent."
 metadata:
-  short-description: Create, validate, render, and sync Resume-Agent resumes
+  short-description: "Create, validate, render, and sync Resume-Agent resumes"
 ---
 
 # Resume Agent
 
-Build, update, validate, render, and optionally sync Workspace v2 `ResumeData` JSON resumes using the deterministic `resume-agent` CLI while letting Codex handle natural-language authoring and tailoring.
+Build, update, validate, render, and optionally sync Workspace v2 `ResumeData` JSON resumes using the deterministic `resume-agent` CLI, while this harness handles natural-language authoring and tailoring.
+
+Invoke this skill in Codex with `$resume-agent`.
 
 ## Core Guardrails
 
@@ -22,11 +24,12 @@ Build, update, validate, render, and optionally sync Workspace v2 `ResumeData` J
   ```bash
   pip install --no-build-isolation -e /path/to/Resume-Agent
   ```
-- Codex skill symlink discovery (if not already linked):
+- Harness discovery for Codex (writes into the documented skills directory):
   ```bash
-  mkdir -p ~/.agents/skills
-  ln -s /path/to/Resume-Agent/skills/resume-agent ~/.agents/skills/resume-agent
+  resume-agent skill install --harness codex --dry-run
+  resume-agent skill install --harness codex
   ```
+  `resume-agent skill status --harness codex` reports drift and CLI/skill version skew; `resume-agent skill uninstall --harness codex` removes only files it created.
 
 ## Standard Workflow
 

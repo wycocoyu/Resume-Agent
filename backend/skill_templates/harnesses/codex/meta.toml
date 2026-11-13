@@ -1,0 +1,40 @@
+schema_version = 1
+id = "codex"
+display_name = "Codex"
+status = "verified"
+invoke_syntax = "$resume-agent"
+cli_min_version = "0.1.0"
+
+[frontmatter]
+name = "resume-agent"
+description = "long"
+short_description = "short"
+include_metadata = true
+
+[constraints]
+description_min = 20
+description_max = 1024
+short_description_min = 25
+short_description_max = 64
+forbid_chars = ["<", ">"]
+
+[[assets]]
+from = "core/body.md"
+to = "SKILL.md"
+mode = "skill"
+
+[[assets]]
+from = "core/references/schema.md"
+to = "references/schema.md"
+mode = "schema"
+
+[[assets]]
+from = "harnesses/codex/agents/openai.yaml"
+to = "agents/openai.yaml"
+mode = "copy"
+
+[install]
+scope_default = "user"
+strategy = "copy"
+user_paths = ["~/.codex/skills", "~/.agents/skills"]
+project_paths = [".codex/skills"]
