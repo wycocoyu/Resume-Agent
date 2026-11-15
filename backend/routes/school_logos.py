@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Form
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from middleware.auth import AppUser, require_admin_only
 # User(users) 已退役(2026-07-17 身份统一),身份用 middleware.auth.AppUser
 
@@ -31,7 +32,7 @@ async def get_school_logo_file(key: str):
     if ".." in key or "/" in key or "\\" in key:
         raise HTTPException(status_code=400, detail="无效的 key")
     m = _import_school_logos()
-    path = m.get_school_logo_local_path(key)
+    path = await run_in_threadpool(m.get_school_logo_local_path, key)
     if path is None:
         raise HTTPException(status_code=404, detail="School logo 不存在")
     media_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
@@ -42,8 +43,8 @@ async def get_school_logo_file(key: str):
 async def get_school_logos():
     try:
         m = _import_school_logos()
-        logos = m.get_all_school_logos_with_urls()
-        groups = m.get_grouped_school_logos_with_urls()
+        logos = await run_in_threadpool(m.get_all_school_logos_with_urls)
+        groups = await run_in_threadpool(m.get_grouped_school_logos_with_urls)
         return JSONResponse(status_code=200, content={"logos": logos, "groups": groups})
     except Exception as e:
         return JSONResponse(
@@ -85,8 +86,6 @@ async def upload_school_logo(
         raise HTTPException(status_code=400, detail="文件过大，最大 2MB")
 
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv("COS_SECRET_ID", "")
         secret_key = os.getenv("COS_SECRET_KEY", "")
         region = os.getenv("COS_REGION", "ap-guangzhou")
@@ -95,22 +94,26 @@ async def upload_school_logo(
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-
         cos_key = f"school_logo/{group}/{safe_filename}"
-        client.put_object(
-            Bucket=bucket,
-            Body=content,
-            Key=cos_key,
-            ContentType=file.content_type or "image/png",
-        )
-
         m = _import_school_logos()
-        local_dir = Path(m.LOCAL_SCHOOL_LOGO_DIR) / group
-        local_dir.mkdir(parents=True, exist_ok=True)
-        (local_dir / safe_filename).write_bytes(content)
-        m.clear_cache()
+
+        def _upload_sync():
+            from qcloud_cos import CosConfig, CosS3Client
+
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            client.put_object(
+                Bucket=bucket,
+                Body=content,
+                Key=cos_key,
+                ContentType=file.content_type or "image/png",
+            )
+            local_dir = Path(m.LOCAL_SCHOOL_LOGO_DIR) / group
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / safe_filename).write_bytes(content)
+            m.clear_cache()
+
+        await run_in_threadpool(_upload_sync)
 
         import urllib.request
 
@@ -149,8 +152,6 @@ async def delete_school_logo(
     m = _import_school_logos()
     cos_key = f"school_logo/{group}/{safe}"
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv("COS_SECRET_ID", "")
         secret_key = os.getenv("COS_SECRET_KEY", "")
         region = os.getenv("COS_REGION", "ap-guangzhou")
@@ -158,15 +159,18 @@ async def delete_school_logo(
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-        client.delete_object(Bucket=bucket, Key=cos_key)
+        def _delete_sync():
+            from qcloud_cos import CosConfig, CosS3Client
 
-        local_path = Path(m.LOCAL_SCHOOL_LOGO_DIR) / group / safe
-        if local_path.exists():
-            local_path.unlink()
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            client.delete_object(Bucket=bucket, Key=cos_key)
+            local_path = Path(m.LOCAL_SCHOOL_LOGO_DIR) / group / safe
+            if local_path.exists():
+                local_path.unlink()
+            m.clear_cache()
 
-        m.clear_cache()
+        await run_in_threadpool(_delete_sync)
         return {"success": True}
     except HTTPException:
         raise

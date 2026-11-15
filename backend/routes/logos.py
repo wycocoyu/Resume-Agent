@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from middleware.auth import AppUser, require_admin_only
 # User(users) 已退役(2026-07-17 身份统一),身份用 middleware.auth.AppUser
 
@@ -34,7 +35,7 @@ async def get_logo_file(key: str):
     m = _import_logos()
     if ".." in key or "/" in key or "\\" in key:
         raise HTTPException(status_code=400, detail="无效的 key")
-    path = m.get_logo_local_path(key)
+    path = await run_in_threadpool(m.get_logo_local_path, key)
     if path is None:
         raise HTTPException(status_code=404, detail="Logo 不存在")
     media_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
@@ -104,8 +105,6 @@ async def upload_logo(
         raise HTTPException(status_code=400, detail="文件过大，最大 2MB")
 
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv('COS_SECRET_ID', '')
         secret_key = os.getenv('COS_SECRET_KEY', '')
         region = os.getenv('COS_REGION', 'ap-guangzhou')
@@ -114,31 +113,30 @@ async def upload_logo(
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-
         m = _import_logos()
-        # 上传到 COS company_logo/ 目录
         cos_key = f"{m.COMPANY_LOGO_PREFIX}{safe_filename}"
-        client.put_object(
-            Bucket=bucket,
-            Body=content,
-            Key=cos_key,
-            ContentType=file.content_type or 'image/png',
-        )
 
-        # 同步写入本地 images/logo（与 COS 保持同名）
-        local_dir = Path(m.LOCAL_LOGO_DIR)
-        target_path = local_dir / cos_key
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(content)
+        def _upload_sync():
+            from qcloud_cos import CosConfig, CosS3Client
 
-        # 清除缓存，让下次 GET 能拿到新 Logo
-        m.clear_cache()
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            client.put_object(
+                Bucket=bucket,
+                Body=content,
+                Key=cos_key,
+                ContentType=file.content_type or 'image/png',
+            )
+            local_dir = Path(m.LOCAL_LOGO_DIR)
+            target_path = local_dir / cos_key
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_bytes(content)
+            m.clear_cache()
+
+        await run_in_threadpool(_upload_sync)
 
         import urllib.request
         cos_base = m.COS_BASE_URL
-        name = os.path.splitext(cos_key)[0]
         url = f"{cos_base}/{urllib.request.quote(cos_key, safe='/')}"
 
         return {
@@ -169,8 +167,6 @@ async def delete_logo(
     m = _import_logos()
     cos_key = f"{m.COMPANY_LOGO_PREFIX}{safe}"
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv('COS_SECRET_ID', '')
         secret_key = os.getenv('COS_SECRET_KEY', '')
         region = os.getenv('COS_REGION', 'ap-guangzhou')
@@ -178,17 +174,19 @@ async def delete_logo(
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-        client.delete_object(Bucket=bucket, Key=cos_key)
+        def _delete_sync():
+            from qcloud_cos import CosConfig, CosS3Client
 
-        # 删除本地缓存（可能位于 images/logo/ 或 images/logo/company_logo/）
-        local_dir = Path(m.LOCAL_LOGO_DIR)
-        for candidate in (local_dir / cos_key, local_dir / safe):
-            if candidate.exists():
-                candidate.unlink()
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            client.delete_object(Bucket=bucket, Key=cos_key)
+            local_dir = Path(m.LOCAL_LOGO_DIR)
+            for candidate in (local_dir / cos_key, local_dir / safe):
+                if candidate.exists():
+                    candidate.unlink()
+            m.clear_cache()
 
-        m.clear_cache()
+        await run_in_threadpool(_delete_sync)
         return {"success": True}
     except HTTPException:
         raise

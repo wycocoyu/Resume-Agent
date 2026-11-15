@@ -20,6 +20,7 @@ import { cn } from "../../../../lib/utils";
 import FileUploadZone from "./FileUploadZone";
 import { getApiBaseUrl } from "@/lib/runtimeEnv";
 import { FetchTimeoutError, fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { uploadResumeImageStream } from "@/lib/uploadResumeImageStream";
 
 // 简历解析走大模型，耗时较长，给一个宽松上限避免后端挂死时前端一直卡在"解析中"
 const PARSE_TIMEOUT_MS = 150_000;
@@ -306,7 +307,7 @@ export function AIImportModal({
     }
   };
 
-  // 图片上传解析（内联 fetch，镜像 handlePdfUpload）
+  // 图片上传解析（SSE 流式心跳保活，防止长耗时被网关切断）
   const handleImageUpload = async () => {
     if (!selectedFile) return;
     setParsing(true);
@@ -318,25 +319,13 @@ export function AIImportModal({
       if (selectedImage2) formData.append("files", selectedImage2);
       formData.append("model", selectedVisionModel);
 
-      const response = await fetchWithTimeout(
-        `${getApiBaseUrl()}/api/resume/upload-image`,
-        { method: "POST", body: formData },
-        PARSE_TIMEOUT_MS,
-      );
-
-      if (!response.ok) {
-        let errMsg = "解析失败";
-        try {
-          const err = await response.json();
-          errMsg = err.detail || errMsg;
-        } catch {
-          errMsg = `HTTP ${response.status}`;
-        }
-        throw new Error(errMsg);
-      }
-
-      const result = await response.json();
-      applyParsedData(result.resume || result.data || result);
+      const parsed = await uploadResumeImageStream({
+        apiBaseUrl: getApiBaseUrl(),
+        formData,
+        idleTimeoutMs: PARSE_TIMEOUT_MS,
+        maxTotalMs: 300_000,
+      });
+      applyParsedData(parsed);
     } catch (err: any) {
       console.error("图片解析失败:", err);
       if (err instanceof FetchTimeoutError) {

@@ -19,6 +19,7 @@ from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import PermissionDeniedError
+from starlette.concurrency import run_in_threadpool
 
 from backend.agent.pi_core.resume_agent import ResumeAgentRuntime
 from backend.agent.pi_core.metrics import get_pi_core_metrics
@@ -295,8 +296,8 @@ async def _stream_event_generator(
         f"[SSE Generator] Starting generator for conversation: {conversation_id}"
     )
     try:
-        session = _get_or_create_session(
-            conversation_id, user, resume_path, resume_data
+        session = await run_in_threadpool(
+            _get_or_create_session, conversation_id, user, resume_path, resume_data
         )
         agent = session["agent"]
         chat_history = session["chat_history"]
@@ -442,7 +443,10 @@ async def _stream_event_generator(
                 )
                 aclose = getattr(stream_iterator, "aclose", None)
                 if callable(aclose):
-                    await aclose()
+                    try:
+                        await aclose()
+                    except BaseException as close_exc:
+                        logger.debug(f"[SSE] Stream iterator close ignored: {close_exc}")
         else:
             async for event in stream_processor.start_stream(
                 session_id=conversation_id,
@@ -516,6 +520,14 @@ async def _stream_event_generator(
             error_payload = {"content": error_msg, "error_type": type(e).__name__}
         error_event = wrap_event("error", error_payload)
         yield error_event.to_sse_format()
+    except BaseException as base_exc:
+        if isinstance(base_exc, (SystemExit, KeyboardInterrupt)):
+            raise
+        logger.exception(f"[SSE] BaseException/TaskGroup failure for session {conversation_id}: {base_exc}")
+        cancel_event = wrap_event(
+            "status", {"content": "cancelled", "conversation_id": conversation_id}
+        )
+        yield cancel_event.to_sse_format()
 
     finally:
         _cleanup_session(conversation_id)

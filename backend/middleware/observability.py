@@ -1,6 +1,8 @@
-"""可观测性中间件：请求日志、错误日志、链路 span。"""
+"""可观测性中间件：请求日志、错误日志、链路 span（纯 ASGI 实现，避免 BaseHTTPMiddleware TaskGroup 在 SSE 断连时崩溃）。"""
 from __future__ import annotations
 
+import asyncio
+import builtins
 import os
 import time
 import traceback
@@ -10,31 +12,80 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from database import SessionLocal
 from models import APIErrorLog, APIRequestLog, APITraceSpan
 
+_BASE_EXC_GROUP = getattr(builtins, "BaseExceptionGroup", None)
 
-class RequestObservabilityMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+
+def _is_disconnect_only_error(exc: BaseException) -> bool:
+    """判断异常（含 Python 3.11+ ExceptionGroup）是否仅由客户端断开/取消引发。"""
+    if isinstance(exc, (asyncio.CancelledError, BrokenPipeError, ConnectionResetError)):
+        return True
+    if _BASE_EXC_GROUP is not None and isinstance(exc, _BASE_EXC_GROUP):
+        return bool(exc.exceptions) and all(_is_disconnect_only_error(sub) for sub in exc.exceptions)
+    return False
+
+
+def _first_leaf_exception(exc: BaseException) -> Exception | None:
+    if _BASE_EXC_GROUP is not None and isinstance(exc, _BASE_EXC_GROUP):
+        for sub in exc.exceptions:
+            found = _first_leaf_exception(sub)
+            if found is not None:
+                return found
+        return None
+    return exc if isinstance(exc, Exception) else None
+
+
+class RequestObservabilityMiddleware:
+    """纯 ASGI 可观测性中间件：不包裹 anyio TaskGroup，兼容 SSE 长连接与提前断连。"""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
         start_perf = time.perf_counter()
         start_at = datetime.now(timezone.utc)
+        request = Request(scope)
+
         trace_id = request.headers.get("x-trace-id") or uuid4().hex
         request_id = request.headers.get("x-request-id") or uuid4().hex
 
-        request.state.trace_id = trace_id
-        request.state.request_id = request_id
+        state = scope.setdefault("state", {})
+        state["trace_id"] = trace_id
+        state["request_id"] = request_id
 
         user_id = _extract_user_id(request)
-        response = None
+        status_code = 500
+        response_size: int | None = None
         captured_error: Exception | None = None
 
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code, response_size
+            if message.get("type") == "http.response.start":
+                status_code = int(message.get("status", 200))
+                headers = MutableHeaders(scope=message)
+                headers["X-Trace-Id"] = trace_id
+                headers["X-Request-Id"] = request_id
+                raw_cl = headers.get("content-length")
+                response_size = _safe_int(raw_cl)
+            await send(message)
+
         try:
-            response = await call_next(request)
-            return response
-        except Exception as exc:
-            captured_error = exc
+            await self.app(scope, receive, send_wrapper)
+        except BaseException as exc:
+            if _is_disconnect_only_error(exc):
+                if status_code == 500:
+                    status_code = 499
+                return
+            captured_error = _first_leaf_exception(exc) or RuntimeError(str(exc))
             raise
         finally:
             elapsed_ms = round((time.perf_counter() - start_perf) * 1000, 2)
@@ -44,7 +95,8 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
                 target=_persist_observability,
                 kwargs={
                     "request": request,
-                    "response": response,
+                    "status_code": status_code,
+                    "response_size": response_size,
                     "user_id": user_id,
                     "trace_id": trace_id,
                     "request_id": request_id,
@@ -55,9 +107,6 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
                 },
                 daemon=True,
             ).start()
-            if response is not None:
-                response.headers["X-Trace-Id"] = trace_id
-                response.headers["X-Request-Id"] = request_id
 
 
 def _extract_user_id(request: Request) -> str | None:
@@ -80,7 +129,8 @@ def _extract_user_id(request: Request) -> str | None:
 def _persist_observability(
     *,
     request: Request,
-    response,
+    status_code: int,
+    response_size: int | None,
     user_id: str | None,
     trace_id: str,
     request_id: str,
@@ -92,8 +142,6 @@ def _persist_observability(
     db = SessionLocal()
     try:
         request_size = _safe_int(request.headers.get("content-length"))
-        response_size = _safe_int(response.headers.get("content-length")) if response else None
-        status_code = response.status_code if response is not None else 500
 
         row = APIRequestLog(
             trace_id=trace_id,

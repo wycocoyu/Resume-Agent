@@ -6,12 +6,15 @@ import re
 import json as _json
 import os
 import sys
+import time
 import asyncio
+import threading
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 # 统一导入方式：优先使用顶层模块，避免重复加载 backend.models
 try:
@@ -1118,6 +1121,41 @@ async def upload_resume_pdf(
 
 
 MAX_IMAGE_COUNT = 2
+IMAGE_STREAM_HEARTBEAT_INTERVAL = 15.0
+
+
+async def _validate_and_read_uploaded_images(
+    files: List[UploadFile],
+) -> list[tuple[bytes, str]]:
+    """校验并读取上传的图片字节，避免在 StreamingResponse 启动后才报 400/413。"""
+    if not files:
+        raise HTTPException(status_code=400, detail="请上传图片")
+    if len(files) > MAX_IMAGE_COUNT:
+        raise HTTPException(
+            status_code=400, detail=f"最多支持 {MAX_IMAGE_COUNT} 张图片"
+        )
+
+    payloads: list[tuple[bytes, str]] = []
+    for f in files:
+        if f.content_type not in SUPPORTED_IMAGE_TYPES:
+            raise HTTPException(status_code=400, detail="仅支持 JPG / PNG 图片")
+        image_bytes = await f.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="文件为空")
+        if len(image_bytes) > MAX_PDF_SIZE_MB * 1024 * 1024:
+            raise HTTPException(
+                status_code=413, detail=f"单张图片过大，最大支持 {MAX_PDF_SIZE_MB}MB"
+            )
+        payloads.append((image_bytes, f.content_type))
+    return payloads
+
+
+def _normalize_uploaded_resume(resume_data: dict, label: str = "图片解析") -> dict:
+    try:
+        return normalize_resume_json(resume_data)
+    except Exception as e:
+        logger.warning(f"{label} JSON 标准化失败: {e}")
+        return resume_data
 
 
 @router.post("/resume/upload-image")
@@ -1131,27 +1169,16 @@ async def upload_resume_image(
     与 /resume/upload-pdf 同构返回 {"resume": ...}。
     视觉模型由前端传入：glm-ocr（默认，实测比 qwen-vl-max 快约 5 倍）/ qwen-vl-max。
     """
-    if not files:
-        raise HTTPException(status_code=400, detail="请上传图片")
-    if len(files) > MAX_IMAGE_COUNT:
-        raise HTTPException(
-            status_code=400, detail=f"最多支持 {MAX_IMAGE_COUNT} 张图片"
-        )
+    payloads = await _validate_and_read_uploaded_images(files)
 
-    # 步骤1：逐张图片 → 文本（视觉识别），按上传顺序合并
+    # 步骤1：逐张图片 → 文本（线程池卸载同步 OCR，避免阻塞事件循环）
     texts = []
-    for f in files:
-        if f.content_type not in SUPPORTED_IMAGE_TYPES:
-            raise HTTPException(status_code=400, detail="仅支持 JPG / PNG 图片")
-        image_bytes = await f.read()
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="文件为空")
-        if len(image_bytes) > MAX_PDF_SIZE_MB * 1024 * 1024:
-            raise HTTPException(
-                status_code=413, detail=f"单张图片过大，最大支持 {MAX_PDF_SIZE_MB}MB"
-            )
+    for image_bytes, content_type in payloads:
         try:
-            texts.append(image_to_text(image_bytes, f.content_type, model))
+            text_piece = await run_in_threadpool(
+                image_to_text, image_bytes, content_type, model
+            )
+            texts.append(text_piece)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"图片识别失败: {e}")
 
@@ -1165,12 +1192,144 @@ async def upload_resume_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"简历结构化失败: {e}")
 
-    try:
-        normalized = normalize_resume_json(resume_data)
-        return {"resume": normalized, "provider": model}
-    except Exception as e:
-        logger.warning(f"JSON 标准化失败: {e}")
-        return {"resume": resume_data, "provider": model}
+    normalized = _normalize_uploaded_resume(resume_data, "图片解析")
+    return {"resume": normalized, "provider": model}
+
+
+@router.post("/resume/upload-image/stream")
+async def upload_resume_image_stream(
+    files: List[UploadFile] = File(...),
+    model: str = Form(default="glm-ocr"),
+):
+    """流式上传并解析简历图片（SSE 阶段状态 + 15s 心跳保活，防止反代 100s 空闲断连）。"""
+    payloads = await _validate_and_read_uploaded_images(files)
+
+    def _sse(payload: dict | str) -> str:
+        if isinstance(payload, str):
+            return f"data: {payload}\n\n"
+        return f"data: {_json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    async def generate():
+        started_at = time.time()
+        state = {"stage": "ocr"}
+        event_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+
+        async def _run_pipeline():
+            try:
+                total = len(payloads)
+                texts: list[str] = []
+                for idx, (image_bytes, content_type) in enumerate(payloads, start=1):
+                    await event_queue.put(
+                        _sse(
+                            {
+                                "type": "status",
+                                "stage": "ocr",
+                                "image_index": idx,
+                                "total_images": total,
+                                "content": f"正在识别第 {idx}/{total} 张图片...",
+                            }
+                        )
+                    )
+                    try:
+                        text_piece = await run_in_threadpool(
+                            image_to_text, image_bytes, content_type, model
+                        )
+                    except Exception as e:
+                        await event_queue.put(
+                            _sse({"type": "error", "status": 502, "content": f"图片识别失败: {e}"})
+                        )
+                        return
+                    texts.append(text_piece)
+
+                ocr_text = "\n\n".join(t for t in texts if t.strip())
+                if not ocr_text.strip():
+                    await event_queue.put(
+                        _sse(
+                            {
+                                "type": "error",
+                                "status": 422,
+                                "content": "未识别到文字，请换清晰的图片",
+                            }
+                        )
+                    )
+                    return
+
+                state["stage"] = "structuring"
+                await event_queue.put(
+                    _sse(
+                        {
+                            "type": "status",
+                            "stage": "structuring",
+                            "content": "正在整理简历结构...",
+                        }
+                    )
+                )
+                try:
+                    resume_data = await assemble_resume_data_fast(ocr_text, model=None)
+                except Exception as e:
+                    await event_queue.put(
+                        _sse(
+                            {
+                                "type": "error",
+                                "status": 500,
+                                "content": f"简历结构化失败: {e}",
+                            }
+                        )
+                    )
+                    return
+
+                normalized = _normalize_uploaded_resume(resume_data, "图片流式解析")
+                await event_queue.put(
+                    _sse(
+                        {
+                            "type": "json",
+                            "content": {"resume": normalized, "provider": model},
+                        }
+                    )
+                )
+                await event_queue.put(_sse("[DONE]"))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                await event_queue.put(
+                    _sse({"type": "error", "status": 500, "content": str(e)})
+                )
+            finally:
+                await event_queue.put(None)
+
+        pipeline_task = asyncio.create_task(_run_pipeline())
+        try:
+            while True:
+                try:
+                    frame = await asyncio.wait_for(
+                        event_queue.get(), timeout=IMAGE_STREAM_HEARTBEAT_INTERVAL
+                    )
+                except asyncio.TimeoutError:
+                    yield _sse(
+                        {
+                            "type": "heartbeat",
+                            "stage": state["stage"],
+                            "elapsed": round(time.time() - started_at, 1),
+                        }
+                    )
+                    continue
+                if frame is None:
+                    break
+                yield frame
+        finally:
+            if not pipeline_task.done():
+                pipeline_task.cancel()
+                await asyncio.gather(pipeline_task, return_exceptions=True)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 async def _parse_resume_serial(body: ResumeParseRequest):
@@ -1375,13 +1534,42 @@ async def parse_resume_text_stream(body: ResumeParseRequest):
     prompt = _build_stream_parse_prompt(text)
 
     async def generate():
+        started_at = time.time()
         full = ""
+        chunk_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        stop_event = threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def _producer():
+            try:
+                for chunk in call_llm_stream(provider, prompt):
+                    if stop_event.is_set():
+                        break
+                    loop.call_soon_threadsafe(chunk_queue.put_nowait, ("chunk", chunk))
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, ("eof", None))
+            except Exception as err:
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, ("error", err))
+
+        worker = threading.Thread(target=_producer, daemon=True)
+        worker.start()
+
         try:
             yield f"data: {_json.dumps({'type': 'status', 'content': 'parsing'}, ensure_ascii=False)}\n\n"
-            for chunk in call_llm_stream(provider, prompt):
-                full += chunk
-                yield f"data: {_json.dumps({'type': 'progress', 'chars': len(full)}, ensure_ascii=False)}\n\n"
-                await asyncio.sleep(0)
+            while True:
+                try:
+                    kind, payload = await asyncio.wait_for(
+                        chunk_queue.get(), timeout=IMAGE_STREAM_HEARTBEAT_INTERVAL
+                    )
+                except asyncio.TimeoutError:
+                    yield f"data: {_json.dumps({'type': 'heartbeat', 'elapsed': round(time.time() - started_at, 1)}, ensure_ascii=False)}\n\n"
+                    continue
+                if kind == "chunk":
+                    full += payload
+                    yield f"data: {_json.dumps({'type': 'progress', 'chars': len(full)}, ensure_ascii=False)}\n\n"
+                elif kind == "error":
+                    raise payload
+                elif kind == "eof":
+                    break
 
             cleaned = clean_llm_response(full)
             data = parse_json_response(cleaned)
@@ -1395,6 +1583,8 @@ async def parse_resume_text_stream(body: ResumeParseRequest):
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            stop_event.set()
 
     return StreamingResponse(
         generate(),

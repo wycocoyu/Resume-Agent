@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEnvironment } from "@/contexts/EnvironmentContext";
 import { useCLTP } from "@/hooks/useCLTP";
 import { isAgentEnabled } from "@/lib/runtimeEnv";
+import { uploadResumeImageStream } from "@/lib/uploadResumeImageStream";
 import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
 import { hasHeroHandoffImages, takeHeroHandoffImages } from "@/lib/heroHandoff";
 import { JdOptimizeChatCard } from "@/components/agent-chat/JdOptimizeChatCard";
@@ -3758,24 +3759,17 @@ function CocoChatContent() {
         picked.forEach((file) => formData.append("files", file));
         formData.append("model", "glm-ocr");
 
-        const response = await fetch(`${apiBaseUrl}/api/resume/upload-image`, {
-          method: "POST",
-          body: formData,
+        const parsedResume = await uploadResumeImageStream({
+          apiBaseUrl,
+          formData,
+          onStatus: (statusText) => {
+            updateResumePdfState(resumeEntryId, {
+              loading: true,
+              progress: statusText,
+              error: null,
+            });
+          },
         });
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => null);
-          const detail =
-            errBody && typeof errBody.detail === "string"
-              ? errBody.detail
-              : `图片识别失败（${response.status}）`;
-          throw new Error(detail);
-        }
-
-        const data = await response.json();
-        const parsedResume = data?.resume;
-        if (!parsedResume || typeof parsedResume !== "object") {
-          throw new Error("未识别出结构化简历内容，请换更清晰的图片重试。");
-        }
 
         const displayName = resolveImportedResumeDisplayName(parsedResume);
         const canonical = normalizeImportedResumeToCanonical(parsedResume, {

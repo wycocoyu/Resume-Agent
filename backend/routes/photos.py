@@ -6,6 +6,7 @@ import os
 import re
 import hashlib
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from starlette.concurrency import run_in_threadpool
 
 from middleware.auth import get_current_user
 
@@ -64,8 +65,6 @@ async def upload_photo(
         raise HTTPException(status_code=400, detail="文件过大，最大 2MB")
 
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv('COS_SECRET_ID', '')
         secret_key = os.getenv('COS_SECRET_KEY', '')
         region = os.getenv('COS_REGION', 'ap-guangzhou')
@@ -74,28 +73,31 @@ async def upload_photo(
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-
         # 以数据库 username 创建目录；文件名用内容哈希实现去重复用
         account = getattr(current_user, 'username', '') or getattr(current_user, 'email', '') or str(getattr(current_user, 'id', ''))
         safe_account = _sanitize_account_name(account)
         cos_key = _build_photo_key(safe_account, content, ext)
 
-        # 内容去重：COS 里已存在同一张照片就复用，跳过重复上传（存在性探测失败不阻断，退回正常 PUT）
-        reused = False
-        try:
-            reused = bool(client.object_exists(Bucket=bucket, Key=cos_key))
-        except Exception:
-            reused = False
+        def _upload_sync() -> bool:
+            from qcloud_cos import CosConfig, CosS3Client
 
-        if not reused:
-            client.put_object(
-                Bucket=bucket,
-                Body=content,
-                Key=cos_key,
-                ContentType=file.content_type or 'image/png',
-            )
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            reused_flag = False
+            try:
+                reused_flag = bool(client.object_exists(Bucket=bucket, Key=cos_key))
+            except Exception:
+                reused_flag = False
+            if not reused_flag:
+                client.put_object(
+                    Bucket=bucket,
+                    Body=content,
+                    Key=cos_key,
+                    ContentType=file.content_type or 'image/png',
+                )
+            return reused_flag
+
+        reused = await run_in_threadpool(_upload_sync)
 
         import urllib.parse
         cos_base = _import_cos_base_url()
@@ -120,8 +122,6 @@ async def upload_photo(
 async def list_photos(current_user=Depends(get_current_user)):
     """列出当前用户已上传的照片（COS users/<account>/photos/ 前缀），供前端复用选择。"""
     try:
-        from qcloud_cos import CosConfig, CosS3Client
-
         secret_id = os.getenv('COS_SECRET_ID', '')
         secret_key = os.getenv('COS_SECRET_KEY', '')
         region = os.getenv('COS_REGION', 'ap-guangzhou')
@@ -130,14 +130,18 @@ async def list_photos(current_user=Depends(get_current_user)):
         if not secret_id or not secret_key:
             raise HTTPException(status_code=500, detail="COS 凭证未配置")
 
-        config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-        client = CosS3Client(config)
-
         account = getattr(current_user, 'username', '') or getattr(current_user, 'email', '') or str(getattr(current_user, 'id', ''))
         safe_account = _sanitize_account_name(account)
         prefix = f"users/{safe_account}/photos/"
 
-        resp = client.list_objects(Bucket=bucket, Prefix=prefix, MaxKeys=100)
+        def _list_sync():
+            from qcloud_cos import CosConfig, CosS3Client
+
+            config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
+            client = CosS3Client(config)
+            return client.list_objects(Bucket=bucket, Prefix=prefix, MaxKeys=100)
+
+        resp = await run_in_threadpool(_list_sync)
 
         import urllib.parse
         cos_base = _import_cos_base_url()

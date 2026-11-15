@@ -1,22 +1,7 @@
-import sys, os
-# Insert the project root so we can import events.py directly
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
-# Import the events module directly (bypassing package __init__.py which triggers
-# the full backend initialization chain including logging config)
-import importlib.util
-_events_path = os.path.join(
-    os.path.dirname(__file__), '..', 'agent', 'web', 'streaming', 'events.py'
+from backend.agent.web.streaming.events import (
+    ResumeGeneratedEvent,
+    ResumePatchEvent,
 )
-_spec = importlib.util.spec_from_file_location(
-    "backend.agent.web.streaming.events", _events_path
-)
-_mod = importlib.util.module_from_spec(_spec)
-sys.modules["backend.agent.web.streaming.events"] = _mod
-_spec.loader.exec_module(_mod)
-
-ResumePatchEvent = _mod.ResumePatchEvent
-ResumeGeneratedEvent = _mod.ResumeGeneratedEvent
 
 
 def test_resume_patch_event_to_dict():

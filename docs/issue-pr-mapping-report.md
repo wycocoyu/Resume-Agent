@@ -12,7 +12,7 @@
 
 ## 1. Executive Summary
 
-This document serves as the authoritative, definitive delivery mapping and technical audit report for the complete consolidation of **17 GitHub Issues (#41 through #63)** and **3 Pull Requests (#64, #66, #67)** within the `Resume-Agent` / `CocoCV` monorepo.
+This document serves as the authoritative, definitive delivery mapping and technical audit report for the complete consolidation of **18 GitHub Issues (#41 through #63, and #68)** and **3 Pull Requests (#64, #66, #67)** within the `Resume-Agent` / `CocoCV` monorepo.
 
 ### 1.1 Monorepo Evolution
 Historically, the `Resume-Agent` project evolved through fragmented iterations:
@@ -88,7 +88,7 @@ ResumeAgent Monorepo
 
 ## 3. Exhaustive 1:1 Mapping Table: Issues & PRs
 
-The following section documents the root cause, touched files, architectural solution, and physical verification evidence for all 17 GitHub Issues and 3 Pull Requests.
+The following section documents the root cause, touched files, architectural solution, and physical verification evidence for all 18 GitHub Issues and 3 Pull Requests.
 
 | Identifier | Title / Scope | Milestone | Primary Files Touched / Created | Verification Command | Exit Code | Assertion Status |
 |:---|:---|:---:|:---|:---|:---:|:---:|
@@ -112,6 +112,7 @@ The following section documents the root cause, touched files, architectural sol
 | **PR #64** | Universal Harness Base & Shared Core Skills | M1 | `backend/skill_templates/*`, `backend/skillkit/render.py`, `skills/resume-agent/*` | `.venv/bin/pytest tests/e2e/tier1/test_pr64_universal_harness.py` | 0 | 100% Passed (6/6) |
 | **PR #66** | Tabbit CLI E2E UI Verification Script | M1 | `scripts/verify-ui-tabbit.sh`, `tests/e2e/tier1/test_pr66_tabbit_visual_verify.py` | `.venv/bin/pytest tests/e2e/tier1/test_pr66_tabbit_visual_verify.py` | 0 | 100% Passed (5/5) |
 | **PR #67** | Replace OpenManus with Pi Core Runtime | M1 | `backend/agent/pi_core/*`, `backend/agent/tool/*`, `backend/tests/test_pi_core_loop.py` | `.venv/bin/pytest backend/tests/test_pi_core_loop.py tests/e2e/tier1/test_pi_mono_agent_core.py` | 0 | 100% Passed (9/9) |
+| **Issue #68** | Image Stream Timeout, ASGI/COS 502s & Sync TZ | Post-M7 | `backend/services/sync_service.py`, `backend/middleware/observability.py`, `backend/routes/resume.py`, `backend/routes/*logos.py`, `frontend/src/lib/uploadResumeImageStream.ts` | `.venv/bin/pytest backend/tests/test_issue68_reliability.py && cd frontend && npm test -- src/lib/__tests__/uploadResumeImageStream.test.ts --run` | 0 | 100% Passed (9/9) |
 
 ---
 
@@ -398,6 +399,23 @@ The following section documents the root cause, touched files, architectural sol
 - **Verification Evidence**:
   * Command: `.venv/bin/pytest backend/tests/test_pi_core_loop.py tests/e2e/tier1/test_pi_mono_agent_core.py -v` (Exit Code 0, 9 passed).
 
+### 4.20 Issue #68: Image Upload Stream Timeout, ASGI/COS 502s, and Sync Datetime Timezone Fix
+- **Requirement & Root Cause**:
+  1. Sync `500` crash (`TypeError: can't compare offset-naive and offset-aware datetimes`) in `backend/services/sync_service.py` where `_parse_iso_datetime` stripped trailing `"Z"` into naive `datetime` while PostgreSQL `Resume.updated_at` (`DateTime(timezone=True)`) is offset-aware.
+  2. Starlette `BaseHTTPMiddleware` wrapping SSE/HTTP in an `anyio.TaskGroup` (`backend/middleware/observability.py`) crashed with `unhandled errors in a TaskGroup` on client disconnects, while synchronous `_get_or_create_session` retries (`stream.py`), synchronous `call_llm_stream` (`resume.py`), and synchronous `CosS3Client` calls (`logos.py`, `school_logos.py`, `photos.py`) blocked the uvicorn event loop causing 502s.
+  3. Non-streaming `POST /resume/upload-image` held HTTP connections open without keepalive bytes during long Vision + LLM parsing, triggering reverse-proxy idle timeouts.
+- **Touched Files**:
+  * `backend/services/sync_service.py`: Added `_normalize_utc` and UTC-aware normalization before timestamp comparisons.
+  * `backend/middleware/observability.py`: Replaced `BaseHTTPMiddleware` with pure ASGI `RequestObservabilityMiddleware` and disconnect-aware `_is_disconnect_only_error` / `BaseExceptionGroup` unwinding.
+  * `backend/agent/web/routes/stream.py`: Offloaded `_get_or_create_session` to `run_in_threadpool` and hardened teardown / `BaseExceptionGroup` handling.
+  * `backend/routes/resume.py`: Added `POST /resume/upload-image/stream` (pre-stream 400/413 validation, SSE `status` + 15s `heartbeat` + `json` + `[DONE]`) and worker-thread queue offloading in `POST /resume/upload-image` & `POST /resume/parse/stream`.
+  * `backend/routes/logos.py`, `backend/routes/school_logos.py`, `backend/routes/photos.py`: Offloaded local logo resolution and COS `put_object` / `delete_object` / `list_objects` calls via `run_in_threadpool`.
+  * `frontend/src/lib/uploadResumeImageStream.ts`, `frontend/src/pages/Workspace/v2/shared/AIImportModal.tsx`, `frontend/src/pages/AgentChat/CocoChat.tsx`: Wired chunk-reset SSE streaming client (`idleTimeoutMs = 90_000`, `maxTotalMs = 300_000`, `application/json` fallback).
+  * `backend/tests/test_issue68_reliability.py`, `frontend/src/lib/__tests__/uploadResumeImageStream.test.ts`, `backend/tests/test_resume_events.py`, `backend/tests/test_generate_resume_tool.py`: Added 9 regression tests for `#68` and removed top-level `sys.modules` overwrites so `backend/tests/` and `tests/e2e/` pass together cleanly.
+- **Verification Evidence**:
+  * Command: `.venv/bin/pytest backend/tests/test_issue68_reliability.py backend/tests/test_upload_image_route.py backend/tests/test_cli_sync.py -v` (Exit Code 0, 19 passed).
+  * Command: `cd frontend && npm test -- src/lib/__tests__/uploadResumeImageStream.test.ts --run` (Exit Code 0, 3 passed).
+
 ---
 
 ## 5. Full 5-Tier Test Matrix Breakdown
@@ -413,11 +431,12 @@ The test suite comprises 214 total end-to-end tests across 5 tiers, alongside co
 | **Tier 3: Pairwise Interactions** | `tests/e2e/tier3/` | 16 | 16 | 0 | 0 | 0 | 11.17s | ✅ PASS |
 | **Tier 4: Real-World Workflows** | `tests/e2e/tier4/` | 6 | 6 | 0 | 0 | 0 | 7.32s | ✅ PASS |
 | **Tier 5: White-Box Adversarial** | `tests/e2e/tier5/` | 26 | 26 | 0 | 0 | 0 | 11.78s | ✅ PASS |
-| **Backend Unit & Integration** | `backend/tests/` | 638 | 638 | 0 | 0 | 0 | 26.77s | ✅ PASS |
-| **Frontend Vitest Suite** | `frontend/ (npm test)` | 163 | 163 | 0 | 0 | 0 | 2.94s | ✅ PASS |
-| **Frontend Production Build** | `frontend/ (npm run build)` | 7889 mods | 7889 | 0 | 0 | 0 | 9.06s | ✅ PASS |
+| **Backend Unit & Integration** | `backend/tests/` (part of `858` combined pytest) | 644 | 644 | 0 | 0 | 0 | 85.74s (combined) | ✅ PASS |
+| **Frontend Vitest Suite** | `frontend/ (npm test -- --run)` | 166 | 166 | 0 | 0 | 0 | 2.9s+ | ✅ PASS |
+| **Wave 0 TS Packages** | `vitest run packages/schema/tests/ packages/proxy/tests/` | 19 | 19 | 0 | 0 | 0 | 0.49s | ✅ PASS |
+| **Frontend Production Build** | `frontend/ (npm run build)` | 7890 mods | 7890 | 0 | 0 | 0 | 8.88s | ✅ PASS |
 | **Changelog Pure-Date Validator** | `scripts/check-changelog.mjs` | 30 releases | 30 | 0 | 0 | 0 | 0.08s | ✅ PASS |
-| **TOTAL E2E + UNIT SUITE** | **Complete Monorepo Verification** | **1,014** | **1,014** | **0** | **0** | **0** | **~96s** | **✅ 100% GREEN** |
+| **TOTAL AUTOMATED SUITE** | **Backend (644) + E2E (214) + Frontend (166) + Wave 0 (19)** | **1,043** | **1,043** | **0** | **0** | **0** | **~98s** | **✅ 100% GREEN** |
 
 ### 5.2 Detailed Tier Breakdown
 
@@ -522,6 +541,6 @@ In accordance with strict project engineering discipline:
 
 ## 8. Conclusion
 
-The comprehensive consolidation of all 17 GitHub Issues (#41 through #63) and 3 Pull Requests (#64, #66, #67) is **100% COMPLETE, VERIFIED, AND PRODUCTION READY**.
+The comprehensive consolidation of all 18 GitHub Issues (#41 through #63, and #68) and 3 Pull Requests (#64, #66, #67) is **100% COMPLETE, VERIFIED, AND PRODUCTION READY**.
 
-Every architectural requirement, interface contract, security boundary, and rendering capability has been implemented with genuine production logic and validated across a 1,014-test verification pyramid with zero regressions. The repository is ready for final review and pull request creation.
+Every architectural requirement, interface contract, security boundary, and rendering capability has been implemented with genuine production logic and validated across a 1,043-test verification pyramid (`858` backend/E2E pytest + `166` frontend Vitest + `19` Wave 0 TS tests) with zero regressions. The repository is ready for final review and pull request creation.

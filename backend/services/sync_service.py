@@ -1,8 +1,8 @@
 """
 简历数据同步服务
 """
-from datetime import datetime
-from typing import List, Dict, Any
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -16,13 +16,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("backend")
 
-def _parse_iso_datetime(value: str) -> datetime:
-    if not value:
+
+def _normalize_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """将 offset-naive 与 offset-aware datetime 统一归一为 UTC aware。"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return _normalize_utc(value)
+    if not value or not isinstance(value, str):
         return None
     try:
-        if value.endswith("Z"):
-            value = value[:-1]
-        return datetime.fromisoformat(value)
+        raw = value.strip()
+        if raw.endswith(("Z", "z")):
+            raw = raw[:-1] + "+00:00"
+        return _normalize_utc(datetime.fromisoformat(raw))
     except Exception:
         return None
 
@@ -63,8 +76,9 @@ def sync_resumes(db: Session, user: "AppUser", resumes: List[Dict[str, Any]]) ->
 
         existing = existing_map.get(resume_id)
         if existing:
-            # 比较时间戳，只有更新更晚才覆盖
-            if incoming_updated_at and existing.updated_at and incoming_updated_at <= existing.updated_at:
+            # 比较时间戳，只有更新更晚才覆盖（统一为 UTC aware，防止 naive/aware 混用抛 TypeError）
+            existing_updated_at = _normalize_utc(existing.updated_at)
+            if incoming_updated_at and existing_updated_at and incoming_updated_at <= existing_updated_at:
                 skipped += 1
                 continue
             existing.name = name
