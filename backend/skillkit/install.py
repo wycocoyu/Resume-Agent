@@ -104,7 +104,7 @@ def resolve_target(adapter: HarnessAdapter, scope: str, override: str | None) ->
             f"Harness '{adapter.id}' has no verified discovery path for scope '{scope}'. "
             "Pass --path <dir> explicitly (the adapter is marked experimental)."
         )
-    return (paths[0] / adapter.name).resolve()
+    return (paths[0] / adapter.name).expanduser().absolute()
 
 
 def _file_hashes(root: Path) -> dict[str, str]:
