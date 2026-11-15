@@ -1,4 +1,4 @@
-"""Message types - Complete LangChain implementation for OpenManus."""
+"""Message types - Complete LangChain implementation for resume agent."""
 
 from backend.agent.memory.langchain.messages.base import BaseMessage, BaseMessageChunk, merge_content
 from backend.agent.memory.langchain.messages.human import HumanMessage, HumanMessageChunk

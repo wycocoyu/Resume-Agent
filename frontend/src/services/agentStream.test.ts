@@ -51,15 +51,13 @@ describe("parseAgentStreamBlock", () => {
         controller.close();
       },
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(body, {
-          status: 200,
-          headers: { "Content-Type": "text/event-stream" },
-        }),
-      ),
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
     );
+    vi.stubGlobal("fetch", fetchMock);
     const events: string[] = [];
 
     await streamAgent(
@@ -68,6 +66,10 @@ describe("parseAgentStreamBlock", () => {
     );
 
     expect(events).toEqual(["done"]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/agent/stream"),
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("fails a truncated stream instead of fabricating a canonical done event", async () => {

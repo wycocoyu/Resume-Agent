@@ -8,6 +8,7 @@ import ActionMenu from '../common/ActionMenu';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAgentEnabled } from '@/lib/runtimeEnv';
+import { getAuthHeaders as buildAuthHeaders } from '@/lib/authHeaders';
 import {
   DEFAULT_SESSION_LIMITS,
   getSessionLimitMessage,
@@ -86,8 +87,7 @@ export function RecentSessions({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
   const getAuthHeaders = useCallback((extra: Record<string, string> = {}) => {
-    // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie，不再注入 Bearer。
-    return { ...extra };
+    return buildAuthHeaders(extra);
   }, []);
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

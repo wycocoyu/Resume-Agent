@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEnvironment } from "@/contexts/EnvironmentContext";
 import { useCLTP } from "@/hooks/useCLTP";
 import { isAgentEnabled } from "@/lib/runtimeEnv";
+import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
 import { hasHeroHandoffImages, takeHeroHandoffImages } from "@/lib/heroHandoff";
 import { JdOptimizeChatCard } from "@/components/agent-chat/JdOptimizeChatCard";
 import {
@@ -601,8 +602,7 @@ function CocoChatContent() {
     openModal("login");
   }, [isAuthenticated, openModal]);
   const getAuthHeaders = useCallback((extra: Record<string, string> = {}) => {
-    // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie，不再注入 Bearer。
-    return { ...extra };
+    return buildAuthHeaders(extra);
   }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .context import convert_to_llm, transform_context
@@ -152,11 +152,9 @@ async def run_agent_loop(
                 decision = await _resolve(hooks.before_tool_call(call, messages))
             if decision.block:
                 result = ToolResult(error=decision.reason or "Tool call blocked")
-                yield AgentEvent(
-                    "tool_execution_end",
-                    {"tool_call_id": call.id, "tool": call.name, "error": result.error, "blocked": True},
-                )
+                blocked = True
             else:
+                blocked = False
                 yield AgentEvent(
                     "tool_execution_start",
                     {"tool_call_id": call.id, "tool": call.name, "arguments": call.arguments},
@@ -172,6 +170,46 @@ async def run_agent_loop(
                     else:
                         assert partial is not None
                         result = partial
+
+                for progress in result.progress_updates:
+                    yield AgentEvent(
+                        "tool_execution_update",
+                        {
+                            "tool_call_id": call.id,
+                            "tool": call.name,
+                            "text": str(progress.get("summary") or progress.get("content") or ""),
+                            "stage_id": progress.get("stage_id") or "progress",
+                            "current": progress.get("current"),
+                            "total": progress.get("total"),
+                            "label": progress.get("label"),
+                            "stages": progress.get("stages") or [],
+                        },
+                    )
+
+            if hooks.after_tool_call:
+                after = await _resolve(hooks.after_tool_call(call, result, messages))
+                if after.structured_content:
+                    result = replace(
+                        result,
+                        structured_content={
+                            **(result.structured_content or {}),
+                            **after.structured_content,
+                        },
+                    )
+                should_terminate = after.terminate
+
+            if blocked:
+                yield AgentEvent(
+                    "tool_execution_end",
+                    {
+                        "tool_call_id": call.id,
+                        "tool": call.name,
+                        "error": result.error,
+                        "structured_content": result.structured_content,
+                        "blocked": True,
+                    },
+                )
+            else:
                 yield AgentEvent(
                     "tool_execution_end",
                     {
@@ -193,9 +231,6 @@ async def run_agent_loop(
                     supersede_key=result.supersede_key,
                 )
             )
-            if hooks.after_tool_call:
-                after = await _resolve(hooks.after_tool_call(call, result, messages))
-                should_terminate = bool(getattr(after, "terminate", False))
             if decision.terminate or should_terminate:
                 break
 

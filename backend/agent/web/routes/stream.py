@@ -20,7 +20,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import PermissionDeniedError
 
-from backend.agent.agent.manus import Manus
+from backend.agent.pi_core.resume_agent import ResumeAgentRuntime
+from backend.agent.pi_core.metrics import get_pi_core_metrics
 from backend.agent.config import NetworkConfig, config
 from backend.core.logger import get_logger
 from backend.middleware.auth import get_current_user
@@ -161,7 +162,7 @@ def _get_or_create_session(
             try:
                 # Use network configuration manager's context manager
                 with network_config.without_proxy():
-                    agent = Manus(
+                    agent = ResumeAgentRuntime(
                         session_id=conversation_id,
                         is_admin=_is_admin(user),
                         user_id=user.id,
@@ -385,55 +386,63 @@ async def _stream_event_generator(
         chat_history.add_message(Message(role=Role.USER, content=prompt), persist=False)
 
         # Execute agent and stream events
-        # 使用独立后台任务 + 队列消费，让心跳超时只 cancel queue.get()，
-        # 不会意外取消 LLM 调用，彻底解决"30秒后流被强制终止"问题。
+        # 心跳只等待下一个异步事件，不再额外创建 producer + Queue。
+        # 这样既不会让队列承担事件排序职责，也不会因为心跳超时取消
+        # 正在执行的 LLM/工具迭代。
         if HEARTBEAT_V2_ENABLED:
-            _SENTINEL = object()
-            event_queue: asyncio.Queue = asyncio.Queue()
-
-            async def _producer():
-                try:
-                    async for ev in stream_processor.start_stream(
-                        session_id=conversation_id,
-                        agent=agent,
-                        state_machine=state_machine,
-                        event_sender=lambda d: None,
-                        user_message=prompt,
-                        chat_history_manager=chat_history,
-                    ):
-                        await event_queue.put(ev)
-                finally:
-                    await event_queue.put(_SENTINEL)
-
-            producer_task = asyncio.create_task(_producer())
+            stream_iterator = stream_processor.start_stream(
+                session_id=conversation_id,
+                agent=agent,
+                state_machine=state_machine,
+                event_sender=lambda d: None,
+                user_message=prompt,
+                chat_history_manager=chat_history,
+            ).__aiter__()
+            next_event_task = asyncio.create_task(stream_iterator.__anext__())
+            heartbeat_task = asyncio.create_task(
+                asyncio.sleep(HEARTBEAT_INTERVAL)
+            )
 
             try:
                 while True:
-                    try:
-                        item = await asyncio.wait_for(
-                            event_queue.get(), timeout=HEARTBEAT_INTERVAL
-                        )
-                    except asyncio.TimeoutError:
+                    done, _ = await asyncio.wait(
+                        {next_event_task, heartbeat_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if heartbeat_task in done:
                         yield HeartbeatEvent().to_sse_format()
                         last_emit_time = time.time()
-                        continue
+                        heartbeat_task = asyncio.create_task(
+                            asyncio.sleep(HEARTBEAT_INTERVAL)
+                        )
 
-                    if item is _SENTINEL:
-                        break
+                    if next_event_task in done:
+                        try:
+                            item = next_event_task.result()
+                        except StopAsyncIteration:
+                            break
 
-                    sse_event = wrap_stream_event(item)
-                    yield sse_event.to_sse_format()
-                    now = time.time()
-                    last_emit_time = now
-                    last_agent_event_time = now
-                    await asyncio.sleep(0)
+                        sse_event = wrap_stream_event(item)
+                        yield sse_event.to_sse_format()
+                        now = time.time()
+                        last_emit_time = now
+                        last_agent_event_time = now
+                        next_event_task = asyncio.create_task(
+                            stream_iterator.__anext__()
+                        )
             finally:
-                if not producer_task.done():
-                    producer_task.cancel()
-                    try:
-                        await producer_task
-                    except (asyncio.CancelledError, Exception):
-                        pass
+                for task in (next_event_task, heartbeat_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(
+                    next_event_task,
+                    heartbeat_task,
+                    return_exceptions=True,
+                )
+                aclose = getattr(stream_iterator, "aclose", None)
+                if callable(aclose):
+                    await aclose()
         else:
             async for event in stream_processor.start_stream(
                 session_id=conversation_id,
@@ -633,6 +642,28 @@ async def stop_stream(
     else:
         logger.warning(f"[SSE] Stop requested for non-active stream: {conversation_id}")
         return {"status": "not_found", "conversation_id": conversation_id}
+
+
+@router.get("/stream/metrics")
+async def stream_metrics(
+    conversation_id: Optional[str] = None,
+    current_user: AppUser = Depends(get_current_user),
+) -> dict:
+    """Return bounded Pi Core rollout metrics for operators.
+
+    Session-specific metrics are owner-scoped; the aggregate registry is
+    restricted to administrators to avoid leaking cross-user activity.
+    """
+
+    if conversation_id:
+        _assert_session_access(conversation_id, current_user)
+        return {
+            "conversation_id": conversation_id,
+            "metrics": get_pi_core_metrics(conversation_id),
+        }
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可查看聚合指标")
+    return {"metrics": get_pi_core_metrics()}
 
 
 @router.delete("/stream/session/{conversation_id}")

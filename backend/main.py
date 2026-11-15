@@ -137,7 +137,7 @@ app.include_router(admin_router)
 app.include_router(leetcode_router)
 app.include_router(billing_router)
 
-# 注册 OpenManus 路由（合并后）
+# 注册 resume agent 路由（合并后）
 AGENT_BACKEND_BASE_URL = os.getenv("AGENT_BACKEND_BASE_URL", "").strip().rstrip("/")
 
 if AGENT_BACKEND_BASE_URL:
@@ -214,14 +214,11 @@ if AGENT_BACKEND_BASE_URL:
             await client.aclose()
 else:
     try:
-        from backend.agent.web.routes import api_router as openmanus_router
-        app.include_router(openmanus_router, prefix="/api/agent")
-        logger.info("[合并] OpenManus 路由已加载，前缀: /api/agent")
+        from backend.agent.web.routes import api_router as resume_router
+        app.include_router(resume_router, prefix="/api/agent")
+        logger.info("[合并] Resume Agent 路由已加载，前缀: /api/agent")
     except Exception as exc:
-        if "browser_use" in str(exc) or "browser-use" in str(exc):
-            logger.warning(f"[合并] OpenManus 路由未加载（缺少可选依赖）: {exc}")
-        else:
-            logger.warning(f"[合并] OpenManus 路由未加载: {exc}")
+        logger.warning(f"[合并] Resume Agent 路由未加载: {exc}")
 
 
 # 启动时预热 HTTP 连接并配置日志

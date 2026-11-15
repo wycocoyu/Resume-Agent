@@ -10,9 +10,17 @@ from typing import Optional
 from io import BytesIO
 
 try:
-    from .latex_utils import resolve_xelatex_executable, subprocess_env_with_xelatex_bin
+    from .latex_utils import (
+        resolve_xelatex_executable,
+        subprocess_env_with_xelatex_bin,
+        xelatex_install_hint,
+    )
 except ImportError:
-    from latex_utils import resolve_xelatex_executable, subprocess_env_with_xelatex_bin
+    from latex_utils import (
+        resolve_xelatex_executable,
+        subprocess_env_with_xelatex_bin,
+        xelatex_install_hint,
+    )
 
 
 def compile_latex_raw(latex_content: str) -> BytesIO:
@@ -64,21 +72,7 @@ def compile_latex_raw(latex_content: str) -> BytesIO:
         # 检查 xelatex 是否可用（Windows 下额外搜索 MiKTeX 常见路径）
         xelatex_path = resolve_xelatex_executable()
         if not xelatex_path:
-            # 提供安装说明
-            install_hint = """
-LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
-
-通过 Homebrew 安装 BasicTeX（推荐，较小）：
-  brew install --cask basictex
-  然后运行: eval "$(/usr/libexec/path_helper)"
-
-或安装完整版 MacTeX：
-  brew install --cask mactex
-
-安装完成后，需要重新启动终端或运行:
-  eval "$(/usr/libexec/path_helper)"
-"""
-            raise RuntimeError(f"xelatex 命令未找到。{install_hint}")
+            raise RuntimeError(f"xelatex 命令未找到。{xelatex_install_hint()}")
         
         # 使用 xelatex 编译
         compile_cmd = [
@@ -94,6 +88,8 @@ LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
             cwd=temp_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=180,
             env=_latex_env,
         )
@@ -101,14 +97,15 @@ LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
         if result.returncode != 0:
             # 提取有用的错误信息
             error_lines = []
-            for line in result.stdout.split('\n'):
+            compiler_output = result.stdout or result.stderr or ""
+            for line in compiler_output.split('\n'):
                 if '!' in line or 'Error' in line or 'error' in line or 'Undefined' in line:
                     error_lines.append(line)
             # 如果找到关键错误行，使用它们；否则使用最后500字符
             if error_lines:
                 error_msg = '\n'.join(error_lines[:20])  # 最多20行关键错误
             else:
-                error_msg = result.stdout[-1000:] if len(result.stdout) > 1000 else result.stdout
+                error_msg = compiler_output[-1000:] if len(compiler_output) > 1000 else compiler_output
             print(f"[LaTeX 编译] 错误: {error_msg}")
             raise RuntimeError(f"LaTeX 编译失败: {error_msg}")
         

@@ -1,13 +1,14 @@
-"""Experimental thin stream adapter for the linear pi-core loop.
+"""Thin production stream adapter for the linear pi-core loop.
 
-The adapter is intentionally opt-in.  It reuses Manus' prompt/tool policy,
-while replacing only the per-turn execution scheduler and event ordering.
+It reuses the resume domain's prompt/tool policy while keeping per-turn
+execution scheduling and event ordering inside the pi-core loop.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import Any, Optional
 
@@ -15,7 +16,6 @@ from backend.agent.schema import (
     AgentState as SchemaAgentState,
     Message,
     Role,
-    ToolCall as LegacyToolCall,
 )
 from backend.agent.web.streaming.events import (
     AgentEndEvent,
@@ -25,6 +25,7 @@ from backend.agent.web.streaming.events import (
     AnswerResetEvent,
     ResumeGeneratedEvent,
     ResumePatchEvent,
+    SuggestionsEvent,
     StreamEvent,
     SystemEvent,
     ThoughtEvent,
@@ -33,9 +34,11 @@ from backend.agent.web.streaming.agent_state import AgentState
 from backend.agent.web.streaming.state_machine import AgentStateMachine
 
 from .loop import run_agent_loop
+from .metrics import metrics_registry
 from .resume_adapter import (
     build_resume_hooks,
     execute_resume_tool,
+    append_core_messages_to_memory,
     stream_resume_model,
     to_core_messages,
 )
@@ -58,9 +61,50 @@ class PiCoreAgentStream:
         self._state_machine = state_machine
         self._chat_history_manager = chat_history_manager
         self._step_id = 0
+        self._suggestions_emitted = False
+        self._pending_text_deltas: list[str] = []
+
+    @staticmethod
+    def _extract_suggestions(content: str) -> tuple[str, list[dict[str, Any]]]:
+        """Extract optional suggestion-button markers from assistant text."""
+
+        marker = "%%SUGGESTIONS%%"
+        if marker not in content:
+            return content, []
+        prefix, payload = content.split(marker, 1)
+        payload = payload.split("%%END%%", 1)[0].strip()
+        try:
+            items = json.loads(payload)
+        except json.JSONDecodeError:
+            try:
+                items = json.loads(payload + "]")
+            except json.JSONDecodeError:
+                return prefix.strip(), []
+        if not isinstance(items, list):
+            return prefix.strip(), []
+        return prefix.strip(), [item for item in items if isinstance(item, dict)]
+
+    def _make_suggestions_event(
+        self,
+        items: list[dict[str, Any]],
+    ) -> SuggestionsEvent | None:
+        if not items or self._suggestions_emitted:
+            return None
+        self._suggestions_emitted = True
+        return SuggestionsEvent(items=items, session_id=self._session_id)
+
+    @staticmethod
+    def _diagnosis_completion_text(structured: dict[str, Any] | None) -> str:
+        source = ((structured or {}).get("details") or {}).get(
+            "diagnosis_source"
+        )
+        if source == "heuristic_fallback":
+            return "深度诊断暂时没跑完，先给你一份基础检查结果；稍后可重试获取完整建议。"
+        return "诊断已经整理好，本轮没有改动简历。想看逐条修改建议，点评分卡上的「查看修改建议」。"
 
     async def execute(self, user_message: str) -> AsyncIterator[StreamEvent]:
         start_len = len(self.agent.memory.messages)
+        metrics = metrics_registry.start_run(self._session_id)
         try:
             await self._state_machine.transition_to(
                 AgentState.STARTING,
@@ -68,21 +112,23 @@ class PiCoreAgentStream:
                 data={"user_message": user_message},
             )
             yield AgentStartEvent(
-                agent_name="Manus",
+                agent_name=str(getattr(self.agent, "agent_name", "ResumeAgent")),
                 task=user_message,
                 session_id=self._session_id,
             )
 
             await self._state_machine.transition_to(AgentState.RUNNING)
-            if hasattr(self.agent, "state"):
+            set_state = getattr(self.agent, "set_lifecycle_state", None)
+            if callable(set_state):
+                set_state(SchemaAgentState.IDLE)
+            elif hasattr(self.agent, "state"):
                 self.agent.state = SchemaAgentState.IDLE
             if hasattr(self.agent.memory, "cleanup_incomplete_sequences"):
                 self.agent.memory.cleanup_incomplete_sequences()
             self.agent.memory.add_message(Message.user_message(user_message))
             if getattr(self.agent, "_langchain_memory", None):
                 self.agent._langchain_memory.add_user_message(user_message)
-            if hasattr(self.agent, "prepare_pi_core_turn"):
-                await self.agent.prepare_pi_core_turn(user_message)
+            await self.agent.prepare_turn(user_message)
 
             messages = to_core_messages(self.agent.memory.messages)
             core_base_len = len(self.agent.memory.messages)
@@ -115,12 +161,33 @@ class PiCoreAgentStream:
                     )
                     return
                 if internal.kind == "message_end":
+                    metrics.record_event(internal.kind)
                     self._step_id += 1
+                    tool_calls = internal.data.get("tool_calls") or ()
+                    if not tool_calls:
+                        for delta in self._pending_text_deltas:
+                            yield AnswerEvent(
+                                content=delta,
+                                delta=delta,
+                                is_complete=False,
+                                session_id=self._session_id,
+                            )
+                    self._pending_text_deltas.clear()
                     for completion in self._emit_message_completion(internal):
                         yield completion
                     continue
+                if internal.kind == "message_update":
+                    if internal.data.get("delta_type") == "text_delta":
+                        text = str(internal.data.get("text") or "")
+                        if text:
+                            self._pending_text_deltas.append(text)
+                        continue
                 if internal.kind.startswith("_"):
                     continue
+
+                metrics.record_event(internal.kind)
+                if internal.kind == "tool_execution_end":
+                    metrics.record_tool_end(internal.data)
 
                 legacy = to_legacy_stream_event(
                     internal,
@@ -149,17 +216,23 @@ class PiCoreAgentStream:
 
             self._sync_memory(messages, core_base_len)
             self._persist_new_messages(start_len)
-            if hasattr(self.agent, "state"):
+            set_state = getattr(self.agent, "set_lifecycle_state", None)
+            if callable(set_state):
+                set_state(SchemaAgentState.IDLE)
+            elif hasattr(self.agent, "state"):
                 self.agent.state = SchemaAgentState.IDLE
             await self._state_machine.transition_to(AgentState.COMPLETED)
+            metrics.completed_runs += 1
             yield AgentEndEvent(
-                agent_name="Manus",
+                agent_name=str(getattr(self.agent, "agent_name", "ResumeAgent")),
                 success=True,
                 session_id=self._session_id,
             )
         except asyncio.CancelledError:
+            metrics.stopped_runs += 1
             raise
         except Exception as exc:
+            metrics.failed_runs += 1
             await self._state_machine.handle_error(exc)
             yield AgentErrorEvent(
                 error_message="刚才这一步运行出了点问题，请稍后重试。",
@@ -190,12 +263,20 @@ class PiCoreAgentStream:
                 summary=structured.get("summary", ""),
                 session_id=self._session_id,
             )
+        elif structured.get("type") == "resume_diagnosis":
+            yield AnswerEvent(
+                content=self._diagnosis_completion_text(structured),
+                **self._completion_kwargs(),
+                session_id=self._session_id,
+            )
 
     def _emit_message_completion(self, event: AgentEvent):
         """Close the visible assistant turn before any tool card starts."""
 
         data = event.data
         content = str(data.get("content") or "")
+        cleaned, suggestions = self._extract_suggestions(content)
+        content = cleaned
         tool_calls = data.get("tool_calls") or ()
         if tool_calls and content.strip():
             # A tool-bearing assistant message is action narration, not the
@@ -212,9 +293,18 @@ class PiCoreAgentStream:
             yield AnswerEvent(
                 content=content,
                 delta=None,
-                is_complete=True,
+                **self._completion_kwargs(),
                 session_id=self._session_id,
             )
+        suggestion_event = self._make_suggestions_event(suggestions)
+        if suggestion_event is not None:
+            yield suggestion_event
+
+    @staticmethod
+    def _completion_kwargs() -> dict[str, bool]:
+        """Keep all visible answer completions on one protocol path."""
+
+        return dict(is_complete=True)
 
     def _sync_memory(
         self,
@@ -223,36 +313,7 @@ class PiCoreAgentStream:
     ) -> None:
         """Append only pi-core messages created after the legacy snapshot."""
 
-        for message in messages[base_len:]:
-            if message.role == "assistant":
-                calls = [
-                    LegacyToolCall(
-                        id=call.id,
-                        type="function",
-                        function={
-                            "name": call.name,
-                            "arguments": json.dumps(
-                                call.arguments, ensure_ascii=False
-                            ),
-                        },
-                    )
-                    for call in message.tool_calls
-                ]
-                self.agent.memory.add_message(
-                    Message(
-                        role=Role.ASSISTANT,
-                        content=message.content or None,
-                        tool_calls=calls or None,
-                    )
-                )
-            elif message.role == "tool":
-                self.agent.memory.add_message(
-                    Message.tool_message(
-                        content=message.content,
-                        name=message.name or "unknown",
-                        tool_call_id=message.tool_call_id or "",
-                    )
-                )
+        append_core_messages_to_memory(self.agent.memory, messages, base_len)
 
     def _persist_new_messages(self, start_len: int) -> None:
         if not self._chat_history_manager:

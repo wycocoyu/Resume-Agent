@@ -1,5 +1,5 @@
 """
-LangChain-style Memory System - Complete implementation for OpenManus
+LangChain-style Memory System - Complete implementation for resume agent
 
 This is a complete implementation inspired by LangChain's Memory design,
 with in-memory storage for the resume optimization use case.

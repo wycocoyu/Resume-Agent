@@ -1,35 +1,65 @@
-from backend.agent.tool.ask_user_question_tool import AskUserQuestionTool
-from backend.agent.tool.base import BaseTool
-from backend.agent.tool.bash import Bash
-# BrowserUseTool 可能有额外依赖或 Pydantic 兼容性问题，设为可选
-try:
-    from backend.agent.tool.browser_use_tool import BrowserUseTool
-except Exception:
-    BrowserUseTool = None
-from backend.agent.tool.create_chat_completion import CreateChatCompletion
-from backend.agent.tool.cv_analyzer_agent_tool import CVAnalyzerAgentTool
-from backend.agent.tool.cv_suggestions_agent_tool import CVSuggestionsAgentTool
-from backend.agent.tool.cv_editor_agent_tool import CVEditorAgentTool
-from backend.agent.tool.cv_reader_agent_tool import CVReaderAgentTool
-from backend.agent.tool.cv_reader_tool import ReadCVContext
-from backend.agent.tool.planning import PlanningTool
-from backend.agent.tool.generate_resume_tool import GenerateResumeTool
-from backend.agent.tool.show_resume_tool import ShowResumeTool
-from backend.agent.tool.list_resumes_tool import ListResumesTool
-from backend.agent.tool.get_resume_detail_tool import GetResumeDetailTool
-from backend.agent.tool.str_replace_editor import StrReplaceEditor
-from backend.agent.tool.terminate import Terminate
-from backend.agent.tool.tool_collection import ToolCollection
+from importlib import import_module
+
+
+_EXPORTS = {
+    "AskUserQuestionTool": (
+        "backend.agent.tool.ask_user_question_tool",
+        "AskUserQuestionTool",
+    ),
+    "BaseTool": ("backend.agent.tool.base", "BaseTool"),
+    "CreateChatCompletion": (
+        "backend.agent.tool.create_chat_completion",
+        "CreateChatCompletion",
+    ),
+    "CVAnalyzerAgentTool": (
+        "backend.agent.tool.cv_analyzer_agent_tool",
+        "CVAnalyzerAgentTool",
+    ),
+    "CVSuggestionsAgentTool": (
+        "backend.agent.tool.cv_suggestions_agent_tool",
+        "CVSuggestionsAgentTool",
+    ),
+    "CVEditorAgentTool": (
+        "backend.agent.tool.cv_editor_agent_tool",
+        "CVEditorAgentTool",
+    ),
+    "CVReaderAgentTool": (
+        "backend.agent.tool.cv_reader_agent_tool",
+        "CVReaderAgentTool",
+    ),
+    "ReadCVContext": ("backend.agent.tool.cv_reader_tool", "ReadCVContext"),
+    "GenerateResumeTool": (
+        "backend.agent.tool.generate_resume_tool",
+        "GenerateResumeTool",
+    ),
+    "ShowResumeTool": (
+        "backend.agent.tool.show_resume_tool",
+        "ShowResumeTool",
+    ),
+    "ListResumesTool": (
+        "backend.agent.tool.list_resumes_tool",
+        "ListResumesTool",
+    ),
+    "GetResumeDetailTool": (
+        "backend.agent.tool.get_resume_detail_tool",
+        "GetResumeDetailTool",
+    ),
+    "Terminate": ("backend.agent.tool.terminate", "Terminate"),
+    "ToolCollection": (
+        "backend.agent.tool.tool_collection",
+        "ToolCollection",
+    ),
+}
 
 __all__ = [
     "AskUserQuestionTool",
     "BaseTool",
     "Bash",
-    "Terminate",
+    "PlanningTool",
     "StrReplaceEditor",
+    "Terminate",
     "ToolCollection",
     "CreateChatCompletion",
-    "PlanningTool",
     "ReadCVContext",
     "CVReaderAgentTool",
     "CVAnalyzerAgentTool",
@@ -42,5 +72,25 @@ __all__ = [
     "AskUserQuestionTool",
 ]
 
-if BrowserUseTool:
-    __all__.append("BrowserUseTool")
+def __getattr__(name: str):
+    """Load tools only when explicitly requested by a compatibility import."""
+
+    target = _EXPORTS.get(name)
+    if target is None:
+        target = {
+            "Bash": ("backend.agent.tool.bash", "Bash"),
+            "PlanningTool": (
+                "backend.agent.tool.planning",
+                "PlanningTool",
+            ),
+            "StrReplaceEditor": (
+                "backend.agent.tool.str_replace_editor",
+                "StrReplaceEditor",
+            ),
+        }.get(name)
+    if target is not None:
+        module_name, attribute = target
+        value = getattr(import_module(module_name), attribute)
+        globals()[name] = value
+        return value
+    raise AttributeError(name)

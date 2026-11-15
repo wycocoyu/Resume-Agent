@@ -72,6 +72,13 @@ export function getDirectApiBaseUrl(env: RuntimeEnv = getRuntimeEnv()): string {
 }
 
 export function getApiBaseUrl(env: RuntimeEnv = getRuntimeEnv()): string {
+  // 本地 Vite 开发默认使用 FastAPI 直连/本地代理，不依赖可能未启动的
+  // BetterAuth Web 服务。否则只要 .env 配置了 VITE_AUTH_WEB_URL，
+  // /api/agent/stream 就会被改写到 localhost:3000，浏览器最终只显示
+  // “Failed to fetch”，而本地 9000 后端其实是可用的。
+  if (import.meta.env.DEV && env === 'local') {
+    return getDirectApiBaseUrl(env)
+  }
   const authProxyBase = getAuthWebApiProxyBaseUrl()
   if (authProxyBase) return authProxyBase
   return getDirectApiBaseUrl(env)
@@ -83,6 +90,17 @@ export function getAuthWebBaseUrl(): string {
 
 export function isAuthWebEnabled(): boolean {
   return Boolean(getAuthWebBaseUrl())
+}
+
+/**
+ * 本地开发时没有单独启动 BetterAuth 服务，使用后端显式开启的本地开发身份。
+ * 该分支只在 Vite DEV 构建生效，生产构建永远不会自动带本地身份头。
+ */
+export function isLocalDevAuthEnabled(): boolean {
+  if (!import.meta.env.DEV) return false
+  const configured = String(import.meta.env.VITE_LOCAL_DEV_AUTH ?? '').trim().toLowerCase()
+  if (!configured) return true
+  return TRUE_ENV_VALUES.has(configured)
 }
 
 export function buildAuthWebUrl(path = '/account', returnTo?: string): string {

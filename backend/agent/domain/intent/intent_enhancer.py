@@ -3,7 +3,7 @@ Intent Enhancer - 意图增强器
 
 在 agent 执行前，通过意图识别增强 user query，以引导 agent 使用合适的工具。
 
-参考 AgentIntentEnhancer 实现，适配 OpenManus 的工具系统。
+参考 AgentIntentEnhancer 实现，适配 resume agent 的工具系统。
 """
 
 import re

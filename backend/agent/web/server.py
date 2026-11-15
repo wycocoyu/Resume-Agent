@@ -1,5 +1,5 @@
 """
-OpenManus Web Server - HTTP + SSE architecture.
+Resume Agent Web Server - HTTP + SSE architecture.
 
 This server provides:
 - SSE endpoint for agent interaction with real-time streaming
@@ -37,7 +37,7 @@ class AgentMessage(BaseModel):
 
 
 app = FastAPI(
-    title="OpenManus API",
+    title="Resume Agent API",
     description="Resume optimization agent with real-time SSE streaming",
     version="3.0.0",
 )
@@ -275,7 +275,7 @@ else:
     @app.get("/")
     async def root():
         return {
-            "message": "OpenManus API 服务已启动",
+        "message": "Resume Agent API 服务已启动",
             "transport": "SSE (Server-Sent Events)",
             "endpoints": {
                 "stream": "POST /api/stream - SSE streaming endpoint",
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     import uvicorn
     PORT = 8080
     print("========================================")
-    print("  OpenManus Web 服务器 (SSE)")
+    print("  Resume Agent Web 服务器 (SSE)")
     print("========================================")
     print(f"传输协议: SSE (Server-Sent Events)")
     print(f"前端目录: {FRONTEND_DIST}")

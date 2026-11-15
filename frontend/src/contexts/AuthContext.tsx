@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { buildAuthWebUrl, isAuthWebEnabled } from '@/lib/runtimeEnv'
+import { buildAuthWebUrl, isAuthWebEnabled, isLocalDevAuthEnabled } from '@/lib/runtimeEnv'
 import { fetchUserEntitlement } from '@/services/api'
 import {
   fetchBetterAuthSession,
@@ -86,6 +86,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // 清理旧 JWT 时代的本地残留（token 已无任何后端可用它）
         localStorage.removeItem(TOKEN_KEY)
+
+        if (isLocalDevAuthEnabled()) {
+          const localUser: User = {
+            id: 'codex-local-user',
+            username: 'local',
+            email: 'local@localhost',
+            betterAuthUserId: 'codex-local-user',
+            role: 'user',
+          }
+          applyAuthState(localUser, null)
+          try {
+            localStorage.setItem(USER_KEY, JSON.stringify(localUser))
+          } catch {
+            // 本地身份仅用于开发，不影响页面继续运行
+          }
+          return
+        }
 
         if (!isAuthWebEnabled()) {
           // 未配置 BetterAuth（VITE_AUTH_WEB_URL 为空）时没有任何登录方式：

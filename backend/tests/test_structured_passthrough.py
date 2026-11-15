@@ -9,13 +9,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-import backend.agent.agent.manus  # noqa: F401  先初始化包,避开循环导入
-from backend.agent.agent.manus import Manus
+import backend.agent.pi_core.resume_agent  # noqa: F401  先初始化包,避开循环导入
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 from backend.agent.tool.base import ToolResult
 
 
 def make_agent():
-    return Manus(session_id="s-structured-test")
+    return ResumeDomainRuntime(session_id="s-structured-test")
 
 
 def test_unknown_tool_with_typed_system_passes_through():

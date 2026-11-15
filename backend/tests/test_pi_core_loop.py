@@ -125,6 +125,50 @@ def test_hooks_can_block_and_terminate_after_tool():
     assert events[-1].data["blocked"] is True
 
 
+def test_after_tool_hook_can_merge_structured_content_and_terminate_batch():
+    first = ToolCall("call-1", "read_resume", {})
+    second = ToolCall("call-2", "cv_editor_agent", {"path": "projects[0]"})
+    executed: list[str] = []
+
+    async def stream(_messages):
+        yield AssistantChunk(
+            "done",
+            turn=ModelTurn(tool_calls=(first, second), stop_reason="tool_calls"),
+        )
+
+    async def execute(call, _messages):
+        executed.append(call.name)
+        return ToolResult(
+            output="读取完成",
+            structured_content={"source": "tool"},
+        )
+
+    async def after(call, _result, _messages):
+        if call.id == first.id:
+            return ToolDecision(
+                terminate=True,
+                structured_content={"resume_patch": {"path": "projects[0]"}},
+            )
+        return ToolDecision()
+
+    messages, events = _collect(
+        _events(
+            stream,
+            execute,
+            hooks=AgentHooks(after_tool_call=after),
+        )
+    )
+
+    assert executed == ["read_resume"]
+    end_event = events[-1]
+    assert end_event.kind == "tool_execution_end"
+    assert end_event.data["structured_content"] == {
+        "source": "tool",
+        "resume_patch": {"path": "projects[0]"},
+    }
+    assert messages[-1].structured_content == end_event.data["structured_content"]
+
+
 def test_superseded_tool_output_is_compacted_without_mutating_history():
     old = AgentMessage(role="tool", content="old resume", supersede_key="resume")
     new = AgentMessage(role="tool", content="new resume", supersede_key="resume")

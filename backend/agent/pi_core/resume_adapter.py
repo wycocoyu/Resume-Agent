@@ -1,8 +1,7 @@
-"""Adapters between the existing Resume-Agent objects and ``pi_core``.
+"""Adapters between the resume domain objects and ``pi_core``.
 
-The adapter deliberately keeps the legacy Manus object alive during migration.
-It centralizes protocol conversion and resume-specific lifecycle rules so the
-SSE layer can switch execution engines without duplicating business policy.
+The adapter centralizes protocol conversion and resume-specific lifecycle
+rules, keeping the SSE layer independent from domain implementation details.
 """
 
 from __future__ import annotations
@@ -11,13 +10,14 @@ import json
 from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
-from backend.agent.schema import Message, ToolCall as LegacyToolCall
+from backend.agent.schema import Message, Role, ToolCall as LegacyToolCall
 from backend.agent.pi_core.loop import AgentHooks
 from backend.agent.pi_core.types import (
     AgentMessage,
     AssistantChunk,
     FinishDecision,
     LLMMessage,
+    RuntimeToolResult,
     ToolCall,
     ToolDecision,
     ToolResult,
@@ -79,6 +79,46 @@ def to_legacy_messages(messages: Iterable[LLMMessage]) -> list[dict[str, Any]]:
     return result
 
 
+def append_core_messages_to_memory(
+    memory: Any,
+    messages: list[AgentMessage],
+    base_len: int,
+) -> None:
+    """Commit pi-core messages through the legacy memory boundary."""
+
+    for message in messages[base_len:]:
+        if message.role == "assistant":
+            calls = [
+                LegacyToolCall(
+                    id=call.id,
+                    type="function",
+                    function={
+                        "name": call.name,
+                        "arguments": json.dumps(
+                            call.arguments,
+                            ensure_ascii=False,
+                        ),
+                    },
+                )
+                for call in message.tool_calls
+            ]
+            memory.add_message(
+                Message(
+                    role=Role.ASSISTANT,
+                    content=message.content or None,
+                    tool_calls=calls or None,
+                )
+            )
+        elif message.role == "tool":
+            memory.add_message(
+                Message.tool_message(
+                    content=message.content,
+                    name=message.name or "unknown",
+                    tool_call_id=message.tool_call_id or "",
+                )
+            )
+
+
 async def stream_resume_model(
     agent: Any,
     messages: list[LLMMessage],
@@ -86,71 +126,76 @@ async def stream_resume_model(
     system_prompt: str | None = None,
     cancel_event: Any = None,
 ) -> AsyncIterator[AssistantChunk]:
-    """Expose the existing LLM client as the core model-stream protocol."""
+    """Expose the runtime model stream as the core provider protocol."""
 
-    prompt = system_prompt if system_prompt is not None else getattr(agent, "system_prompt", "")
-    system_msgs = [{"role": "system", "content": prompt}] if prompt else None
-    tools = agent.available_tools.to_params()
-    async for chunk in agent.llm.stream_tool_response(
-        messages=to_legacy_messages(messages),
-        system_msgs=system_msgs,
-        tools=tools,
-        tool_choice=getattr(agent, "tool_choices", "auto"),
+    async for chunk in agent.stream_model_response(
+        to_legacy_messages(messages),
+        system_prompt=system_prompt,
         cancel_event=cancel_event,
     ):
         yield chunk
 
 
 def build_resume_hooks(agent: Any) -> AgentHooks:
-    """Create the four lifecycle hooks using existing Manus state."""
+    """Create the four lifecycle hooks for the resume runtime."""
+
+    async def prepare_request(messages: list[Any]) -> list[Any]:
+        """Apply provider safety defaults immediately before each model call.
+
+        The normal route already configures DeepSeek with
+        ``thinking.type=disabled``.  This fallback keeps the pi-core path safe
+        for sessions created with an older in-memory LLM configuration or for
+        tests that construct an agent directly.
+        """
+
+        prepare = getattr(agent, "prepare_model_request", None)
+        if callable(prepare):
+            return await prepare(messages)
+
+        llm = getattr(agent, "llm", None)
+        model = str(getattr(llm, "model", "") or "")
+        if model.startswith("deepseek"):
+            extra_body = getattr(llm, "extra_body", None)
+            llm.extra_body = {
+                **(extra_body if isinstance(extra_body, dict) else {}),
+                "thinking": {"type": "disabled"},
+            }
+        return messages
 
     async def before_tool_call(call: ToolCall, _messages: list[AgentMessage]) -> ToolDecision:
-        turn = getattr(agent, "_turn", None)
         name = call.name
-        if turn is None:
-            return ToolDecision()
-
-        blocked: tuple[bool, str] = (
-            (
-                bool(getattr(turn, "read_only", False)),
-                "错误：本轮为只读查看请求，禁止修改简历。",
-            ),
-            (
-                bool(getattr(turn, "view_suggestions", False)),
-                "错误：本轮只展示诊断建议，不修改简历。",
-            ),
-            (
-                bool(getattr(turn, "diagnosis_only", False)),
-                "错误：本轮只做简历诊断，不修改简历。",
-            ),
-            (
-                bool(getattr(turn, "diagnosis_gap_collect", False)),
-                "错误：本轮只收集缺失信息，不修改简历。",
-            ),
-        )
-        protected_tools = {
-            "cv_editor_agent",
-            "str_replace_editor",
-            "ask_human",
-            "ask_user_question",
-        }
-        for enabled, reason in blocked:
-            if enabled and name in protected_tools:
-                return ToolDecision(block=True, reason=reason)
+        policy = getattr(agent, "tool_block_reason", None)
+        reason = policy(name) if callable(policy) else None
+        if reason:
+            return ToolDecision(block=True, reason=reason)
         return ToolDecision()
 
     async def after_tool_call(
         call: ToolCall,
-        _result: ToolResult,
+        result: ToolResult,
         _messages: list[AgentMessage],
     ) -> ToolDecision:
-        pending_approval = bool(getattr(agent, "_halt_for_pending_approval", False))
-        pending_question = bool(getattr(agent, "_halt_for_ask_question", False))
+        structured_type = (
+            result.structured_content.get("type")
+            if isinstance(result.structured_content, dict)
+            else None
+        )
+        terminate_for_turn = False
+        policy = getattr(agent, "get_turn_policy", None)
+        snapshot = policy() if callable(policy) else None
+        if snapshot is not None:
+            terminate_for_turn = bool(
+                getattr(snapshot, "diagnosis_only", False)
+                and call.name == "cv_analyzer_agent"
+            ) or bool(
+                getattr(snapshot, "view_suggestions", False)
+                and call.name == "cv_suggestions_agent"
+            )
         return ToolDecision(
             terminate=(
                 call.name in {"ask_user_question", "show_resume"}
-                or pending_approval
-                or pending_question
+                or structured_type == "approval_request"
+                or terminate_for_turn
             )
         )
 
@@ -158,13 +203,26 @@ def build_resume_hooks(agent: Any) -> AgentHooks:
         turn: Any,
         _messages: list[AgentMessage],
     ) -> FinishDecision:
-        if getattr(agent, "state", None) is not None and str(getattr(agent, "state")) == "FINISHED":
-            return FinishDecision(action="end", reason="legacy agent marked the turn finished")
+        is_finished = getattr(agent, "is_turn_finished", None)
+        if callable(is_finished) and is_finished():
+            return FinishDecision(
+                action="end",
+                reason="runtime marked the turn finished",
+            )
+        if (
+            getattr(agent, "state", None) is not None
+            and str(getattr(agent, "state")) == "FINISHED"
+        ):
+            return FinishDecision(
+                action="end",
+                reason="legacy agent marked the turn finished",
+            )
         return FinishDecision(
             action="continue" if getattr(turn, "tool_calls", ()) else "end"
         )
 
     return AgentHooks(
+        prepare_request=prepare_request,
         before_tool_call=before_tool_call,
         after_tool_call=after_tool_call,
         finish_turn=finish_turn,
@@ -176,20 +234,20 @@ async def execute_resume_tool(
     call: ToolCall,
     _messages: list[AgentMessage],
 ) -> ToolResult:
-    """Execute one core tool call through the existing Manus implementation."""
+    """Execute one core tool call through the runtime boundary."""
 
-    legacy_call = LegacyToolCall(
-        id=call.id,
-        type="function",
-        function={"name": call.name, "arguments": json.dumps(call.arguments, ensure_ascii=False)},
-    )
-    output = await agent.execute_tool(legacy_call)
-    structured = {}
-    structured_results = getattr(agent, "_tool_structured_results", {})
-    if isinstance(structured_results, dict):
-        candidate = structured_results.pop(call.id, None)
-        if isinstance(candidate, dict):
-            structured = candidate
+    execution = await agent.execute_tool(call)
+    if isinstance(execution, RuntimeToolResult):
+        output = execution.output
+        structured = execution.structured_content
+        progress_updates = execution.progress_updates
+    elif isinstance(execution, tuple) and len(execution) == 2:
+        # Compatibility for old runtime doubles and transitional adapters.
+        output, structured = execution
+        progress_updates = ()
+    else:
+        output, structured = str(execution or ""), {}
+        progress_updates = ()
 
     text = str(output or "")
     error = text if text.startswith(("Error:", "错误：", "⚠️")) else None
@@ -198,6 +256,7 @@ async def execute_resume_tool(
         error=error,
         structured_content=structured or None,
         supersede_key=_supersede_key(call.name),
+        progress_updates=tuple(progress_updates),
     )
 
 

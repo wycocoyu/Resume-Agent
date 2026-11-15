@@ -13,6 +13,7 @@ import {
 vi.mock("@/lib/runtimeEnv", () => ({
   getApiBaseUrl: () => "http://test.local",
   isAgentEnabled: () => true,
+  isLocalDevAuthEnabled: () => false,
 }));
 
 vi.mock("@/services/agentStream", () => ({

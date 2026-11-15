@@ -1,3 +1,5 @@
+import { isLocalDevAuthEnabled } from '@/lib/runtimeEnv'
+
 export const BETTER_AUTH_SESSION_TOKEN = 'better-auth-session'
 
 /**
@@ -6,5 +8,9 @@ export const BETTER_AUTH_SESSION_TOKEN = 'better-auth-session'
  * 本函数保留签名兼容既有调用方，不再注入 Authorization Bearer。
  */
 export function getAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return { ...extra }
+  if (!isLocalDevAuthEnabled()) return { ...extra }
+  return {
+    'X-Local-Dev-User': 'codex-local-user',
+    ...extra,
+  }
 }

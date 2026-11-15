@@ -1,8 +1,8 @@
 """
-Chat History - Complete LangChain implementation for OpenManus
+Chat History - Complete LangChain implementation for resume agent
 
 This is a complete implementation of LangChain's chat history,
-adapted for OpenManus use case with in-memory storage.
+adapted for resume agent use case with in-memory storage.
 """
 
 from typing import List, Sequence

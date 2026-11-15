@@ -27,7 +27,7 @@ class _FakeAgent:
         self.llm = object()
         self.prepared = False
 
-    async def prepare_pi_core_turn(self, user_message):
+    async def prepare_turn(self, user_message):
         self.prepared = user_message == "hello"
 
 
@@ -69,11 +69,26 @@ def test_pi_core_stream_preserves_linear_event_order(monkeypatch):
     assert agent.memory.messages[-1].role == "assistant"
 
 
-def test_pi_core_flag_defaults_off(monkeypatch):
+def test_pi_core_flag_defaults_on_with_explicit_legacy_rollback(monkeypatch):
     monkeypatch.delenv("RESUME_AGENT_PI_CORE", raising=False)
-    assert is_pi_core_enabled() is False
-    monkeypatch.setenv("RESUME_AGENT_PI_CORE", "true")
     assert is_pi_core_enabled() is True
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE", "false")
+    assert is_pi_core_enabled() is False
+
+
+def test_pi_core_rollout_percent_is_deterministic(monkeypatch):
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE", "true")
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE_ROLLOUT_PERCENT", "0")
+    assert is_pi_core_enabled("session-a") is False
+
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE_ROLLOUT_PERCENT", "100")
+    assert is_pi_core_enabled("session-a") is True
+
+
+def test_pi_core_rollout_invalid_percent_falls_back_to_full(monkeypatch):
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE", "true")
+    monkeypatch.setenv("RESUME_AGENT_PI_CORE_ROLLOUT_PERCENT", "invalid")
+    assert is_pi_core_enabled("session-a") is True
 
 
 def test_pi_core_stream_emits_narration_before_tool_card(monkeypatch):

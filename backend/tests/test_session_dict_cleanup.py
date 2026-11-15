@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-import backend.agent.agent.manus as _manus  # noqa: F401 触发 tool 包初始化，避开循环导入
+import backend.agent.pi_core.resume_agent as _runtime  # noqa: F401 触发 tool 包初始化，避开循环导入
 from backend.agent.tool.resume_data_store import ResumeDataStore
 from backend.agent.web import session_manager
 

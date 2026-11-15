@@ -27,9 +27,9 @@ from backend.agent.web.streaming.agent_state import (
 )
 from backend.agent.web.streaming.state_machine import AgentStateMachine
 
-# ``agent_stream`` imports the legacy Manus/LLM stack, which requires logging
-# to be initialized before import.  Keep the lightweight event package usable
-# on its own (for example from the pi-core SSE adapter) and load the heavy
+# ``agent_stream`` imports the runtime/SSE adapter stack, which requires
+# logging to be initialized before import. Keep the lightweight event package
+# usable on its own (for example from the pi-core SSE adapter) and load the
 # runtime classes only when callers explicitly request them.
 _LAZY_STREAMING_EXPORTS = {"AgentStream", "StreamProcessor", "EventSender"}
 

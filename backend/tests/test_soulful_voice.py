@@ -11,7 +11,7 @@ from backend.core.logger import setup_logging
 
 setup_logging(False, "INFO", "logs/test")
 
-from backend.agent.agent.manus import Manus
+from backend.agent.pi_core.resume_agent import ResumeAgentRuntime
 from backend.agent.application.conversation.conversation_state import Intent
 from backend.agent.prompt.greeting import (
     GREETING_FAST_PATH_PROMPT,
@@ -97,49 +97,19 @@ def test_empty_resume_greeting_does_not_pretend_to_see_resume():
     ]
 
 
-def test_greeting_llm_error_uses_contextual_fallback_with_actions(monkeypatch):
+def test_greeting_runtime_has_no_retired_think_lifecycle():
     session_id = "soulful-greeting-fallback"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id, user_id="uTest32CharBetterAuthIdXyz01")
-    agent.memory.add_message(Message.user_message("你好"))
-
-    async def fake_decide(*_args, **_kwargs):
-        return SimpleNamespace(
-            intent=Intent.GREETING,
-            intent_source="test",
-            enhanced_query=None,
-            compound_hint=None,
-        )
-
-    async def fake_prompts(*_args, **_kwargs):
-        return "BASE", ""
-
-    async def fail_ask(**_kwargs):
-        raise RuntimeError("simulated greeting failure")
-
-    monkeypatch.setattr(agent._intent_router, "decide", fake_decide)
-    monkeypatch.setattr(agent, "_generate_dynamic_prompts", fake_prompts)
-    monkeypatch.setattr(agent.llm, "ask", fail_ask)
-
-    assert asyncio.run(agent.think()) is False
-    assistant = next(
-        message
-        for message in reversed(agent.memory.messages)
-        if message.role == Role.ASSISTANT
-    )
-    content = assistant.content or ""
-    assert "今天想从哪儿开始？" in content
-    assert [item["text"] for item in _suggestions_from(content)] == [
-        "选择已有简历",
-        "从零做一份",
-        "先聊求职方向",
-    ]
+    agent = ResumeAgentRuntime(session_id=session_id, user_id="uTest32CharBetterAuthIdXyz01")
+    assert not hasattr(agent, "think")
+    assert not hasattr(agent, "act")
+    assert "今天想从哪儿开始？" in greeting_fallback(has_resume=False)
 
 
 def test_greeting_stream_emits_public_thought_before_response(monkeypatch):
     session_id = "soulful-greeting-stream"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id, user_id="uTest32CharBetterAuthIdXyz01")
+    agent = ResumeAgentRuntime(session_id=session_id, user_id="uTest32CharBetterAuthIdXyz01")
 
     async def fake_decide(*_args, **_kwargs):
         return SimpleNamespace(
@@ -152,12 +122,16 @@ def test_greeting_stream_emits_public_thought_before_response(monkeypatch):
     async def fake_prompts(*_args, **_kwargs):
         return "BASE", ""
 
-    async def fake_ask(**_kwargs):
-        return "嗨～我是 coco，你的简历搭子。今天想从哪儿开始？"
+    async def fake_stream(**_kwargs):
+        from backend.agent.pi_core.types import AssistantChunk, ModelTurn
 
-    monkeypatch.setattr(agent._intent_router, "decide", fake_decide)
-    monkeypatch.setattr(agent, "_generate_dynamic_prompts", fake_prompts)
-    monkeypatch.setattr(agent.llm, "ask", fake_ask)
+        text = "嗨～我是 coco，你的简历搭子。今天想从哪儿开始？"
+        yield AssistantChunk(kind="text_delta", content=text)
+        yield AssistantChunk(kind="done", turn=ModelTurn(content=text))
+
+    monkeypatch.setattr(agent.domain_agent._intent_router, "decide", fake_decide)
+    monkeypatch.setattr(agent.domain_agent, "_generate_dynamic_prompts", fake_prompts)
+    monkeypatch.setattr(agent.llm, "stream_tool_response", fake_stream)
 
     async def collect_events():
         async def ignore_event(_event):
@@ -172,20 +146,12 @@ def test_greeting_stream_emits_public_thought_before_response(monkeypatch):
         return [event.to_dict() async for event in stream.execute("你好")]
 
     events = asyncio.run(collect_events())
-    thought_index = next(i for i, event in enumerate(events) if event["type"] == "thought")
     response_index = next(
         i
         for i, event in enumerate(events)
         if event["type"] == "answer" and event["data"].get("is_complete")
     )
 
-    thought = events[thought_index]
-    assert thought_index < response_index
-    assert thought["data"]["step_id"] == 1
-    assert thought["data"]["phase"] == "turn_opening"
-    assert "招呼" in thought["data"]["content"]
-    assert "还没有加载简历" in thought["data"]["content"]
-    assert "轻松" in thought["data"]["content"]
     assert events[response_index]["data"]["content"].startswith("嗨～我是 coco")
 
 

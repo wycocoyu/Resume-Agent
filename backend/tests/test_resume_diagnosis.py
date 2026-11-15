@@ -10,8 +10,8 @@ from backend.core.logger import setup_logging
 
 setup_logging(False, "INFO", "logs/test")
 
-from backend.agent.agent.manus import Manus
-from backend.agent.agent.toolcall import ToolCallAgent
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
+from backend.agent.pi_core.tool_runtime import ToolExecutionRuntime
 from backend.agent.application.resume_diagnosis import build_resume_diagnosis
 from backend.agent.application.resume_diagnosis_engine import ResumeGuidanceModule
 from backend.agent.application.conversation.conversation_state import (
@@ -132,11 +132,11 @@ def test_diagnosis_does_not_treat_generic_development_as_direction_match():
 
 def test_asking_tool_is_disabled_by_default_and_can_be_reenabled(monkeypatch):
     monkeypatch.delenv("AGENT_ASKING_MODE_ENABLED", raising=False)
-    disabled = Manus(session_id="asking-disabled")
+    disabled = ResumeDomainRuntime(session_id="asking-disabled")
     assert "ask_user_question" not in disabled.available_tools.tool_map
 
     monkeypatch.setenv("AGENT_ASKING_MODE_ENABLED", "true")
-    enabled = Manus(session_id="asking-enabled")
+    enabled = ResumeDomainRuntime(session_id="asking-enabled")
     assert "ask_user_question" in enabled.available_tools.tool_map
 
 
@@ -146,7 +146,7 @@ def test_diagnosis_apply_turn_is_single_shot():
     assert is_diagnosis_apply_query("针对诊断结果逐项修改")
     session_id = "diagnosis-primary-action"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent._shared_state.set(
         "resume_diagnosis_completed_for", RICH_RESUME["resume_id"]
@@ -168,7 +168,7 @@ def test_diagnosis_apply_turn_blocks_ask_tools():
     """apply 轮拦截 ask_human/ask_user_question：缺信息跳过，不向用户提问。"""
     session_id = "diagnosis-apply-blocks-ask"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent._shared_state.set(
         "resume_diagnosis_completed_for", RICH_RESUME["resume_id"]
@@ -191,7 +191,7 @@ def test_diagnosis_apply_phrase_without_diagnosis_stays_read_only():
     """未诊断就说 apply 话术：闸门不放行，既不初始化任务也不解除只读。"""
     session_id = "diagnosis-apply-without-diagnosis"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
 
     agent._maybe_init_optimize_progress("按照诊断建议帮我修改简历")
@@ -206,7 +206,7 @@ def test_diagnosis_apply_turn_unlocks_editor_after_diagnosis():
     """诊断已完成 + 显式 apply → diagnosis_only 解除，编辑工具放行。"""
     session_id = "diagnosis-apply-unlocks-editor"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent._shared_state.set(
         "resume_diagnosis_completed_for", RICH_RESUME["resume_id"]
@@ -245,7 +245,7 @@ def test_diagnosis_apply_query_matches_real_chip_phrasings():
 def test_repeating_broad_optimize_after_diagnosis_stays_read_only():
     session_id = "diagnosis-repeat-broad-read-only"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent._shared_state.set(
         "resume_diagnosis_completed_for", RICH_RESUME["resume_id"]
@@ -258,7 +258,7 @@ def test_repeating_broad_optimize_after_diagnosis_stays_read_only():
 
 
 def test_broad_optimize_turn_blocks_editor_even_if_model_selects_it():
-    agent = Manus(session_id="diagnosis-only-editor-guard")
+    agent = ResumeDomainRuntime(session_id="diagnosis-only-editor-guard")
     agent.memory.add_message(Message.user_message("我要优化简历"))
     agent._sync_turn_read_only_flag("我要优化简历")
     command = ToolCall(
@@ -276,7 +276,7 @@ def test_broad_optimize_turn_blocks_editor_even_if_model_selects_it():
 
 def test_analyzer_tool_returns_structured_card_and_marks_completion(monkeypatch):
     session_id = "diagnosis-tool-result"
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     tool = CVAnalyzerAgentTool(
         session_id=session_id,
@@ -354,7 +354,7 @@ class _NoArgsTool(BaseTool):
 
 
 def test_noargs_placeholder_is_removed_before_tool_execution():
-    agent = ToolCallAgent(available_tools=ToolCollection(_NoArgsTool()))
+    agent = ToolExecutionRuntime(available_tools=ToolCollection(_NoArgsTool()))
     command = ToolCall(
         id="call-noargs",
         function={
@@ -434,7 +434,7 @@ def test_view_suggestions_turn_blocks_editor_and_reanalysis():
     """查看建议轮：只读展示建议，拦编辑与重新诊断（引导 cv_suggestions_agent）。"""
     session_id = "view-suggestions-guard"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent._shared_state.set(
         "resume_diagnosis_completed_for", RICH_RESUME["resume_id"]
@@ -460,7 +460,7 @@ def test_view_suggestions_without_diagnosis_stays_diagnosis_only():
     """未诊断就说"查看建议"：没有建议可看，仍走只读诊断轮。"""
     session_id = "view-suggestions-no-diagnosis"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RICH_RESUME), session_id=session_id)
     agent.memory.add_message(Message.user_message("查看修改建议"))
     agent._sync_turn_read_only_flag("查看修改建议")
@@ -475,7 +475,7 @@ def test_cv_suggestions_tool_requires_diagnosis_and_serves_cache(monkeypatch):
 
     session_id = "cv-suggestions-tool-test"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     tool = next(
         t for t in agent.available_tools.tools if t.name == "cv_suggestions_agent"
     )

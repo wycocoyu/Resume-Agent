@@ -28,6 +28,7 @@ import { getCurrentResumeId } from "@/services/resumeStorage";
 import { RecentSessions } from "@/components/sidebar/RecentSessions";
 import SkinPickerModal from "@/pages/Workspace/v2/components/SkinPickerModal";
 import { canUseAdminFeature, canUseAgentFeature, getApiBaseUrl, isAgentEnabled } from "@/lib/runtimeEnv";
+import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
 
 // 工作区类型
 type WorkspaceType =
@@ -39,8 +40,7 @@ type WorkspaceType =
   | "admin";
 
 function getAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie，不再注入 Bearer。
-  return { ...extra };
+  return buildAuthHeaders(extra);
 }
 
 /** 复刻参考图：圆角矩形 + 内竖线（左窄右宽），细描边 */

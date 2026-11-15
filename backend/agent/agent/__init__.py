@@ -1,24 +1,17 @@
-from backend.agent.agent.base import BaseAgent
-from backend.agent.agent.browser import BrowserAgent
-from backend.agent.agent.cv_analyzer import CVAnalyzer
-from backend.agent.agent.cv_editor import CVEditor
-from backend.agent.agent.cv_reader import CVReader
-from backend.agent.agent.mcp import MCPAgent
-from backend.agent.agent.manus import Manus
-from backend.agent.agent.react import ReActAgent
-from backend.agent.agent.swe import SWEAgent
-from backend.agent.agent.toolcall import ToolCallAgent
+"""Agent package exports.
+
+The production agent is composition-based and lives in ``pi_core``.  Keep
+this package import-light so route startup does not eagerly construct the
+resume domain or model client.
+"""
+
+__all__ = ["ResumeAgentRuntime"]
 
 
-__all__ = [
-    "BaseAgent",
-    "BrowserAgent",
-    "CVReader",
-    "CVAnalyzer",
-    "CVEditor",
-    "Manus",
-    "MCPAgent",
-    "ReActAgent",
-    "SWEAgent",
-    "ToolCallAgent",
-]
+def __getattr__(name: str):
+    if name != "ResumeAgentRuntime":
+        raise AttributeError(name)
+    from backend.agent.pi_core.resume_agent import ResumeAgentRuntime
+
+    globals()[name] = ResumeAgentRuntime
+    return ResumeAgentRuntime

@@ -63,8 +63,12 @@ def to_legacy_stream_event(
     if event.kind == "tool_execution_update":
         return ToolProgressEvent(
             tool_call_id=str(data.get("tool_call_id") or ""),
-            stage_id="pi-core",
+            stage_id=str(data.get("stage_id") or "pi-core"),
             summary=str(data.get("text") or ""),
+            current=data.get("current"),
+            total=data.get("total"),
+            label=data.get("label"),
+            stages=data.get("stages") or [],
             session_id=session_id,
         )
 

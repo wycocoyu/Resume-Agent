@@ -4,12 +4,8 @@ CVEditor Agent - 简历编辑 Agent
 可以修改、添加或删除简历数据
 """
 
-from typing import Dict, Optional, Any
-from pydantic import Field
-import json
+from typing import Any, Dict, Optional
 
-from backend.agent.agent.toolcall import ToolCallAgent
-from backend.agent.tool import ToolCollection, Terminate, CreateChatCompletion
 from backend.agent.utils.json_path import parse_path, get_by_path, set_by_path, delete_by_path, exists_path
 
 PATH_ALIASES = {
@@ -42,53 +38,14 @@ def normalize_path(path: str) -> str:
     return ".".join(normalized)
 
 
-class CVEditor(ToolCallAgent):
+class CVEditor:
     """简历编辑 Agent
 
     专门用于修改简历内容的 Agent
     """
 
-    name: str = "CVEditor"
-    description: str = "An AI agent that edits and modifies CV/Resume content"
-
-    system_prompt: str = """You are a professional CV/Resume editor. You help users modify and improve their resumes.
-
-Your capabilities:
-1. Update existing resume fields (name, email, phone, title, etc.)
-2. Add new entries to arrays (education, experience, projects, awards, etc.)
-3. Delete unnecessary information
-4. Reformat and structure resume data properly
-
-When editing:
-- Always preserve the resume data structure
-- Use proper JSON path notation: 'basic.name', 'education[0].school', etc.
-- When adding new items, provide complete object data
-- Maintain data consistency
-
-Available operations:
-- update: Modify an existing field's value
-- add: Add a new item to an array
-- delete: Remove a field or array item
-"""
-
-    next_step_prompt: str = """Please analyze the user's request and use the appropriate edit operation (update/add/delete) on the resume data."""
-
-    available_tools: ToolCollection = Field(
-        default_factory=lambda: ToolCollection(
-            CreateChatCompletion(),
-            Terminate(),
-        )
-    )
-
-    special_tool_names: list[str] = Field(default_factory=lambda: [Terminate().name])
-
-    max_steps: int = 10
-
-    # 当前加载的简历数据
-    _resume_data: Optional[Dict] = None
-
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(self) -> None:
+        self._resume_data: Optional[Dict] = None
 
     def load_resume(self, resume_data: Dict) -> str:
         """加载简历数据到 Agent
@@ -109,8 +66,6 @@ Target Position: {basic.get('title', 'N/A')}
 
 You can edit this resume using update, add, or delete operations.
 """
-        from backend.agent.schema import Message
-        self.memory.add_message(Message.system_message(context))
         return context
 
     async def edit_resume(self, path: str, action: str, value: Any = None) -> Dict[str, Any]:

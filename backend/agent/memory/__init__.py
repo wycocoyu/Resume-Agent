@@ -1,5 +1,5 @@
 """
-OpenManus Memory System - Based on LangChain design
+resume agent Memory System - Based on LangChain design
 
 This module provides a unified memory management system inspired by LangChain's
 Memory architecture, adapted for the resume optimization use case.
@@ -8,7 +8,7 @@ Components:
 - langchain: Complete LangChain-style message types and chat history implementation
 - ChatHistoryManager: Wrapper for managing conversation history
 - ConversationStateManager: Manages conversation state and intent recognition
-- MessageAdapter: Converts between OpenManus and LangChain message formats
+- MessageAdapter: Converts between resume agent and LangChain message formats
 - CheckpointSaver: Version snapshot and rollback mechanism
 - EntityMemory: Entity extraction and memory for resume-related entities
 """
@@ -23,7 +23,7 @@ from backend.agent.memory.langchain import (
     InMemoryChatMessageHistory,
 )
 
-# OpenManus wrappers
+# resume agent wrappers
 from backend.agent.memory.chat_history_manager import ChatHistoryManager
 from backend.agent.application.conversation.conversation_state import (
     ConversationStateManager,
@@ -61,7 +61,7 @@ __all__ = [
     "SystemMessage",
     "BaseChatMessageHistory",
     "InMemoryChatMessageHistory",
-    # OpenManus wrappers
+    # resume agent wrappers
     "ChatHistoryManager",
     "ConversationStateManager",
     "ConversationState",

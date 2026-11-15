@@ -1,10 +1,9 @@
-"""File and directory manipulation tool with sandbox support."""
+"""Local file and directory manipulation tool."""
 
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, List, Literal, Optional, get_args
 
-from backend.agent.config import config
 from backend.agent.exceptions import ToolError
 from backend.agent.tool import BaseTool
 from backend.agent.tool.base import CLIResult, ToolResult
@@ -12,7 +11,6 @@ from backend.agent.tool.file_operators import (
     FileOperator,
     LocalFileOperator,
     PathLike,
-    SandboxFileOperator,
 )
 
 
@@ -58,7 +56,7 @@ def maybe_truncate(
 
 
 class StrReplaceEditor(BaseTool):
-    """A tool for viewing, creating, and editing files with sandbox support."""
+    """A tool for viewing, creating, and editing local files."""
 
     name: str = "str_replace_editor"
     description: str = _STR_REPLACE_EDITOR_DESCRIPTION
@@ -100,16 +98,9 @@ class StrReplaceEditor(BaseTool):
     }
     _file_history: DefaultDict[PathLike, List[str]] = defaultdict(list)
     _local_operator: LocalFileOperator = LocalFileOperator()
-    _sandbox_operator: SandboxFileOperator = SandboxFileOperator()
-
-    # def _get_operator(self, use_sandbox: bool) -> FileOperator:
     def _get_operator(self) -> FileOperator:
-        """Get the appropriate file operator based on execution mode."""
-        return (
-            self._sandbox_operator
-            if config.sandbox.use_sandbox
-            else self._local_operator
-        )
+        """Return the only supported local operator."""
+        return self._local_operator
 
     async def execute(
         self,

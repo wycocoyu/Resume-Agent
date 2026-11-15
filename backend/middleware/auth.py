@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from time import sleep
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.exc import (
     DBAPIError,
     DisconnectionError,
@@ -26,6 +26,32 @@ from database import get_db
 
 logger = logging.getLogger("backend")
 MAX_AUTH_DB_RETRIES = 4
+
+
+def _resolve_local_dev_user(request: Request) -> Optional[BetterAuthUser]:
+    """仅允许回环地址上的显式本地开发身份，避免生产环境匿名放行。"""
+    enabled = os.getenv("LOCAL_DEV_AUTH_ENABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not enabled:
+        return None
+    client_host = request.client.host if request.client else ""
+    if client_host not in {"127.0.0.1", "::1", "localhost"}:
+        return None
+    local_user_id = request.headers.get("X-Local-Dev-User", "").strip()
+    if not local_user_id:
+        return None
+    expected_user_id = os.getenv("LOCAL_DEV_AUTH_USER_ID", "codex-local-user").strip()
+    if local_user_id != expected_user_id:
+        raise HTTPException(status_code=401, detail="本地开发身份无效")
+    return BetterAuthUser(
+        id=local_user_id,
+        email=os.getenv("LOCAL_DEV_AUTH_EMAIL", "local@localhost"),
+        name=os.getenv("LOCAL_DEV_AUTH_NAME", "Local Developer"),
+    )
 
 
 @dataclass
@@ -100,6 +126,7 @@ def _resolve_app_user(db: Session, better_user: BetterAuthUser) -> AppUser:
 
 
 async def get_current_user(
+    request: Request,
     authorization: Optional[str] = Header(default=None),
     x_internal_auth_secret: Optional[str] = Header(default=None),
     x_better_auth_user_id: Optional[str] = Header(default=None),
@@ -109,6 +136,10 @@ async def get_current_user(
     db: Session = Depends(get_db),
 ) -> AppUser:
     """从 trusted headers 或 BetterAuth Bearer 获取当前用户（旧 JWT 通道已下架）。"""
+    local_dev_user = _resolve_local_dev_user(request)
+    if local_dev_user:
+        return _resolve_app_user(db, local_dev_user)
+
     trusted_user = _resolve_trusted_better_auth_user(
         x_internal_auth_secret,
         x_better_auth_user_id,
@@ -131,6 +162,7 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
+    request: Request,
     authorization: Optional[str] = Header(default=None),
     x_internal_auth_secret: Optional[str] = Header(default=None),
     x_better_auth_user_id: Optional[str] = Header(default=None),
@@ -146,6 +178,7 @@ async def get_current_user_optional(
     """
     try:
         return await get_current_user(
+            request=request,
             authorization=authorization,
             x_internal_auth_secret=x_internal_auth_secret,
             x_better_auth_user_id=x_better_auth_user_id,

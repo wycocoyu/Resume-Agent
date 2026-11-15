@@ -13,8 +13,8 @@ setup_logging(False, "INFO", "logs/test")
 
 import json
 
-import backend.agent.agent.manus as _manus  # noqa: F401 触发 tool 包初始化，避开循环导入
-from backend.agent.agent.manus import Manus
+import backend.agent.pi_core.resume_agent as _runtime  # noqa: F401 触发 tool 包初始化，避开循环导入
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 from backend.agent.schema import Function, Message, ToolCall
 from backend.agent.utils.optimize_progress import (
     compute_pending_modules,
@@ -209,7 +209,7 @@ class _FakeAgentForSignal2:
         self.tool_calls = tool_calls
         self.memory = _FakeMemory(messages)
 
-    _confirm_optimize_progress_from_results = Manus._confirm_optimize_progress_from_results
+    _confirm_optimize_progress_from_results = ResumeDomainRuntime._confirm_optimize_progress_from_results
 
 
 def _cv_editor_call(path: str) -> ToolCall:
@@ -289,10 +289,10 @@ class _FakeAgentForSignal3:
         self.memory = _FakeMemory([user_msg, assistant_msg])
         self.tool_calls = []
 
-    _advance_optimize_progress = Manus._advance_optimize_progress
-    _get_last_user_input = Manus._get_last_user_input
-    _get_last_user_message_idx = Manus._get_last_user_message_idx
-    _is_injected_system_user_message = staticmethod(Manus._is_injected_system_user_message)
+    _advance_optimize_progress = ResumeDomainRuntime._advance_optimize_progress
+    _get_last_user_input = ResumeDomainRuntime._get_last_user_input
+    _get_last_user_message_idx = ResumeDomainRuntime._get_last_user_message_idx
+    _is_injected_system_user_message = staticmethod(ResumeDomainRuntime._is_injected_system_user_message)
 
 
 def test_signal3_skips_current_module_when_no_question():

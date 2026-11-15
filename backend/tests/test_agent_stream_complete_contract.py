@@ -18,7 +18,7 @@ setup_logging(False, "INFO", "logs/test")
 from backend.agent.web.streaming.agent_stream import merge_visible_piece  # noqa: E402
 
 _AGENT_STREAM_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "agent", "web", "streaming", "agent_stream.py"
+    os.path.dirname(__file__), "..", "agent", "pi_core", "stream.py"
 )
 
 

@@ -8,6 +8,7 @@
  * - Heartbeat detection
  */
 import { getApiBaseUrl, isAgentEnabled } from '@/lib/runtimeEnv';
+import { getAuthHeaders } from '@/lib/authHeaders';
 
 export interface SSEEvent {
   id: string;
@@ -98,18 +99,19 @@ export class SSETransport {
       requestBody.resume_data = this.resumeData;
     }
 
-      // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie（fetch 已被
-      // configureAuthWebRequests patch 自动带 credentials），不再注入 Bearer。
-      const authHeaders: Record<string, string> = {};
+    // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie（fetch 已被
+    // configureAuthWebRequests patch 自动带 credentials），不再注入 Bearer。
+    const authHeaders = getAuthHeaders();
 
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-            ...authHeaders,
-          },
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          ...authHeaders,
+        },
+        credentials: 'include',
         body: JSON.stringify(requestBody),
         signal: this.abortController.signal,
       });

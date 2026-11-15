@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SSEEvent } from "@/transports/SSETransport";
 import { getApiBaseUrl, isAgentEnabled } from "@/lib/runtimeEnv";
+import { getAuthHeaders } from "@/lib/authHeaders";
 import { streamAgent, type AgentStreamEvent } from "@/services/agentStream";
 import { createAgentEventAdapter } from "@/agent-presentation/AgentEventAdapter";
 import {
@@ -167,7 +168,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
       setCurrentRunState(createConversationRunState(runId));
 
       // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie，不再注入 Bearer。
-      const authHeaders: Record<string, string> = {};
+      const authHeaders = getAuthHeaders();
 
       let completed = false;
       let failed = false;

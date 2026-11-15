@@ -20,7 +20,13 @@ from io import BytesIO
 from datetime import date
 
 from .html_to_latex import escape_href
-from .latex_utils import escape_latex, normalize_resume_data, resolve_xelatex_executable, subprocess_env_with_xelatex_bin
+from .latex_utils import (
+    escape_latex,
+    normalize_resume_data,
+    resolve_xelatex_executable,
+    subprocess_env_with_xelatex_bin,
+    xelatex_install_hint,
+)
 from .latex_sections import (
     SECTION_GENERATORS,
     DEFAULT_SECTION_ORDER,
@@ -773,21 +779,7 @@ def compile_latex_to_pdf(
         # 检查 xelatex 是否可用（Windows 下额外搜索 MiKTeX 常见路径）
         xelatex_path = resolve_xelatex_executable()
         if not xelatex_path:
-            # 提供安装说明
-            install_hint = """
-LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
-
-通过 Homebrew 安装 BasicTeX（推荐，较小）：
-  brew install --cask basictex
-  然后运行: eval "$(/usr/libexec/path_helper)"
-
-或安装完整版 MacTeX：
-  brew install --cask mactex
-
-安装完成后，需要重新启动终端或运行:
-  eval "$(/usr/libexec/path_helper)"
-"""
-            raise RuntimeError(f"xelatex 命令未找到。{install_hint}")
+            raise RuntimeError(f"xelatex 命令未找到。{xelatex_install_hint()}")
         
         # 使用 xelatex 编译
         compile_cmd = [
@@ -804,6 +796,8 @@ LaTeX (XeLaTeX) 未安装。请运行以下命令安装：
             cwd=temp_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=180,
             env=_latex_env,
         )

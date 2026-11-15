@@ -1,41 +1,47 @@
-# Pi Core 迁移阶段说明
+# Pi Core 迁移说明
 
-当前分支已经加入 `backend/agent/pi_core/`，作为 #42 的第一阶段内核：
+## 已完成
 
-- 单协程线性事件流：`message_start` → `message_update` → `message_end` → 工具事件；
-- `AgentMessage` 与 `LLMMessage` 分层；
-- `prepare_request`、`before_tool_call`、`after_tool_call`、`finish_turn` 四个 Hook；
-- `stop_reason == "length"` 时拒绝执行残缺工具调用；
-- 通过 `supersede_key` 在发送给模型前裁剪过期工具输出；
-- 不依赖 OpenManus 继承链，也不依赖 Web/SSE 层。
+- `backend/agent/pi_core/loop.py` 提供单协程、线性有序的模型→工具事件流。
+- `AgentMessage` 与 provider-facing `LLMMessage` 分层，UI 结构化字段不会写入 LLM 上下文。
+- `prepare_request`、`before_tool_call`、`after_tool_call`、`finish_turn` 四个生命周期 Hook 已落地。
+- `stop_reason == "length"` 时拒绝执行不完整的工具调用。
+- `context.py` 提供 compaction、supersede/pruning 与消息转换。
+- `durable.py` 提供追加式 JSONL journal 与原子快照。
+- `resume_agent.py`、`resume_tools.py`、`resume_coordinator.py` 组成简历领域 runtime；生产 SSE 只依赖这一组组合式 API。
+- `web/streaming/agent_stream.py` 只负责把 Pi Core 事件转换成既有 SSE 事件，不再创建 Queue、Future 或忙轮询。
+- `AgentStream` 仅保留历史构造函数兼容名；实际实现为 `PiCoreAgentStream`。
 
-同时增加了 `resume_adapter.py` 和 `sse_adapter.py`，负责把现有 `Message`、DeepSeek
-流、Manus 工具和旧 SSE 事件互相转换。`StreamProcessor` 已提供一个**默认关闭的
-灰度入口**：
+## 生产边界
 
-```powershell
-$env:RESUME_AGENT_PI_CORE = "true"
+生产入口是：
+
+```text
+backend.agent.web.routes.stream
+  -> backend.agent.pi_core.resume_agent.ResumeAgentRuntime
+  -> backend.agent.pi_core.stream.PiCoreAgentStream
+  -> backend.agent.pi_core.loop.run_agent_loop
 ```
 
-开启后单次请求只走 `PiCoreAgentStream`；未开启时仍走原来的
-`AgentStream`。这样可以按会话/环境做回退，不会同时执行两套模型调用。
+旧的 `backend.agent.agent.manus.Manus` 兼容入口已删除。生产代码统一通过
+`backend.agent.pi_core.resume_agent.ResumeAgentRuntime` 组合式 runtime 进入，
+不再承载旧的 agent 继承链或旧的 step/think/act/run 生命周期。
 
-## 当前边界
+## 灰度开关
 
-这一步已经把生产入口接成**显式 opt-in**，但不建议在没有端到端回归前默认打开。现有
-前端仍依赖旧的 SSE 事件字段、旁白归位、审批卡和 `resume_patch` 语义；新适配器已做
-兼容映射，但 PDF 上传、审批、自动续跑等真实链路仍需在目标环境验证。
-
-下一阶段应继续做灰度回归，并在确认所有旧语义等价后，再删除旧
-Queue、Future 和 `0.01s` 轮询逻辑。
+- `RESUME_AGENT_PI_CORE_ROLLOUT_PERCENT`：按 session 稳定哈希控制灰度比例。
+- `RESUME_AGENT_PI_CORE=false`：直接禁用 Pi Core 请求并返回明确错误；不会回退到旧 SSE 实现。
 
 ## 验证
 
 ```powershell
 $env:PYTHONPATH = "C:\Users\DKF\Downloads\Resume-Agent-github"
 C:\Users\DKF\Downloads\Resume-Agent-main\Resume-Agent-main\.venv\Scripts\python.exe `
-  -m pytest backend/tests/test_pi_core_loop.py -q
+  -m pytest backend/tests -q
 ```
 
-当前测试覆盖事件顺序、截断工具熔断、Hook 阻断/早停、supersede 裁剪、旧 SSE 映射
-以及 opt-in stream 的旁白→工具卡顺序。
+上下文裁剪可通过以下离线脚本复现：
+
+```powershell
+python -m backend.scripts.bench_pi_core_context --rounds 8 --chars 4000
+```

@@ -55,6 +55,20 @@ _logging_config: Optional["LoggingConfig"] = None
 _log_dir: Optional[Path] = None
 
 
+class _DeferredLogger:
+    """Resolve the configured logger lazily after import-time bootstrap."""
+
+    def __init__(self, name: Optional[str]) -> None:
+        self._name = name
+
+    def _target(self):
+        active = logger if _logging_config is not None else _base_logger
+        return active.bind(name=self._name) if self._name else active
+
+    def __getattr__(self, attribute: str):
+        return getattr(self._target(), attribute)
+
+
 def _sanitize_text_payload(message: str) -> str:
     sanitized = message
     for pattern in _SENSITIVE_PATTERNS:
@@ -129,6 +143,18 @@ class LoggingConfig:
                 enqueue=True,
             )
         else:
+            # Windows 默认控制台编码常为 GBK，而 Agent 日志包含中文和 emoji。
+            # 将控制台流切到 UTF-8，避免日志输出失败反过来污染请求处理。
+            for stream in (sys.stdout, sys.stderr):
+                reconfigure = getattr(stream, "reconfigure", None)
+                if reconfigure is None:
+                    continue
+                try:
+                    reconfigure(encoding="utf-8", errors="backslashreplace")
+                except (OSError, ValueError):
+                    # 测试捕获流或外部托管流可能不允许重配置，保留原流即可。
+                    pass
+
             def safe_format(record):
                 request_id = record.get("extra", {}).get("request_id", "N/A")
                 flow_id = record.get("extra", {}).get("flow_id", "N/A")
@@ -190,7 +216,11 @@ def setup_logging(is_production: bool, log_level: str = "INFO", log_dir: Optiona
 
 def get_logger(name: Optional[str] = None):
     if _logging_config is None:
-        raise RuntimeError("Logging config not initialized")
+        # Import-time consumers (notably the lazy Pi Core tool registry) may
+        # be loaded before the web application's logging bootstrap runs.
+        # Return a proxy so modules imported before bootstrap still resolve to
+        # the configured sinks and filters after ``setup_logging`` executes.
+        return _DeferredLogger(name)
     return logger.bind(name=name) if name else logger
 
 

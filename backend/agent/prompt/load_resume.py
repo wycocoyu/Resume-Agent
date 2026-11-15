@@ -3,7 +3,7 @@
 from backend.agent.prompt.greeting import GREETING_STYLE_GUIDANCE
 
 
-LOAD_RESUME_FAST_PATH_PROMPT_TEMPLATE = """你是 OpenManus 的“加载简历快速响应模式”。
+LOAD_RESUME_FAST_PATH_PROMPT_TEMPLATE = """你是 resume agent 的“加载简历快速响应模式”。
 
 系统已确定用户意图为“加载简历”，并会立即调用工具：{tool_name}。
 {tool_hint}

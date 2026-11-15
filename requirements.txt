@@ -27,36 +27,21 @@ passlib[bcrypt]==1.7.4
 email-validator==2.1.1
 bcrypt==3.2.2
 
-# OpenManus dependencies
+# Runtime utilities
 tenacity~=9.0.0
 loguru~=0.7.3
 tiktoken~=0.9.0
 
-# Browser automation
-browser-use~=0.1.40
-playwright~=1.51.0
-browsergym~=0.13.3
-
-# Search engines
-googlesearch-python~=1.3.0
-baidusearch~=1.0.3
-duckduckgo_search~=7.5.3
-
 # Data processing
 numpy<2.0.0
-datasets~=3.4.1
 html2text~=2024.2.26
-# mineru requires pillow>=11.0.0; crawl4ai>=0.8.0 supports pillow>=10.4
+# mineru requires pillow>=11.0.0
 pillow>=11.0.0,<13
-gymnasium~=1.1.1
 PyMuPDF>=1.24.0
 
-# Infrastructure
-docker~=7.1.0
-mcp~=1.5.0
+# Infrastructure used by the active resume/PDF path
 boto3~=1.37.18
 beautifulsoup4~=4.13.3
-crawl4ai~=0.8.0
 markdownify
 mineru>=2.7.0
 # mineru requires pdfminer.six>=20251230
@@ -72,7 +57,6 @@ aiofiles~=24.1.0
 colorama~=0.4.6
 unidiff~=0.7.5
 structlog
-paramiko==3.4.0
 tomli>=2.0.0
 # mineru requires huggingface-hub>=0.32.4
 huggingface-hub>=0.32.4,<1

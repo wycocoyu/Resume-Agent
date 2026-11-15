@@ -4,6 +4,7 @@
 """
 
 import os
+import hashlib
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
@@ -18,16 +19,29 @@ def is_asking_mode_enabled() -> bool:
     )
 
 
-def is_pi_core_enabled() -> bool:
-    """Whether the experimental linear pi-core stream is enabled.
+def is_pi_core_enabled(session_id: str | None = None) -> bool:
+    """Whether the linear pi-core stream is enabled.
 
-    The legacy OpenManus stream remains the default until the new adapter has
-    completed end-to-end regression (approval, resume patches and PDF flows).
+    Pi Core is now the default production path.  The flag remains available
+    for controlled rollout and emergency disablement.
     """
 
-    return (
-        os.getenv("RESUME_AGENT_PI_CORE", "false").strip().lower() in _TRUE_VALUES
-    )
+    if os.getenv("RESUME_AGENT_PI_CORE", "true").strip().lower() not in _TRUE_VALUES:
+        return False
+    raw_percent = os.getenv("RESUME_AGENT_PI_CORE_ROLLOUT_PERCENT", "100")
+    try:
+        percent = max(0, min(100, int(raw_percent)))
+    except ValueError:
+        percent = 100
+    if percent >= 100 or not session_id:
+        return True
+    if percent <= 0:
+        return False
+    bucket = int(
+        hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:8],
+        16,
+    ) % 100
+    return bucket < percent
 
 
 ASKING_MODE_DISABLED_PROMPT = """

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-import backend.agent.agent.manus as manus_module  # noqa: F401 包初始化
+import backend.agent.pi_core.resume_agent as runtime_module  # noqa: F401 包初始化
 from backend.agent.agent.intent_router import (
     _looks_like_compound_request,
     _rule_intent_yield_reason,
@@ -53,19 +53,20 @@ def test_greeting_prompt_interpolation_locked():
     assert GREETING_STYLE_GUIDANCE in GREETING_FAST_PATH_PROMPT
 
 
-def test_llm_first_yields_rule_route_and_blocks_query_rewrite(monkeypatch):
-    """行为级白盒(Codex review):规则给出 LOAD_RESUME+tool+带 /[tool:] 标记的
-    enhanced_query 时,LLM-first(2026-07-11 起唯一路径,无回退开关)必须
-    ①落到 super().think()(不直调工具)②不把工具标记写回 memory(规则只做
-    日志参考,不许暗中遥控)。"""
+def test_pi_core_prepare_keeps_rule_markers_out_of_memory(monkeypatch):
+    """规则层只提供路由参考，Pi Core 不把工具标记写回用户消息。"""
     import asyncio
 
-    from backend.agent.agent.manus import Manus
-    from backend.agent.agent.toolcall import ToolCallAgent
+    from backend.agent.pi_core.resume_agent import ResumeAgentRuntime
     from backend.agent.application.conversation.conversation_state import Intent
     from backend.agent.schema import Message, Role
 
-    agent = Manus(session_id="s-llmfirst-test", is_admin=False, user_id="uTest32CharBetterAuthIdXyz01")
+    agent = ResumeAgentRuntime(
+        session_id="s-llmfirst-test",
+        is_admin=False,
+        user_id="uTest32CharBetterAuthIdXyz01",
+    )
+    domain = agent.domain_agent
     original_input = "帮我加载一下我的简历"
     agent.memory.add_message(Message.user_message(original_input))
 
@@ -79,20 +80,11 @@ def test_llm_first_yields_rule_route_and_blocks_query_rewrite(monkeypatch):
             "intent_result": None,
         }
 
-    monkeypatch.setattr(agent._conversation_state, "process_input", fake_process_input)
+    monkeypatch.setattr(domain._conversation_state, "process_input", fake_process_input)
+    asyncio.run(agent.prepare_turn(original_input))
 
-    called = {"super_think": False}
-
-    async def fake_super_think(self):
-        called["super_think"] = True
-        return False
-
-    monkeypatch.setattr(ToolCallAgent, "think", fake_super_think)
-
-    asyncio.run(agent.think())
-
-    assert called["super_think"] is True, "让权后必须落到 ReAct loop"
     user_msgs = [m for m in agent.memory.messages if m.role == Role.USER]
     assert user_msgs and "/[tool:" not in (user_msgs[-1].content or ""), \
         "规则的 enhanced_query 工具标记不得写回 memory"
-    assert not agent.tool_calls, "不得由规则手工构造工具调用"
+    assert not hasattr(ResumeAgentRuntime, "think")
+    assert not hasattr(ResumeAgentRuntime, "act")

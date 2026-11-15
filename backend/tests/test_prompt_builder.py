@@ -1,6 +1,6 @@
 """Wave 2a-S2 PromptBuilder golden 对拍:
 迁移前用 capture_prompt_golden.py 录制的 7 组合矩阵输出（fixtures/prompt_golden.json），
-迁移后 Manus._generate_dynamic_prompts（委托 PromptBuilder）必须逐字符一致。
+迁移后 ResumeDomainRuntime._generate_dynamic_prompts（委托 PromptBuilder）必须逐字符一致。
 组合覆盖：有/无简历 × 只读 × 新增经历 × office 关键词 × GREETING next-step。
 """
 import asyncio
@@ -16,7 +16,7 @@ setup_logging(False, "INFO", "logs/test")
 
 import pytest
 
-from backend.agent.agent.manus import Manus
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 from backend.agent.memory import Intent
 from backend.agent.tool.resume_data_store import ResumeDataStore
 
@@ -56,7 +56,7 @@ def golden():
 @pytest.mark.parametrize("case", CASES, ids=[c["key"] for c in CASES])
 def test_prompt_output_matches_golden(case, golden):
     ResumeDataStore.clear_data(SESSION)
-    agent = Manus(session_id=SESSION)
+    agent = ResumeDomainRuntime(session_id=SESSION)
     try:
         if case["resume"]:
             ResumeDataStore.set_data(dict(RESUME), session_id=SESSION)
@@ -72,10 +72,10 @@ def test_prompt_output_matches_golden(case, golden):
         expected = golden[case["key"]]
         # normalize: prompt 含 WORKSPACE_ROOT 绝对路径,不同机器路径不同
         # golden 录制于 /Users/mac/开源工具/ResumeAgent,本地可能是任意路径
-        # 统一把 "xxx/ResumeAgent/docs/openmanus" 和 "xxx/Resume-Agent/docs/openmanus" 归一
+        # 统一把不同机器上的仓库 docs 绝对路径归一
         import re
         _norm = lambda s: re.sub(
-            r"[^\s]+/(?:ResumeAgent|Resume-Agent)/docs/openmanus",
+            r"[^\s]*(?:ResumeAgent|Resume-Agent)[^\s/\\]*[\\/]+docs",
             "<WORKSPACE_ROOT>",
             s,
         )
@@ -86,7 +86,7 @@ def test_prompt_output_matches_golden(case, golden):
 
 
 def test_broad_optimize_loads_full_resume_guidance_skills():
-    agent = Manus(session_id="resume-guidance-skills")
+    agent = ResumeDomainRuntime(session_id="resume-guidance-skills")
 
     guidance = agent._prompt_builder.build_skill_addendum("我要优化简历")
 
@@ -97,7 +97,7 @@ def test_broad_optimize_loads_full_resume_guidance_skills():
 
 
 def test_specific_field_edit_does_not_load_diagnosis_skills():
-    agent = Manus(session_id="resume-guidance-skills-specific-edit")
+    agent = ResumeDomainRuntime(session_id="resume-guidance-skills-specific-edit")
 
     guidance = agent._prompt_builder.build_skill_addendum(
         "把邮箱改成 new@example.com"
@@ -108,7 +108,7 @@ def test_specific_field_edit_does_not_load_diagnosis_skills():
 
 
 def test_required_resume_skill_missing_fails_fast(tmp_path: Path):
-    agent = Manus(session_id="resume-guidance-skills-missing")
+    agent = ResumeDomainRuntime(session_id="resume-guidance-skills-missing")
 
     with pytest.raises(RuntimeError, match="Required resume Skill"):
         agent._prompt_builder.read_skill(tmp_path / "missing" / "SKILL.md")
@@ -117,7 +117,7 @@ def test_required_resume_skill_missing_fails_fast(tmp_path: Path):
 def test_broad_optimize_does_not_resume_an_existing_write_progress():
     session_id = "broad-diagnosis-does-not-resume-write-progress"
     ResumeDataStore.clear_data(session_id)
-    agent = Manus(session_id=session_id)
+    agent = ResumeDomainRuntime(session_id=session_id)
     ResumeDataStore.set_data(dict(RESUME), session_id=session_id)
     ResumeDataStore.init_progress(session_id, RESUME)
 

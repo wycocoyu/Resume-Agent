@@ -6,6 +6,7 @@
 """
 
 import uuid
+from copy import deepcopy
 from typing import Optional, Dict, Any
 
 from backend.agent.agent.shared_state import AgentSharedState
@@ -128,6 +129,45 @@ class ResumeDataStore:
     def set_shared_state(cls, session_id: str, state: AgentSharedState):
         """绑定会话级 shared_state"""
         cls._shared_state_by_session[session_id] = state
+        if session_id in cls._data_by_session:
+            state.set("resume_data", deepcopy(cls._data_by_session[session_id]))
+
+    @classmethod
+    def snapshot(cls, session_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """返回可持久化的会话级简历状态快照。"""
+
+        if not session_id:
+            return None
+        resume_data = cls.get_data(session_id)
+        progress = cls.get_progress(session_id)
+        if resume_data is None and not cls.get_session_jd(session_id) and progress is None:
+            return None
+        return {
+            "resume_data": deepcopy(resume_data),
+            "meta": deepcopy(cls._meta_by_session.get(session_id, {})),
+            "jd": cls.get_session_jd(session_id),
+            "progress": deepcopy(progress),
+        }
+
+    @classmethod
+    def restore_snapshot(
+        cls,
+        session_id: Optional[str],
+        snapshot: Optional[Dict[str, Any]],
+    ) -> None:
+        """恢复持久化的会话级简历状态；缺失或损坏快照时安全跳过。"""
+
+        if not session_id or not isinstance(snapshot, dict):
+            return
+        resume_data = snapshot.get("resume_data")
+        if isinstance(resume_data, dict):
+            cls.set_data(deepcopy(resume_data), session_id=session_id)
+        jd = snapshot.get("jd")
+        if isinstance(jd, str) and jd.strip():
+            cls.set_session_jd(session_id, jd)
+        progress = snapshot.get("progress")
+        if isinstance(progress, dict):
+            cls._progress_by_session[session_id] = deepcopy(progress)
 
     @classmethod
     def persist_data(cls, session_id: str) -> bool:

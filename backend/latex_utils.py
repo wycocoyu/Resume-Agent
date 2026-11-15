@@ -200,7 +200,19 @@ def normalize_item(item: Dict[str, Any], field_mapping: Dict[str, str]) -> Dict[
 # ──────────────────────────────────────────────────────────────────────────────
 
 def resolve_xelatex_executable() -> Optional[str]:
-    """查找 xelatex 可执行路径，Windows 下额外搜索 MiKTeX 常见安装目录。"""
+    """查找 xelatex 可执行路径，支持显式配置和常见 TeX 发行版目录。"""
+    # 允许桌面启动器/IDE 通过环境变量显式指定路径，避免依赖进程继承的 PATH。
+    for env_var in ("XELATEX_PATH", "LATEX_XELATEX_PATH"):
+        configured = os.environ.get(env_var, "").strip().strip('"')
+        if not configured:
+            continue
+        configured_path = Path(configured).expanduser()
+        if configured_path.is_file():
+            return str(configured_path.resolve())
+        configured_from_path = shutil.which(configured)
+        if configured_from_path:
+            return configured_from_path
+
     # 优先走系统 PATH（与原有逻辑相同）
     found = shutil.which("xelatex") or shutil.which("xelatex.exe")
     if found:
@@ -221,17 +233,28 @@ def resolve_xelatex_executable() -> Optional[str]:
                 continue
         return None
 
-    # Windows：枚举常见 MiKTeX 安装位置
+    # Windows：枚举常见 MiKTeX / TeX Live 安装位置
     candidates: List[Path] = []
     local_appdata = os.environ.get("LOCALAPPDATA", "")
     if local_appdata:
-        candidates.append(
-            Path(local_appdata) / "Programs" / "MiKTeX" / "miktex" / "bin" / "x64" / "xelatex.exe"
+        local_root = Path(local_appdata)
+        candidates.extend(
+            [
+                local_root / "Programs" / "MiKTeX" / "miktex" / "bin" / "x64" / "xelatex.exe",
+                local_root / "MiKTeX" / "miktex" / "bin" / "x64" / "xelatex.exe",
+            ]
         )
     for env_var in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
         base = os.environ.get(env_var, "")
         if base:
             candidates.append(Path(base) / "MiKTeX" / "miktex" / "bin" / "x64" / "xelatex.exe")
+
+    for root in (Path("C:/texlive"), Path("D:/texlive")):
+        if root.is_dir():
+            try:
+                candidates.extend(root.glob("*/bin/windows/xelatex.exe"))
+            except OSError:
+                pass
 
     for p in candidates:
         try:
@@ -240,6 +263,29 @@ def resolve_xelatex_executable() -> Optional[str]:
         except OSError:
             continue
     return None
+
+
+def xelatex_install_hint() -> str:
+    """返回当前操作系统可直接执行的 XeLaTeX 安装提示。"""
+    if os.name == "nt":
+        return (
+            "\n\nWindows 未检测到 XeLaTeX。请先安装 MiKTeX：\n"
+            "  winget install --id MiKTeX.MiKTeX --exact\n"
+            "安装完成后重启后端；如果已安装但未加入 PATH，可设置：\n"
+            "  XELATEX_PATH=C:\\\\Program Files\\\\MiKTeX\\\\miktex\\\\bin\\\\x64\\\\xelatex.exe\n"
+            "也可以在 MiKTeX Console 中启用“自动安装缺失宏包”。"
+        )
+    if os.name == "darwin":
+        return (
+            "\n\nmacOS 未检测到 XeLaTeX。可安装 BasicTeX：\n"
+            "  brew install --cask basictex\n"
+            "安装完成后重启终端或运行：\n"
+            "  eval \"$(/usr/libexec/path_helper)\""
+        )
+    return (
+        "\n\nLinux 未检测到 XeLaTeX。可安装 TeX Live：\n"
+        "  sudo apt-get update && sudo apt-get install -y texlive-xetex"
+    )
 
 
 def subprocess_env_with_xelatex_bin(xelatex_path: str) -> dict:

@@ -1,7 +1,7 @@
 """
 Chat History Manager - Wrapper around LangChain-style InMemoryChatMessageHistory
 
-Provides OpenManus-compatible interface for managing conversation history.
+Provides resume agent-compatible interface for managing conversation history.
 Implements LangChain-compatible sliding window mechanism.
 """
 
@@ -24,7 +24,7 @@ class ChatHistoryManager:
 
     Features:
     - Sliding window (keep only last k messages) - LangChain compatible
-    - Message format conversion (OpenManus <-> LangChain)
+    - Message format conversion (resume agent <-> LangChain)
     - Context retrieval for LLM prompting
     - Automatic trimming when messages exceed k limit
     """
@@ -78,7 +78,7 @@ class ChatHistoryManager:
             )
 
     def add_message(self, message: Message, persist: bool = True) -> None:
-        """Add an OpenManus Message to the history.
+        """Add an resume agent Message to the history.
 
         After adding, automatically trims history if it exceeds k messages.
 
@@ -100,7 +100,7 @@ class ChatHistoryManager:
             self._persist_if_needed()
 
     def add_messages(self, messages: List[Message], persist: bool = True) -> None:
-        """Add multiple OpenManus Messages to the history.
+        """Add multiple resume agent Messages to the history.
 
         After adding, automatically trims history if it exceeds k messages.
 
@@ -130,7 +130,7 @@ class ChatHistoryManager:
                 Uses trim_messages for consistent behavior.
 
         Returns:
-            List of OpenManus Messages
+            List of resume agent Messages
         """
         lc_messages = self._history.messages
 

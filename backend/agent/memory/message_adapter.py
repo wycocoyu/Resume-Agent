@@ -1,5 +1,5 @@
 """
-Message Adapter - Convert between OpenManus and LangChain message formats
+Message Adapter - Convert between resume agent and LangChain message formats
 """
 
 import json
@@ -16,7 +16,7 @@ from backend.agent.schema import Message, Role, ToolCall, Function
 
 
 def _convert_tool_calls_to_langchain_format(tool_calls: List[ToolCall] | None) -> List[dict]:
-    """将 OpenManus ToolCall 对象转换为 LangChain 期望的字典格式
+    """将 resume agent ToolCall 对象转换为 LangChain 期望的字典格式
 
     LangChain AIMessage 期望的 tool_calls 格式:
     [
@@ -32,7 +32,7 @@ def _convert_tool_calls_to_langchain_format(tool_calls: List[ToolCall] | None) -
 
     result = []
     for tc in tool_calls:
-        # tc 是 OpenManus 的 ToolCall 对象，包含 id, type, function
+        # tc 是 resume agent 的 ToolCall 对象，包含 id, type, function
         args = tc.function.arguments
 
         # ✅ 如果 args 是 JSON 字符串，解析为字典
@@ -53,7 +53,7 @@ def _convert_tool_calls_to_langchain_format(tool_calls: List[ToolCall] | None) -
 
 
 def _convert_tool_calls_from_langchain_format(lc_tool_calls: List[dict] | None) -> List[ToolCall]:
-    """将 LangChain 字典格式的 tool_calls 转换为 OpenManus ToolCall 对象
+    """将 LangChain 字典格式的 tool_calls 转换为 resume agent ToolCall 对象
 
     LangChain tool_calls 格式:
     [
@@ -64,7 +64,7 @@ def _convert_tool_calls_from_langchain_format(lc_tool_calls: List[dict] | None) 
         }
     ]
 
-    OpenManus ToolCall 格式:
+    resume agent ToolCall 格式:
     [
         ToolCall(
             id="call_xxx",
@@ -104,7 +104,7 @@ def _convert_tool_calls_from_langchain_format(lc_tool_calls: List[dict] | None) 
 
 
 class MessageAdapter:
-    """Adapter for converting between OpenManus Message and LangChain Message formats.
+    """Adapter for converting between resume agent Message and LangChain Message formats.
 
     Critical: Tool messages are now properly preserved to enable the optimization workflow:
     - Analysis results (cv_analyzer_agent) may contain optimization_suggestions JSON
@@ -115,10 +115,10 @@ class MessageAdapter:
     @staticmethod
     def to_langchain(message: Message) -> BaseMessage:
         """
-        Convert OpenManus Message to LangChain Message.
+        Convert resume agent Message to LangChain Message.
 
         Args:
-            message: OpenManus Message object
+            message: resume agent Message object
 
         Returns:
             LangChain BaseMessage (HumanMessage, AIMessage, SystemMessage, or ToolMessage)
@@ -133,7 +133,7 @@ class MessageAdapter:
                 additional_kwargs=extra,
             )
         elif message.role == Role.ASSISTANT:
-            # ✅ 将 OpenManus ToolCall 对象转换为 LangChain 期望的字典格式
+            # ✅ 将 resume agent ToolCall 对象转换为 LangChain 期望的字典格式
             lc_tool_calls = _convert_tool_calls_to_langchain_format(message.tool_calls)
             return AIMessage(
                 content=content,
@@ -157,13 +157,13 @@ class MessageAdapter:
     @staticmethod
     def from_langchain(lc_message: BaseMessage) -> Message:
         """
-        Convert LangChain Message to OpenManus Message.
+        Convert LangChain Message to resume agent Message.
 
         Args:
             lc_message: LangChain BaseMessage object
 
         Returns:
-            OpenManus Message object with all metadata preserved
+            resume agent Message object with all metadata preserved
         """
         thought = None
         if hasattr(lc_message, "additional_kwargs"):
@@ -174,7 +174,7 @@ class MessageAdapter:
             return Message(role=role, content=lc_message.content, thought=thought)
         elif isinstance(lc_message, AIMessage):
             role = Role.ASSISTANT
-            # ✅ 将 LangChain 格式的 tool_calls 转换为 OpenManus ToolCall 对象
+            # ✅ 将 LangChain 格式的 tool_calls 转换为 resume agent ToolCall 对象
             om_tool_calls = _convert_tool_calls_from_langchain_format(lc_message.tool_calls)
             return Message(
                 role=role,
@@ -200,10 +200,10 @@ class MessageAdapter:
 
     @staticmethod
     def batch_to_langchain(messages: List[Message]) -> List[BaseMessage]:
-        """Batch convert OpenManus Messages to LangChain Messages."""
+        """Batch convert resume agent Messages to LangChain Messages."""
         return [MessageAdapter.to_langchain(msg) for msg in messages]
 
     @staticmethod
     def batch_from_langchain(lc_messages: List[BaseMessage]) -> List[Message]:
-        """Batch convert LangChain Messages to OpenManus Messages."""
+        """Batch convert LangChain Messages to resume agent Messages."""
         return [MessageAdapter.from_langchain(msg) for msg in lc_messages]

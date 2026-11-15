@@ -14,7 +14,7 @@ setup_logging(False, "INFO", "logs/test")
 import pytest
 
 # 先 import 完整 agent 包链，再引用子模块函数，避免裸 import 触发既有循环依赖
-from backend.agent.agent.manus import Manus
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 from backend.agent.agent.turn_state import TurnExecutionState
 from backend.agent.application.conversation.conversation_state import (
     is_diagnosis_apply_single_query,
@@ -38,9 +38,9 @@ class _FakeShared:
 class _Host:
     """借用 Manus 取数 helper（只依赖 self._shared_state），绕开 Pydantic 实例化。"""
 
-    _guidance_suggestions = Manus._guidance_suggestions
-    _needs_fact_suggestions = Manus._needs_fact_suggestions
-    _suggestion_by_index = Manus._suggestion_by_index
+    _guidance_suggestions = ResumeDomainRuntime._guidance_suggestions
+    _needs_fact_suggestions = ResumeDomainRuntime._needs_fact_suggestions
+    _suggestion_by_index = ResumeDomainRuntime._suggestion_by_index
 
     def __init__(self, shared):
         self._shared_state = shared
@@ -149,7 +149,7 @@ _NEEDS_FACT = {
 
 def test_format_suggestions_block_mixed():
     h = _host_with_assessment([_PROPOSED, _NEEDS_FACT])
-    block = Manus._format_suggestions_block(h._guidance_suggestions())
+    block = ResumeDomainRuntime._format_suggestions_block(h._guidance_suggestions())
     assert "1. [experience] 量化实习成果" in block
     assert "参考改写：将接口耗时从2s降到380ms" in block
     assert "2. [education] 教育经历缺院校 — 需补充：院校全称、专业名称、学位类型" in block
@@ -163,7 +163,7 @@ def test_needs_fact_suggestions_filters():
 
 def test_format_gap_block_only_needs_fact():
     h = _host_with_assessment([_PROPOSED, _NEEDS_FACT])
-    gap = Manus._format_gap_block(h._needs_fact_suggestions())
+    gap = ResumeDomainRuntime._format_gap_block(h._needs_fact_suggestions())
     assert gap == "- [education] 教育经历缺院校：需要 院校全称、专业名称、学位类型"
 
 
@@ -186,13 +186,13 @@ def test_helpers_empty_when_no_assessment():
 # ---- 单条 apply 命中 needs_fact 的兜底 prompt（消除"承诺提问却不问"断层）----
 
 def test_single_apply_prompt_proposed_edits_directly():
-    p = Manus._build_single_apply_prompt(_PROPOSED)
+    p = ResumeDomainRuntime._build_single_apply_prompt(_PROPOSED)
     assert "只改这一条建议" in p
     assert "量化实习成果" in p
 
 
 def test_single_apply_prompt_needs_fact_no_fake_ask():
-    p = Manus._build_single_apply_prompt(_NEEDS_FACT)
+    p = ResumeDomainRuntime._build_single_apply_prompt(_NEEDS_FACT)
     assert "缺少真实信息" in p
     assert "不要调用" in p and "ask_user_question" in p  # 不假装提问
     assert "教育经历缺院校" in p and "院校全称" in p       # 列出缺什么

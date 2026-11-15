@@ -6,13 +6,14 @@
 """
 import sys
 import os
+import asyncio
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-import backend.agent.agent.manus  # noqa: F401  先初始化包,避开循环导入
+import backend.agent.pi_core.resume_agent  # noqa: F401  先初始化包,避开循环导入
 from backend.agent.web.streaming.agent_stream import AgentStream, is_tool_error_content
 from backend.agent.web.streaming.events import (
     AgentStartEvent,
@@ -27,8 +28,24 @@ from backend.agent.web.streaming.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
+from backend.agent.web.streaming.agent_stream import StreamProcessor
+from backend.agent.web.streaming.state_machine import AgentStateMachine
 
 SID = "s-protocol-test"
+
+
+def test_stream_processor_stop_stream_uses_shared_state_machine():
+    processor = StreamProcessor()
+    state_machine = AgentStateMachine("s-stop")
+    stream = type("Stream", (), {"_state_machine": state_machine})()
+    processor._active_streams["s-stop"] = stream
+
+    stopped = asyncio.run(processor.stop_stream("s-stop", reason="session_switch"))
+
+    assert stopped is True
+    assert state_machine.stop_requested is True
+    assert state_machine.state_info.data["reason"] == "session_switch"
+    assert asyncio.run(processor.stop_stream("missing")) is False
 
 
 def make_stream() -> AgentStream:

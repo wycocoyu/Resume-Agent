@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import hashlib
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -26,6 +27,7 @@ except ImportError:
 from backend.agent.cltp.storage.conversation_storage import ConversationMeta
 from backend.agent.cltp.storage.session_scope import SessionAccessError
 from backend.agent.cltp.storage.session_limits import ensure_can_create_session
+from backend.agent.pi_core.durable import DurableSessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,146 @@ logger = logging.getLogger(__name__)
 class DBConversationStorage:
     """Database-backed conversation storage adapter."""
     _supports_message_hash: Optional[bool] = None
+
+    def __init__(self, durable_root: Optional[str] = None) -> None:
+        """Initialize DB storage and its file-backed durable sidecar.
+
+        The sidecar deliberately avoids a schema migration: the relational
+        database remains the source of truth for chat messages while the
+        durable document keeps session-scoped resume state recoverable.
+        """
+
+        root = (
+            durable_root
+            or os.getenv("AGENT_DB_DURABLE_ROOT")
+            or "data/db-conversations/.durable"
+        )
+        self._durable = DurableSessionStore(root)
+
+    def _durable_payload(self, conversation: AgentConversation) -> Dict[str, Any]:
+        from backend.agent.tool.resume_data_store import ResumeDataStore
+
+        return {
+            "session_id": conversation.session_id,
+            "user_id": conversation.user_id,
+            "created_at": (
+                conversation.created_at.isoformat()
+                if conversation.created_at
+                else ""
+            ),
+            "updated_at": (
+                conversation.updated_at.isoformat()
+                if conversation.updated_at
+                else ""
+            ),
+            "title": conversation.title or "Conversation",
+            "message_count": conversation.message_count or 0,
+            "resume_state": ResumeDataStore.snapshot(conversation.session_id),
+        }
+
+    def _sync_durable_snapshot(
+        self,
+        conversation: AgentConversation,
+        *,
+        event_kind: str,
+    ) -> None:
+        """Persist the latest resume sidecar after a successful DB operation."""
+
+        payload = self._durable_payload(conversation)
+        try:
+            with self._durable.transaction(conversation.session_id) as transaction:
+                transaction.append(
+                    event_kind,
+                    {
+                        "message_count": payload["message_count"],
+                        "updated_at": payload["updated_at"],
+                    },
+                )
+                transaction.set_document(payload)
+        except Exception:
+            # The DB commit has already succeeded; sidecar failure must not
+            # turn a durable conversation write into a false API failure.
+            logger.exception(
+                "[AgentStorage] Failed to sync durable session sidecar: "
+                "session_id=%s",
+                conversation.session_id,
+            )
+
+    def _restore_durable_snapshot(
+        self,
+        session_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        from backend.agent.tool.resume_data_store import ResumeDataStore
+
+        document = self._durable.read_document(session_id)
+        resume_state = document.content.get("resume_state") if document else None
+        if resume_state is not None:
+            payload["resume_state"] = resume_state
+            ResumeDataStore.restore_snapshot(session_id, resume_state)
+        return payload
+
+    def _repair_durable_snapshot_if_stale(
+        self,
+        session_id: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        """Best-effort read-repair for DB/sidecar divergence.
+
+        The relational transaction remains the source of truth.  If a process
+        crash or transient filesystem failure happened after the DB commit but
+        before the sidecar write, the next successful read re-materializes the
+        durable document instead of leaving the session permanently stale.
+        """
+
+        document = self._durable.read_document(session_id)
+        expected_updated_at = str(payload.get("updated_at") or "")
+        current_updated_at = ""
+        if document:
+            current_updated_at = str(document.content.get("updated_at") or "")
+        expected_count = int(payload.get("message_count") or 0)
+        current_count = (
+            int(document.content.get("message_count") or 0)
+            if document
+            else -1
+        )
+        if (
+            document is not None
+            and current_updated_at == expected_updated_at
+            and current_count == expected_count
+        ):
+            return
+        try:
+            conversation = type(
+                "DurableConversationSnapshot",
+                (),
+                {
+                    "session_id": session_id,
+                    "user_id": payload.get("user_id"),
+                    "created_at": (
+                        datetime.fromisoformat(payload["created_at"])
+                        if payload.get("created_at")
+                        else None
+                    ),
+                    "updated_at": (
+                        datetime.fromisoformat(payload["updated_at"])
+                        if payload.get("updated_at")
+                        else None
+                    ),
+                    "title": payload.get("title", "Conversation"),
+                    "message_count": expected_count,
+                },
+            )()
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_read_repair",
+            )
+        except Exception:
+            logger.exception(
+                "[AgentStorage] Failed to repair durable session sidecar: "
+                "session_id=%s",
+                session_id,
+            )
 
     def validate_schema_or_raise(self) -> None:
         """Validate required DB schema for strict DB mode."""
@@ -378,6 +520,10 @@ class DBConversationStorage:
                     db.add(self._message_to_row(conversation.id, seq, message))
 
             db.commit()
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_snapshot",
+            )
 
             created_at = conversation.created_at or now
             updated_at = conversation.updated_at or now
@@ -458,6 +604,10 @@ class DBConversationStorage:
                 db.execute(insert_sql, self._message_to_legacy_params(conversation.id, seq, message))
 
             db.commit()
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_snapshot",
+            )
             created_at = conversation.created_at or now
             updated_at = conversation.updated_at or now
             return ConversationMeta(
@@ -540,6 +690,10 @@ class DBConversationStorage:
                     .all()
                 )
                 if self._rows_match_messages(rows, messages_delta):
+                    self._sync_durable_snapshot(
+                        conversation,
+                        event_kind="session_append_replay",
+                    )
                     created_at = conversation.created_at or now
                     updated_at = conversation.updated_at or now
                     return {
@@ -578,6 +732,10 @@ class DBConversationStorage:
                 conversation.last_message_at = now
 
             db.commit()
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_append",
+            )
             created_at = conversation.created_at or now
             updated_at = conversation.updated_at or now
             return {
@@ -695,6 +853,10 @@ class DBConversationStorage:
                             same = False
                             break
                     if same:
+                        self._sync_durable_snapshot(
+                            conversation,
+                            event_kind="session_append_replay",
+                        )
                         created_at = conversation.created_at or now
                         updated_at = conversation.updated_at or now
                         return {
@@ -734,6 +896,10 @@ class DBConversationStorage:
             if messages_delta:
                 conversation.last_message_at = now
             db.commit()
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_append",
+            )
             created_at = conversation.created_at or now
             updated_at = conversation.updated_at or now
             return {
@@ -786,14 +952,18 @@ class DBConversationStorage:
                 .all()
             )
             messages = [self._serialize_message(self._row_to_message(row)) for row in rows]
-            return {
+            payload = {
                 "session_id": conversation.session_id,
+                "user_id": conversation.user_id,
                 "created_at": conversation.created_at.isoformat() if conversation.created_at else "",
                 "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else "",
                 "title": conversation.title or "Conversation",
                 "message_count": conversation.message_count or len(messages),
                 "messages": messages,
             }
+            restored = self._restore_durable_snapshot(session_id, payload)
+            self._repair_durable_snapshot_if_stale(session_id, restored)
+            return restored
         except Exception as exc:
             if self._is_message_hash_missing_error(exc):
                 logger.warning(
@@ -848,14 +1018,18 @@ class DBConversationStorage:
                 )
                 for row in rows
             ]
-            return {
+            payload = {
                 "session_id": conversation.session_id,
+                "user_id": conversation.user_id,
                 "created_at": conversation.created_at.isoformat() if conversation.created_at else "",
                 "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else "",
                 "title": conversation.title or "Conversation",
                 "message_count": conversation.message_count or len(messages),
                 "messages": messages,
             }
+            restored = self._restore_durable_snapshot(session_id, payload)
+            self._repair_durable_snapshot_if_stale(session_id, restored)
+            return restored
         finally:
             db.close()
 
@@ -912,6 +1086,7 @@ class DBConversationStorage:
             ).delete(synchronize_session=False)
             db.delete(conversation)
             db.commit()
+            self._durable.delete(session_id)
             return True
         except Exception:
             db.rollback()
@@ -935,6 +1110,10 @@ class DBConversationStorage:
             conversation.updated_at = datetime.now()
             db.commit()
             db.refresh(conversation)
+            self._sync_durable_snapshot(
+                conversation,
+                event_kind="session_title_update",
+            )
 
             return ConversationMeta(
                 session_id=conversation.session_id,

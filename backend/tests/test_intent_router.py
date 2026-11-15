@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-import backend.agent.agent.manus as manus_module  # noqa: F401 包初始化
+import backend.agent.pi_core.resume_agent as runtime_module  # noqa: F401 包初始化
 from backend.agent.agent.intent_router import IntentRouter, RoutingContext
 from backend.agent.application.conversation.conversation_state import Intent
 

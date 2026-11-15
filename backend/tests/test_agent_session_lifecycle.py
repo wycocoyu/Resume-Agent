@@ -19,7 +19,7 @@ setup_logging(False, "INFO", "logs/test")
 import pytest
 
 # 先导入 manus 完成 agent 包初始化,避开 backend.agent.tool.__init__ 的循环导入
-import backend.agent.agent.manus  # noqa: F401
+import backend.agent.pi_core.resume_agent  # noqa: F401
 from backend.agent.agent.shared_state import AgentSharedState
 from backend.agent.tool.resume_data_store import ResumeDataStore
 from backend.agent.web import session_manager

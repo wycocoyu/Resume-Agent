@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.core.logger import setup_logging
 setup_logging(False, "INFO", "logs/test")
 
-from backend.agent.agent.manus import Manus
+from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 from backend.agent.memory import Intent
 from backend.agent.tool.resume_data_store import ResumeDataStore
 
@@ -46,7 +46,7 @@ async def main():
     out = {}
     for case in CASES:
         ResumeDataStore.clear_data(SESSION)
-        agent = Manus(session_id=SESSION)
+        agent = ResumeDomainRuntime(session_id=SESSION)
         if case["resume"]:
             ResumeDataStore.set_data(dict(RESUME), session_id=SESSION)
             agent._conversation_state.update_resume_loaded(True)

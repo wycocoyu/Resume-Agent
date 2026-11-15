@@ -6,6 +6,8 @@ Each session JSON includes `user_id` for per-account isolation.
 """
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +21,7 @@ from backend.agent.cltp.storage.session_scope import (
 )
 from backend.agent.cltp.storage.session_limits import ensure_can_create_session
 from backend.agent.schema import Message, Role
+from backend.agent.pi_core.durable import DurableSessionStore
 
 
 @dataclass
@@ -40,9 +43,16 @@ def _can_read_session_for_list(owner_id: Optional[int], user_id: str) -> bool:
 class FileConversationStorage:
     """File-based conversation storage adapter."""
 
-    def __init__(self, base_dir: str = "data/conversations"):
+    def __init__(
+        self,
+        base_dir: str = "data/conversations",
+        durable_root: Optional[str] = None,
+    ):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._durable = DurableSessionStore(
+            durable_root or str(self.base_dir / ".durable")
+        )
 
     def _session_path(self, session_id: str) -> Path:
         safe_id = session_id.replace("/", "_")
@@ -143,9 +153,38 @@ class FileConversationStorage:
             "message_count": meta.message_count,
             "messages": [self._serialize_message(m) for m in messages],
         }
+        from backend.agent.tool.resume_data_store import ResumeDataStore
+
+        resume_state = ResumeDataStore.snapshot(session_id)
+        if resume_state is not None:
+            payload["resume_state"] = resume_state
         path = self._session_path(session_id)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._atomic_write(path, payload)
+        self._durable_snapshot(session_id, payload)
         return meta
+
+    def _atomic_write(self, path: Path, payload: Dict[str, Any]) -> None:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+
+    def _durable_snapshot(self, session_id: str, payload: Dict[str, Any]) -> None:
+        with self._durable.transaction(session_id) as transaction:
+            transaction.append(
+                "session_snapshot",
+                {
+                    "message_count": payload.get("message_count", 0),
+                    "updated_at": payload.get("updated_at", ""),
+                },
+            )
+            transaction.set_document(payload)
 
     def load_session(
         self,
@@ -161,6 +200,9 @@ class FileConversationStorage:
             assert_can_read(stored_user_id(data), user_id, is_admin=is_admin)
         except SessionAccessError:
             return None
+        from backend.agent.tool.resume_data_store import ResumeDataStore
+
+        ResumeDataStore.restore_snapshot(session_id, data.get("resume_state"))
         return data
 
     def list_sessions(
@@ -200,6 +242,7 @@ class FileConversationStorage:
             return False
         path = self._session_path(session_id)
         path.unlink()
+        self._durable.delete(session_id)
         return True
 
     def update_session_title(
@@ -220,7 +263,8 @@ class FileConversationStorage:
         data["message_count"] = len(data.get("messages", []))
 
         path = self._session_path(session_id)
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._atomic_write(path, data)
+        self._durable_snapshot(session_id, data)
 
         return self._meta_from_payload(data, session_id)
 

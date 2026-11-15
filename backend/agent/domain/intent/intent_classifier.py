@@ -5,7 +5,7 @@ Intent Classifier - 意图分类器
 1. 基于规则的快速匹配（关键词 + 正则）
 2. LLM 增强分类（当规则匹配置信度不够时）
 
-参考相关实现，适配 OpenManus 的工具系统。
+参考相关实现，适配 resume agent 的工具系统。
 """
 
 import json
@@ -277,7 +277,7 @@ class IntentClassifier:
 只返回 JSON，不要其他内容。"""
 
         try:
-            # 调用 LLM（使用 OpenManus 的 ask 方法）
+            # 调用 LLM（使用 resume agent 的 ask 方法）
             content = await self.llm_client.ask(
                 messages=[{"role": "user", "content": prompt}],
                 stream=False,

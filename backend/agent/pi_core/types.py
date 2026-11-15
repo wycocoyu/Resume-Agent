@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 
 Role = Literal["system", "user", "assistant", "tool"]
@@ -70,6 +70,20 @@ class ToolResult:
     error: str | None = None
     structured_content: dict[str, Any] | None = None
     supersede_key: str | None = None
+    progress_updates: tuple[dict[str, Any], ...] = ()
+
+
+class RuntimeToolResult(NamedTuple):
+    """Explicit result contract returned by a runtime tool boundary.
+
+    The tuple shape preserves compatibility with the initial migration
+    adapter, while named fields make the structured side-channel explicit and
+    prevent callers from reaching into legacy agent internals.
+    """
+
+    output: str
+    structured_content: dict[str, Any]
+    progress_updates: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +93,7 @@ class ToolDecision:
     block: bool = False
     reason: str = ""
     terminate: bool = False
+    structured_content: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

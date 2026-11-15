@@ -155,6 +155,7 @@ export async function streamAgent(
         Accept: "text/event-stream",
         ...headers,
       },
+      credentials: "include",
       body: JSON.stringify(payload),
       signal,
     });
@@ -281,7 +282,19 @@ export async function streamAgent(
     if (error instanceof Error && error.name === "AbortError") {
       return;
     }
-    const err = error instanceof Error ? error : new Error(String(error));
+    const rawError = error instanceof Error ? error : new Error(String(error));
+    const err =
+      rawError instanceof TypeError && rawError.message === "Failed to fetch"
+        ? new Error(
+            `无法连接 Agent 服务：${
+              baseUrl ||
+              (typeof window !== "undefined"
+                ? window.location.origin
+                : "(current origin)")
+            }/api/agent/stream。` +
+              "请确认后端 9000 端口、前端 API 地址和登录代理均已启动。",
+          )
+        : rawError;
     onError?.(err);
     throw err;
   }
