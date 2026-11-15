@@ -1,0 +1,16 @@
+职位名称：资深全栈/AI Agent架构师
+所属部门：AI创新实验室
+工作地点：北京 / 深圳 / 远程
+岗位职责：
+1. 负责新一代智能求职辅助平台与AI Agent编排运行时核心系统架构设计与落地。
+2. 负责基于单协程事件流架构的线性Agent执行回路研发，支持海量并发长文本上下文压缩与流式SSE推送。
+3. 主导跨平台HTML/LaTeX双渲染引擎的研发与自适应单页排版算法突破。
+4. 推进前端现代化演进（React 18、TypeScript、Tailwind CSS），并对接MCP (Model Context Protocol) 官方生态。
+
+任职要求：
+1. 本科及以上学历，计算机相关专业，5年以上全栈或后端架构经验。
+2. 熟练掌握 Python (FastAPI, asyncio) 与 TypeScript / Node.js 现代异步编程模型。
+3. 熟练掌握 React 18, Tailwind CSS 及现代化前端构建工具链 (Vite, Vitest)。
+4. 深入理解大语言模型 (LLM) 推理集成、Prompt工程、STAR原则简历优化、以及MCP生态。
+5. 具备优秀的高并发分布式系统设计能力，熟练运用 Docker、Kubernetes、Redis、PostgreSQL。
+6. 有知名开源项目经验或深入理解 XeLaTeX 矢量排版引擎者优先。

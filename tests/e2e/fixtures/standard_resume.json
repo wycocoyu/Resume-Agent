@@ -1,0 +1,99 @@
+{
+  "id": "e2e_resume_standard_001",
+  "title": "张三-资深全栈研发架构师",
+  "createdAt": "2026-11-15T11:24:00.000Z",
+  "updatedAt": "2026-11-15T11:24:00.000Z",
+  "templateId": "asu-tech",
+  "templateType": "latex",
+  "basic": {
+    "name": "张三",
+    "title": "资深全栈研发架构师",
+    "email": "zhangsan@cococv.com",
+    "phone": "13800138000",
+    "location": "北京 / 深圳"
+  },
+  "education": [
+    {
+      "id": "edu_1",
+      "school": "北京航空航天大学",
+      "major": "计算机科学与技术",
+      "degree": "硕士",
+      "startDate": "2016-09",
+      "endDate": "2019-06",
+      "description": "<p>研究方向：分布式系统与高可用架构。获得研究生国家奖学金。</p>"
+    }
+  ],
+  "workExperience": [
+    {
+      "id": "work_1",
+      "company": "字节跳动",
+      "position": "资深架构师",
+      "date": "2022-03 - 至今",
+      "details": "<ul><li>主导研发新一代实时AI Agent编排引擎，支持单协程线性事件流调度与上下文压缩。</li><li>设计基于双引擎的高性能矢量渲染流水线，日均生成PDF 50万份。</li></ul>"
+    },
+    {
+      "id": "work_2",
+      "company": "腾讯科技",
+      "position": "高级全栈工程师",
+      "date": "2019-07 - 2022-02",
+      "details": "<ul><li>负责商户开放平台核心微服务研发，重构核心对账系统。</li><li>采用TypeScript与Vite重构控制台，首屏耗时压缩至0.8秒。</li></ul>"
+    }
+  ],
+  "experience": [],
+  "projects": [
+    {
+      "id": "proj_1",
+      "name": "CocoCV (Resume-Agent) 智能简历引擎",
+      "role": "核心架构师",
+      "date": "2023-01 - 至今",
+      "description": "<p>基于FastAPI + React 18的生产级智能简历排版平台，支持自包含可编辑HTML导出与XeLaTeX CMap无损提取。</p>"
+    }
+  ],
+  "openSource": [
+    {
+      "id": "os_1",
+      "name": "Distributed Event-Mesh",
+      "role": "项目发起人",
+      "description": "<p>基于Go与eBPF构建的高吞吐跨云事件网关，单机吞吐超100万msg/s。</p>"
+    }
+  ],
+  "awards": [
+    {
+      "id": "award_1",
+      "title": "国家奖学金",
+      "issuer": "中华人民共和国教育部",
+      "date": "2018-11",
+      "description": "研究生国家奖学金"
+    }
+  ],
+  "customData": {},
+  "selfEvaluation": "<p>具备8年大型互联网全栈系统研发经验，深入理解AI Native架构与高可用设计。</p>",
+  "skillContent": "<p><strong>编程语言:</strong> Python, TypeScript, Go, SQL, C++<br/><strong>前端框架:</strong> React 18, Next.js, Vite, Tailwind CSS<br/><strong>云原生与基础设施:</strong> Docker, Kubernetes, PostgreSQL, Redis, Kafka, XeLaTeX</p>",
+  "activeSection": "basic",
+  "draggingProjectId": null,
+  "menuSections": [
+    { "id": "basic", "title": "基本信息", "icon": "👤", "enabled": true, "order": 0 },
+    { "id": "education", "title": "教育经历", "icon": "🎓", "enabled": true, "order": 1 },
+    { "id": "workExperience", "title": "工作经历", "icon": "🏢", "enabled": true, "order": 2 },
+    { "id": "projects", "title": "项目经历", "icon": "🚀", "enabled": true, "order": 3 },
+    { "id": "skills", "title": "专业技能", "icon": "⚡", "enabled": true, "order": 4 },
+    { "id": "awards", "title": "荣誉奖项", "icon": "🎖️", "enabled": true, "order": 5 },
+    { "id": "selfEvaluation", "title": "自我评价", "icon": "📝", "enabled": true, "order": 6 }
+  ],
+  "globalSettings": {
+    "lineHeight": 1.5,
+    "baseFontSize": 16,
+    "headerSize": 18,
+    "pagePadding": 40,
+    "sectionSpacing": 20,
+    "paragraphSpacing": 10,
+    "experienceGap": 1,
+    "projectExperienceGap": 1,
+    "latexFontSize": 11,
+    "latexMargin": "standard",
+    "latexLineSpacing": 1.15,
+    "latexHeaderTopGapPx": -4,
+    "latexHeaderNameContactGapPx": 0,
+    "latexHeaderBottomGapPx": -1
+  }
+}

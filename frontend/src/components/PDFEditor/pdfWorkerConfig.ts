@@ -7,8 +7,10 @@ import * as pdfjsLib from 'pdfjs-dist'
 
 // 配置 worker 源
 export function configurePDFWorker() {
-  // 优先使用多个 CDN 源作为备选，避免单点故障
+  // 优先使用本地托管的 worker，实现零外网 CDN 依赖；备选多个 CDN 兜底
+  const localWorker = '/pdfjs/pdf.worker.min.mjs'
   const workerUrls = [
+    localWorker,
     // 方案 1: JSDelivr CDN (通常更稳定)
     `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`,
     // 方案 2: unpkg CDN

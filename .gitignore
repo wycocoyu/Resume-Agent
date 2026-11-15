@@ -182,3 +182,7 @@ CONTEXT.md
 
 # --- 竞品调研文档（含产品设计/调研记录）---
 reference/
+
+# E2E Test Suite Artifacts
+*.egg-info/
+e2e_scorecard.*

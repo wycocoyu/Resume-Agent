@@ -41,6 +41,7 @@ interface PreviewPanelProps {
   onRenderModeChange?: (mode: PDFRenderMode) => void
   onRender: () => void
   onDownload: () => void
+  onEngineChange?: (engine: 'latex' | 'html') => void
   /** 顶栏操作按钮群(保存/皮肤/导入/导出),内联到工具栏右侧;原来是独立整行 */
   toolbarActions?: ReactNode
 }
@@ -57,6 +58,7 @@ export function PreviewPanel({
   onRenderModeChange = () => {},
   onRender,
   onDownload,
+  onEngineChange,
   toolbarActions,
 }: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -164,16 +166,46 @@ export function PreviewPanel({
           'border-b border-slate-200/50 dark:border-slate-700/50'
         )}
       >
-        {/* 左组:实时预览标签(HTML) / 渲染按钮 + 缩放·边距·页数(LaTeX) */}
+        {/* 左组: 双引擎切换 (LaTeX / HTML) + 渲染按钮 + 缩放·边距·页数 */}
         <div className="flex items-center gap-3 flex-wrap min-w-0">
-          {/* HTML 模板：仅显示实时预览标签 */}
+          {/* 双引擎切换 Segmented Control */}
+          <div className="inline-flex items-center p-0.5 rounded-none fresh:rounded-md border border-black fresh:border-slate-300 dark:border-white bg-[#F0F0E8] fresh:bg-slate-100 dark:bg-slate-800 shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm">
+            <button
+              type="button"
+              onClick={() => onEngineChange?.('latex')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-none fresh:rounded-sm transition-all',
+                !isHTMLTemplate
+                  ? 'bg-[#4285F4] text-white shadow-[1px_1px_0px_0px_#000000]'
+                  : 'text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white'
+              )}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>LaTeX 精排</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onEngineChange?.('html')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-none fresh:rounded-sm transition-all',
+                isHTMLTemplate
+                  ? 'bg-emerald-600 text-white shadow-[1px_1px_0px_0px_#000000]'
+                  : 'text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white'
+              )}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>HTML 实时</span>
+            </button>
+          </div>
+
+          {/* HTML 模板：显示实时预览标签 */}
           {isHTMLTemplate && (
-            <span className="px-3 py-1 text-xs font-mono fresh:font-sans font-bold uppercase fresh:normal-case tracking-wide fresh:tracking-normal bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-none fresh:rounded-md border border-black fresh:border-slate-200 dark:border-white shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[2px_2px_0px_0px_#ffffff]">
-              实时预览
+            <span className="px-2.5 py-0.5 text-xs font-mono fresh:font-sans font-bold uppercase fresh:normal-case tracking-wide fresh:tracking-normal bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-none fresh:rounded-md border border-black fresh:border-slate-200 dark:border-white shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[1px_1px_0px_0px_#ffffff]">
+              即时呈现
             </span>
           )}
 
-          {/* LaTeX 模板：仅显示渲染按钮 */}
+          {/* LaTeX 模板：显示渲染按钮 */}
           {!isHTMLTemplate && (
             <div className="flex items-center gap-3">
               {/* 渲染按钮 */}

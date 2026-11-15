@@ -1,0 +1,11 @@
+张三 · 资深全栈研发工程师 (Senior Full-Stack Architect)
+中文测试字样：
+1. 常用简体汉字：北京航空航天大学 计算机科学与技术 软件工程 分布式微服务架构
+2. 繁体与异体字：繁體中文測試 臺灣 香港 傳統漢字 爲學日益 為道日損
+3. 罕见字与扩展区（CMap与/ToUnicode测试用）：𠮷野家 𬌗 堃 赟 䶮 燚 翀
+4. 标点符号与特殊全角半角符：【】（）「」『』——……、，。！？《》“”‘’·
+5. 中日英数混合排版：
+   - React 18 & TypeScript 在 Vite 5 环境下的按需加载与 Tree-shaking 优化
+   - XeLaTeX 中文 /ToUnicode CMap 映射表注入机制与 Adobe-GB1 兼容性验证
+   - マイクロサービス (Microservices) アーキテクチャと AI エージェントの統合
+   - Single-coroutine linear event loop with 86.4% context compaction ratio

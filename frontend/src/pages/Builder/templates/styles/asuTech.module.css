@@ -1,0 +1,288 @@
+/* ASu-Tech 默认高密度单栏技术简历样式 */
+
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 7mm 10mm 8mm;
+  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.34;
+  color: #1f2937;
+  background-color: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 顶部个人信息区域 */
+.headerGrid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.headerLeft {
+  flex: 1;
+  min-width: 0;
+}
+
+.candidateName {
+  font-size: 22pt;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.candidateTitle {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 6px 0;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 9.5pt;
+  color: #4b5563;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metaDivider {
+  color: #d1d5db;
+}
+
+.photoSlot {
+  width: 28mm;
+  height: 36mm;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photoSlotEmpty {
+  border: 1px dashed #d1d5db;
+  color: #9ca3af;
+  font-size: 8pt;
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 章节通用标题 */
+.sectionBlock {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.sectionTitle {
+  font-size: 14pt;
+  font-weight: 700;
+  color: #2458b8;
+  border-bottom: 2px solid #2458b8;
+  padding-bottom: 2px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 公司与学校条目条 (灰底圆角胶囊块) */
+.companyBar {
+  background: #f2f3f5;
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-height: 31px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.companyBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.companyLogo {
+  width: 27px;
+  height: 27px;
+  border-radius: 4px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.institutionName {
+  font-size: 11.2pt;
+  font-weight: 700;
+  color: #111827;
+}
+
+.institutionSubtitle {
+  font-size: 10pt;
+  color: #374151;
+  margin-left: 6px;
+}
+
+.entryDate {
+  font-size: 9.5pt;
+  color: #4b5563;
+  white-space: nowrap;
+  font-weight: 500;
+  margin-left: 12px;
+}
+
+/* 项目与开源条目 */
+.projectEntry {
+  margin-top: 6px;
+  margin-bottom: 4px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.projectHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.projectTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.projectTitle {
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: #244b9b;
+}
+
+.projectRole {
+  font-size: 10pt;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.projectLinkPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5pt;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  text-decoration: none;
+  border: 1px solid #bfdbfe;
+}
+
+.projectLinkPill:hover {
+  background-color: #dbeafe;
+}
+
+/* 列表与多级 Bullet */
+.bulletList {
+  margin: 2px 0 4px 0;
+  padding-left: 14px;
+  list-style: none;
+}
+
+.bulletItem {
+  position: relative;
+  margin-bottom: 2px;
+  padding-left: 10px;
+  font-size: 10pt;
+  line-height: 1.34;
+}
+
+.bulletItem::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #2458b8;
+  font-weight: bold;
+}
+
+.bulletItem.nested {
+  margin-left: 12px;
+  font-size: 9.5pt;
+}
+
+.bulletItem.nested::before {
+  content: "○";
+  color: #6b7280;
+  font-size: 8.5pt;
+}
+
+.bulletItem.nestedDeep {
+  margin-left: 24px;
+  font-size: 9pt;
+}
+
+.bulletItem.nestedDeep::before {
+  content: "▪";
+  color: #9ca3af;
+  font-size: 8pt;
+}
+
+/* 行内代码样式 */
+.code {
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9pt;
+  color: #1f2937;
+}
+
+/* 打印样式适配 */
+@media print {
+  .container {
+    padding: 0 !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    box-shadow: none !important;
+  }
+
+  .photoSlotNoPhoto,
+  .photoSlotEmpty {
+    display: none !important;
+  }
+
+  .sectionBlock, .companyBar, .projectEntry {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

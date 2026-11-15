@@ -69,12 +69,12 @@ export const usePDFDocument = (pdfBlob: Blob | null): UsePDFDocumentResult => {
 
         const loadingTask = pdfjsLib.getDocument({
           data: arrayBuffer,
-          cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+          cMapUrl: '/pdfjs/cmaps/',
           cMapPacked: true,
           // 移动设备优化：使用 Range 请求但要求较大的块大小
           rangeChunkSize: 65536,
           disableStream: true, // 禁用流式处理，一次性加载整个文件
-          standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
+          standardFontDataUrl: '/pdfjs/standard_fonts/',
         })
 
         loadingTaskRef.current = loadingTask

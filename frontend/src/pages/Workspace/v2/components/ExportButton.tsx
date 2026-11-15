@@ -5,15 +5,16 @@ import { toast } from '@/lib/toast'
  */
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Download, FileJson, FileText, X } from "lucide-react";
+import { Download, FileJson, FileText, Globe, X } from "lucide-react";
 import { cn } from "../../../../lib/utils";
 import {
   fetchPdfDownloadQuota,
   recordPdfDownload,
   type PdfDownloadQuota,
 } from "@/services/api";
+import { generateHTML } from "../utils/generateHTML";
 
-type ExportFormat = "pdf" | "json";
+type ExportFormat = "pdf" | "json" | "html";
 
 interface ExportButtonProps {
   resumeData: Record<string, any>;
@@ -123,8 +124,33 @@ export function ExportButton({
     }
   };
 
+  // 导出 HTML（自包含、零网络依赖可编辑文件，本地生成不耗下载额度）
+  const exportHtml = () => {
+    setIsOpen(false);
+    try {
+      const htmlContent = generateHTML(
+        resumeData as any,
+        resumeData?.templateId || "asu-tech",
+        { editable: true, autoOnePage: true }
+      );
+      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      const safeName =
+        (resumeName || "简历")
+          .trim()
+          .replace(/[\\/:*?"<>|]/g, "_")
+          .replace(/\s+/g, " ") || "简历";
+      const date = new Date().toISOString().split("T")[0];
+      downloadBlob(blob, `${safeName}_简历_${date}.html`);
+      toast.success("已导出自包含可编辑 HTML 文件");
+    } catch (error) {
+      console.error("导出 HTML 失败:", error);
+      toast.error("导出 HTML 失败，请重试");
+    }
+  };
+
   const handleExport = () => {
     if (format === "pdf") void exportPdf();
+    else if (format === "html") exportHtml();
     else exportJson();
   };
 
@@ -190,7 +216,7 @@ export function ExportButton({
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3 grid-cols-2">
+            <div className="mt-4 grid gap-3 grid-cols-3">
               <button
                 type="button"
                 onClick={() => setFormat("pdf")}
@@ -225,6 +251,32 @@ export function ExportButton({
                     : !pdfBlob
                       ? "需要先渲染 PDF"
                       : getQuotaText()}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormat("html")}
+                className={formatCardClass(format === "html")}
+              >
+                <span
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center",
+                    format === "html"
+                      ? "bg-blue-700 text-white border border-black fresh:border-slate-200 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm"
+                      : "bg-[#F0F0E8] fresh:bg-slate-50 text-black border border-black fresh:border-slate-200 shadow-[1px_1px_0px_0px_#000000] dark:bg-[#2A2A2A] dark:text-white dark:border-white dark:shadow-[1px_1px_0px_0px_#ffffff]",
+                  )}
+                >
+                  <Globe className="h-5 w-5" strokeWidth={2} />
+                </span>
+                <span className="font-mono fresh:font-sans text-xs font-bold uppercase fresh:normal-case tracking-wide fresh:tracking-normal text-black dark:text-white">
+                  HTML
+                </span>
+                <span className="font-mono fresh:font-sans text-[10px] text-[#878E99] dark:text-neutral-400">
+                  自包含可编辑
+                </span>
+                <span className="font-mono fresh:font-sans text-[10px] text-emerald-600 dark:text-emerald-400">
+                  零网络依赖·自带工具栏
                 </span>
               </button>
 

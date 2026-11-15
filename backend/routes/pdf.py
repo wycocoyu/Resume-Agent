@@ -2,10 +2,15 @@
 PDF 渲染路由 - 使用 LaTeX 生成专业简历 PDF
 """
 import base64
+import hashlib
+import io
+import json
 import time
 import logging
+import threading
+from collections import OrderedDict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, List
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
@@ -50,6 +55,52 @@ PDF_PAYLOAD_ENCODING_HEADER = "X-PDF-Payload-Encoding"
 PDF_PAYLOAD_BASE64 = "base64"
 PDF_EVENT_HEX = "pdf"
 PDF_EVENT_BASE64 = "pdf_b64"
+
+
+class PDFCache:
+    """
+    基于 LRU 策略的 PDF 内存缓存
+    使用请求参数的规范化 JSON SHA256 作为缓存键
+    """
+    def __init__(self, max_size: int = 100):
+        self.max_size = max_size
+        self._cache: OrderedDict[str, bytes] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get_cache_key(self, resume_data: Any, section_order: Optional[List[Any]] = None) -> str:
+        payload = {"resume": resume_data, "order": section_order or []}
+        normalized = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def get_latex_cache_key(self, latex_content: str) -> str:
+        return hashlib.sha256(latex_content.encode("utf-8")).hexdigest()
+
+    def get(self, key: str) -> Optional[bytes]:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            return None
+
+    def put(self, key: str, pdf_bytes: bytes) -> None:
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            else:
+                if len(self._cache) >= self.max_size:
+                    self._cache.popitem(last=False)
+            self._cache[key] = pdf_bytes
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+
+_pdf_cache = PDFCache(max_size=100)
 
 
 def _encode_pdf_event(pdf_bytes: bytes, requested_encoding: str) -> dict:
@@ -159,7 +210,7 @@ async def render_pdf(
     """
     将简历 JSON 渲染为 PDF 并返回
     使用 LaTeX (xelatex) 生成专业排版的简历
-    直接渲染 PDF（不使用缓存）
+    优先命中 LRU 内存缓存加速
     """
     start_time = time.time()
     resume_data = body.resume
@@ -178,6 +229,27 @@ async def render_pdf(
         f"section_order={body.section_order} resume_brief={_resume_brief(resume_data)}"
     )
 
+    cache_key = _pdf_cache.get_cache_key(resume_data, body.section_order)
+    cached_pdf = _pdf_cache.get(cache_key)
+    if cached_pdf:
+        render_time = time.time() - start_time
+        quota = build_quota_payload(current_user) if current_user else None
+        print(
+            f"[PDF TRACE][render:cache-hit] trace_id={trace_id} elapsed={render_time:.4f}s "
+            f"bytes={len(cached_pdf)} user_id={uid}"
+        )
+        return StreamingResponse(
+            iter([cached_pdf]),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'inline; filename="resume.pdf"',
+                "X-Render-Time": f"{render_time:.4f}",
+                "X-PDF-Cache": "HIT",
+                "X-PDF-Trace-Id": trace_id,
+                "X-PDF-Download-Remaining": str(quota["remaining"] if quota and quota["remaining"] is not None else -1),
+            },
+        )
+
     try:
         latex_content = await run_in_threadpool(_prepare_latex_content, resume_data, body.section_order)
         pdf_bytes = await run_in_threadpool(
@@ -186,6 +258,8 @@ async def render_pdf(
             _resolve_template_dir(),
             resume_data,
         )
+
+        _pdf_cache.put(cache_key, pdf_bytes)
 
         render_time = time.time() - start_time
         quota = build_quota_payload(current_user) if current_user else None
@@ -200,6 +274,7 @@ async def render_pdf(
             headers={
                 "Content-Disposition": 'inline; filename="resume.pdf"',
                 "X-Render-Time": str(render_time),
+                "X-PDF-Cache": "MISS",
                 "X-PDF-Trace-Id": trace_id,
                 "X-PDF-Download-Remaining": str(quota["remaining"] if quota and quota["remaining"] is not None else -1),
             },
@@ -242,6 +317,32 @@ async def render_pdf_stream(
         )
 
         try:
+            cache_key = _pdf_cache.get_cache_key(resume_data, body.section_order)
+            cached_pdf = _pdf_cache.get(cache_key)
+            if cached_pdf:
+                print(f"[PDF TRACE][stream:cache-hit] trace_id={trace_id}")
+                yield dict(event="start", data="开始生成PDF...")
+                yield dict(event="progress", data="命中渲染缓存，即时就绪 (0.0s)")
+                quota = build_quota_payload(current_user) if current_user else None
+                pdf_event = _encode_pdf_event(cached_pdf, payload_encoding)
+                yield pdf_event
+                if quota:
+                    yield dict(
+                        event="quota",
+                        data=str(
+                            {
+                                "remaining": quota["remaining"],
+                                "used": quota["used"],
+                                "limit": quota["limit"],
+                            }
+                        ),
+                    )
+                print(
+                    f"[PDF TRACE][stream:done-cached] trace_id={trace_id} session_id={session_id or '-'} "
+                    f"resume_id={resume_id or '-'} event={pdf_event['event']} size={len(cached_pdf)} bytes user_id={uid}"
+                )
+                return
+
             print(f"[PDF TRACE][stream:start] trace_id={trace_id}")
             yield dict(event="start", data="开始生成PDF...")
 
@@ -270,6 +371,7 @@ async def render_pdf_stream(
                     _resolve_template_dir(),
                     resume_data,
                 )
+                _pdf_cache.put(cache_key, pdf_bytes)
                 compile_time = time.time() - compile_start
                 print(
                     f"[PDF TRACE][stream:compile-done] trace_id={trace_id} "
@@ -336,8 +438,22 @@ async def compile_latex(
     """
     直接编译 LaTeX 源代码为 PDF
     使用 slager 原版样式（与 slager.link 完全一致）
+    优先命中 LRU 内存缓存
     """
     start_time = time.time()
+    cache_key = _pdf_cache.get_latex_cache_key(body.latex_content)
+    cached_pdf = _pdf_cache.get(cache_key)
+    if cached_pdf:
+        render_time = time.time() - start_time
+        return StreamingResponse(
+            io.BytesIO(cached_pdf),
+            media_type='application/pdf',
+            headers={
+                'Content-Disposition': 'inline; filename="resume.pdf"',
+                'X-Render-Time': f"{render_time:.4f}",
+                'X-PDF-Cache': 'HIT',
+            }
+        )
 
     try:
         try:
@@ -347,13 +463,16 @@ async def compile_latex(
         # subprocess.run(timeout=180) 是重阻塞，必须放线程池，否则冻结事件循环，
         # 连带同进程所有 asyncio.to_thread 结果回调（如 PDF 导入结构化）一起卡住。
         pdf_io = await run_in_threadpool(compile_latex_raw, body.latex_content)
+        pdf_bytes = pdf_io.getvalue()
+        _pdf_cache.put(cache_key, pdf_bytes)
 
         render_time = time.time() - start_time
         print(f"[LaTeX 编译] 完成，耗时: {render_time:.2f}秒, user_id={current_user.id}")
 
-        return StreamingResponse(pdf_io, media_type='application/pdf', headers={
+        return StreamingResponse(io.BytesIO(pdf_bytes), media_type='application/pdf', headers={
             'Content-Disposition': 'inline; filename="resume.pdf"',
-            'X-Render-Time': str(render_time)
+            'X-Render-Time': str(render_time),
+            'X-PDF-Cache': 'MISS',
         })
     except HTTPException:
         raise
@@ -375,6 +494,14 @@ async def compile_latex_stream(
     """
     async def generate():
         try:
+            cache_key = _pdf_cache.get_latex_cache_key(body.latex_content)
+            cached_pdf = _pdf_cache.get(cache_key)
+            if cached_pdf:
+                yield dict(event="start", data="开始编译 LaTeX...")
+                yield dict(event="progress", data="命中编译缓存，即时就绪 (0.0s)")
+                yield dict(event="pdf", data=cached_pdf.hex())
+                return
+
             yield dict(event="start", data="开始编译 LaTeX...")
             yield dict(event="progress", data="正在准备编译环境...")
 
@@ -388,11 +515,13 @@ async def compile_latex_stream(
 
             # 同 /pdf/compile-latex：subprocess.run 必须放线程池，避免冻结事件循环。
             pdf_io = await run_in_threadpool(compile_latex_raw, body.latex_content)
+            pdf_bytes = pdf_io.getvalue()
+            _pdf_cache.put(cache_key, pdf_bytes)
             compile_time = time.time() - compile_start
 
             yield dict(event="progress", data=f"PDF 编译完成 ({compile_time:.1f}s)")
 
-            pdf_hex = pdf_io.getvalue().hex()
+            pdf_hex = pdf_bytes.hex()
             yield dict(event="pdf", data=pdf_hex)
             print(f"[LaTeX 编译] 成功，大小: {len(pdf_hex)/2} 字节, user_id={current_user.id}")
 

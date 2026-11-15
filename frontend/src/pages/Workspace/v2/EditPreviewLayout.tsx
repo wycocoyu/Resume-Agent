@@ -240,6 +240,19 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
     document.body.style.userSelect = "";
   }, []);
 
+  const handleEngineChange = useCallback((engine: 'latex' | 'html') => {
+    setResumeData((prev) => {
+      if (prev.templateType === engine) return prev;
+      return { ...prev, templateType: engine };
+    });
+    try {
+      localStorage.setItem('cococv_preferred_render_engine', engine);
+    } catch {}
+    if (engine === 'latex' && !pdfBlob) {
+      handleRender();
+    }
+  }, [setResumeData, pdfBlob, handleRender]);
+
   return (
     <div className="flex-1 min-h-0 flex relative z-10 overflow-hidden min-w-0">
       {/* 内容区域 */}
@@ -349,6 +362,7 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
             onRenderModeChange={setRenderMode}
             onRender={handleRender}
             onDownload={handleDownload}
+            onEngineChange={handleEngineChange}
             toolbarActions={toolbarActions}
           />
         </div>

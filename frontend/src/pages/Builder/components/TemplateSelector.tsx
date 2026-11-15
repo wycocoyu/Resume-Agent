@@ -224,6 +224,33 @@ export const TemplateThumbnail: React.FC<TemplateThumbnailProps> = ({ type, isAc
     )
   }
 
+  if (type === 'asu-tech' || (typeof type === 'string' && type.startsWith('asu-'))) {
+    return (
+      <div className={`w-14 h-[4.5rem] border ${borderColor} bg-white p-1 flex flex-col gap-0.5`}>
+        {/* Header with photo slot indicator */}
+        <div className="flex justify-between items-center">
+          <div className="space-y-0.5 flex-1">
+            <div className={`h-1.5 ${lineColor} w-2/3`}></div>
+            <div className={`h-0.5 ${lineColor} w-1/2 opacity-60`}></div>
+          </div>
+          <div className={`w-2.5 h-3 border ${borderColor} rounded-[1px] opacity-40`}></div>
+        </div>
+        {/* Section title blue bar */}
+        <div className={`h-0.5 ${accentColor} w-full mt-0.5`}></div>
+        {/* Company bar indicator */}
+        <div className="bg-slate-100 rounded-[2px] p-0.5 flex justify-between items-center">
+          <div className={`h-0.5 ${lineColor} w-2/5`}></div>
+          <div className={`h-0.5 ${lineColor} w-1/4 opacity-40`}></div>
+        </div>
+        {/* Bullets */}
+        <div className="space-y-0.5 pl-1">
+          <div className={`h-0.5 ${lineColor} w-4/5 opacity-50`}></div>
+          <div className={`h-0.5 ${lineColor} w-3/5 opacity-50`}></div>
+        </div>
+      </div>
+    )
+  }
+
   // Modern template thumbnail - with accent color highlights
   return (
     <div className={`w-14 h-[4.5rem] border ${borderColor} bg-white p-1.5 flex flex-col gap-1`}>

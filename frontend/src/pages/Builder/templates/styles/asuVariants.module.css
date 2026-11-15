@@ -1,0 +1,307 @@
+/* 18 套 ASu 变体模板主题与版式矩阵样式 */
+
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 8mm 10mm;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 10pt;
+  line-height: 1.35;
+  color: #1f2937;
+  background-color: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* 布局构型 1: 单栏 (Single Column) */
+.layoutSingleColumn {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* 布局构型 2: 左侧栏 (Sidebar) */
+.layoutSidebar {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+.sidebar {
+  width: 32%;
+  min-width: 180px;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+  border-radius: 6px;
+  border-right: 1px solid #e2e8f0;
+}
+
+.sidebarContent {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 布局构型 3: 双栏 (Two Column) */
+.layoutTwoColumn {
+  display: grid;
+  grid-template-columns: 1.25fr 0.95fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.colLeft, .colRight {
+  min-width: 0;
+}
+
+/* 基础通用 Header */
+.headerBlock {
+  margin-bottom: 12px;
+}
+
+.candidateName {
+  font-size: 20pt;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #111827;
+}
+
+.candidateTitle {
+  font-size: 10.5pt;
+  font-weight: 600;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 9pt;
+  color: #4b5563;
+  margin-top: 4px;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 模块标题通用 */
+.sectionTitle {
+  font-size: 12.5pt;
+  font-weight: 700;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 条目与经历通用 */
+.itemBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.itemMain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 10.5pt;
+  color: #111827;
+}
+
+.itemSub {
+  font-size: 9.5pt;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.itemDate {
+  font-size: 9pt;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.bulletList {
+  margin: 2px 0 6px 0;
+  padding-left: 14px;
+  list-style-type: disc;
+}
+
+.bulletItem {
+  font-size: 9.5pt;
+  line-height: 1.34;
+  margin-bottom: 2px;
+}
+
+/* 变体修饰符 01: 经典蓝线 */
+.variantBlueLine .sectionTitle {
+  color: #1d4ed8;
+  border-bottom: 2px solid #1d4ed8;
+  padding-bottom: 2px;
+}
+
+/* 变体修饰符 02: 蓝底色块条 */
+.variantBand .sectionTitle {
+  background-color: #1e40af;
+  color: #ffffff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11pt;
+}
+
+/* 变体修饰符 03: 时间轴 */
+.variantTimeline .timelineContainer {
+  position: relative;
+  padding-left: 16px;
+  border-left: 2px solid #cbd5e1;
+  margin-left: 6px;
+}
+
+.variantTimeline .timelineNode {
+  position: relative;
+}
+
+.variantTimeline .timelineNode::before {
+  content: "";
+  position: absolute;
+  left: -21px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #2563eb;
+  border: 2px solid #ffffff;
+}
+
+/* 变体修饰符 04: 深蓝通栏顶幅 */
+.variantTopBanner .topBanner {
+  background-color: #1e3a8a;
+  color: #ffffff;
+  margin: -8mm -10mm 12px -10mm;
+  padding: 12px 14px;
+}
+
+.variantTopBanner .topBanner .candidateName {
+  color: #ffffff;
+}
+
+.variantTopBanner .topBanner .candidateTitle {
+  color: #bfdbfe;
+}
+
+.variantTopBanner .topBanner .metaRow {
+  color: #e0e7ff;
+}
+
+/* 变体修饰符 06, 09, 13, 17: 纯黑系列 */
+.variantBlack .sectionTitle {
+  color: #000000;
+  border-bottom: 2px solid #000000;
+  padding-bottom: 2px;
+}
+
+.variantBlack .itemMain {
+  color: #000000;
+}
+
+/* 变体修饰符 07: 右侧蓝轨 */
+.variantRightRail {
+  border-right: 5px solid #2563eb;
+  padding-right: 12px;
+}
+
+/* 变体修饰符 09: 卡片分区 */
+.variantCards .cardBlock {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background-color: #fafafa;
+}
+
+/* 变体修饰符 10: 丝带标签 */
+.variantRibbon .sectionTitle {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 0 4px 4px 0;
+  clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%);
+  margin-left: -10mm;
+  padding-left: 10mm;
+}
+
+/* 变体修饰符 11, 17: 衬线/学术 */
+.variantSerif {
+  font-family: "Georgia", "Songti SC", "SimSun", "Times New Roman", serif;
+}
+
+.variantSerif .sectionTitle {
+  font-family: inherit;
+  font-style: italic;
+  border-bottom: 1px double #4b5563;
+}
+
+/* 变体修饰符 12: 居中作品集 */
+.variantCentered .headerBlock {
+  text-align: center;
+}
+
+.variantCentered .metaRow {
+  justify-content: center;
+}
+
+/* 变体修饰符 15, 18: 现代序号 */
+.variantModern .numberBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border-radius: 50%;
+  font-size: 8.5pt;
+  font-weight: bold;
+}
+
+/* 变体修饰符 16: 超高密度 */
+.variantDense {
+  padding: 5mm 8mm;
+  font-size: 9pt;
+  line-height: 1.25;
+}
+
+.variantDense .sectionTitle {
+  font-size: 11pt;
+  margin-top: 6px;
+  margin-bottom: 3px;
+}
+
+.variantDense .bulletItem {
+  font-size: 8.5pt;
+  margin-bottom: 1px;
+}
+
+/* 变体修饰符 双页 */
+.variantTwoPage {
+  min-height: 594mm;
+}
+
+@media print {
+  .container {
+    padding: 0 !important;
+    width: 210mm !important;
+  }
+}

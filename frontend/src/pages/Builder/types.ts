@@ -131,7 +131,7 @@ export function getSortedSections(resumeData: BuilderResumeData): SectionMeta[] 
  * 移植自 RM lib/utils.ts formatDateRange
  */
 export function formatDateRange(dateString: string | undefined | null): string {
-  if (!dateString) return ''
+  if (!dateString || typeof dateString !== 'string') return ''
 
   // Normalize any existing dashes (en-dash, em-dash) to hyphen-minus for ATS compatibility
   let formatted = dateString.replace(/[–—]/g, '-')

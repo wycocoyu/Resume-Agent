@@ -16,6 +16,9 @@ import { ResumeModern } from './ResumeModern'
 import { ResumeModernTwoColumn } from './ResumeModernTwoColumn'
 import { ResumeClean } from './ResumeClean'
 import { ResumeVivid } from './ResumeVivid'
+import { ResumeAsuTech } from './ResumeAsuTech'
+import { ResumeAsuVariant } from './ResumeAsuVariant'
+import type { AsuVariantId } from '../settings'
 import baseStyles from './styles/_base.module.css'
 
 interface ResumeRendererProps {
@@ -66,6 +69,16 @@ export const ResumeRenderer: React.FC<ResumeRendererProps> = ({ resumeData, sett
       )}
       {mergedSettings.template === 'vivid' && (
         <ResumeVivid data={resumeData} showContactIcons={showContactIcons} />
+      )}
+      {mergedSettings.template === 'asu-tech' && (
+        <ResumeAsuTech data={resumeData} showContactIcons={showContactIcons} />
+      )}
+      {mergedSettings.template.startsWith('asu-') && (
+        <ResumeAsuVariant
+          data={resumeData}
+          variantId={mergedSettings.template as AsuVariantId}
+          showContactIcons={showContactIcons}
+        />
       )}
     </div>
   )

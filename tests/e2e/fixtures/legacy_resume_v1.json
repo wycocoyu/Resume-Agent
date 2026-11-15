@@ -1,0 +1,54 @@
+{
+  "resume_current": "res_legacy_999",
+  "resume_resumes": ["res_legacy_999", "res_legacy_888"],
+  "resume_pinned_ids": ["res_legacy_999"],
+  "seen_changelog_version": "1.9.0",
+  "resume_v2_data": {
+    "id": "res_legacy_999",
+    "title": "李四-后端工程师-老格式",
+    "templateId": "classic",
+    "basic": {
+      "name": "李四",
+      "title": "高级后端工程师",
+      "email": "lisi@legacy-example.com",
+      "phone": "13911112222",
+      "location": "上海",
+      "summary": "5年Java/Python系统架构经验，专注于微服务治理与高可用改造。"
+    },
+    "education": [
+      {
+        "school": "同济大学",
+        "major": "软件工程",
+        "degree": "学士",
+        "startDate": "2015-09",
+        "endDate": "2019-06"
+      }
+    ],
+    "experience": [
+      {
+        "company": "美团 (Meituan)",
+        "role": "资深后端工程师",
+        "startDate": "2021-08",
+        "endDate": "至今",
+        "highlights": [
+          "负责外卖核心调度系统优化，重构订单路由逻辑，提升高峰期吞吐量40%。"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "name": "高并发订单路由服务",
+        "role": "主程",
+        "startDate": "2022-01",
+        "endDate": "2022-12",
+        "description": "基于Spring Cloud与Netty构建的低延迟分布式消息网关。"
+      }
+    ],
+    "skills": [
+      {
+        "category": "后端技术",
+        "items": ["Java", "Spring Boot", "MySQL", "Redis", "Kafka"]
+      }
+    ]
+  }
+}

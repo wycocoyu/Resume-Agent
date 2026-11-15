@@ -1,0 +1,15 @@
+{
+  "id": "path_traversal_sample",
+  "title": "路径穿越测试简历",
+  "basic": {
+    "name": "攻击者",
+    "title": "测试工程师",
+    "email": "attacker@exploit.com",
+    "phone": "13800000000",
+    "avatar": "../../../../../etc/passwd",
+    "logo": "../../../../secret.key"
+  },
+  "education": [],
+  "experience": [],
+  "projects": []
+}

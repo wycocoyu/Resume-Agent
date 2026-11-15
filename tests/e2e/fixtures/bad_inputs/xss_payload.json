@@ -1,0 +1,25 @@
+{
+  "id": "xss_payload_sample",
+  "title": "XSS注入测试简历",
+  "basic": {
+    "name": "<script>alert('xss-name')</script>李四",
+    "title": "安全审计员 <img src=x onerror=alert('xss-title')>",
+    "email": "test@safe.com",
+    "phone": "13800000000",
+    "summary": "<iframe src='javascript:alert(1)'></iframe>具有5年攻防演练经验"
+  },
+  "education": [],
+  "experience": [
+    {
+      "company": "测试实验室 <svg onload=alert('xss-svg')>",
+      "role": "安全专家",
+      "startDate": "2020-01",
+      "endDate": "2023-01",
+      "highlights": [
+        "<a href='javascript:void(0)' onclick='evil()'>点击劫持</a>",
+        "使用 `<script>` 标签与 &amp; 符号测试转义合规性"
+      ]
+    }
+  ],
+  "projects": []
+}

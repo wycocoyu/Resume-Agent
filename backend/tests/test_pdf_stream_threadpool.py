@@ -12,6 +12,8 @@ import backend.latex_generator as latex_generator
 
 
 def test_render_pdf_stream_offloads_blocking_work_to_threadpool(monkeypatch):
+    pdf_route._pdf_cache.clear()
+    latex_generator._pdf_cache.clear()
     calls: list[str] = []
 
     async def fake_run_in_threadpool(func, *args, **kwargs):

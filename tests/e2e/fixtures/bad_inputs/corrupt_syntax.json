@@ -1,0 +1,7 @@
+{
+  "id": "corrupt_syntax_sample",
+  "title": "截断的损坏JSON",
+  "basic": {
+    "name": "测试用户",
+    "email": "test@broken.com",
+    "unfinished_string": "这里缺少闭合双引号和右花括号...

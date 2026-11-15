@@ -4,6 +4,26 @@
  */
 import type React from 'react'
 
+export type AsuVariantId =
+  | 'asu-01'
+  | 'asu-02'
+  | 'asu-03'
+  | 'asu-04'
+  | 'asu-05'
+  | 'asu-06'
+  | 'asu-07'
+  | 'asu-08'
+  | 'asu-09'
+  | 'asu-10'
+  | 'asu-11'
+  | 'asu-12'
+  | 'asu-13'
+  | 'asu-14'
+  | 'asu-15'
+  | 'asu-16'
+  | 'asu-17'
+  | 'asu-18'
+
 export type TemplateType =
   | 'swiss-single'
   | 'swiss-two-column'
@@ -12,6 +32,8 @@ export type TemplateType =
   | 'latex'
   | 'clean'
   | 'vivid'
+  | 'asu-tech'
+  | AsuVariantId
 
 export type PageSize = 'A4' | 'LETTER'
 
@@ -234,6 +256,101 @@ export const TEMPLATE_OPTIONS: TemplateInfo[] = [
     id: 'vivid',
     name: 'Vivid',
     description: 'Colorful two-column layout with accent headers and arrow bullets',
+  },
+  {
+    id: 'asu-tech',
+    name: 'ASu 极客单栏',
+    description: '标准高密度技术单栏简历，精配公司条目灰色气泡与多层级项目列表',
+  },
+  {
+    id: 'asu-01',
+    name: '经典蓝线 (01)',
+    description: '深蓝横线标题，单栏紧凑排版',
+  },
+  {
+    id: 'asu-02',
+    name: '蓝底色块条 (02)',
+    description: '蓝底反白标题色块，单栏明朗结构',
+  },
+  {
+    id: 'asu-03',
+    name: '时间轴 (03)',
+    description: '左侧经历时间轴连接线，科技感脉络',
+  },
+  {
+    id: 'asu-04',
+    name: '深蓝顶幅 (04)',
+    description: '深蓝通栏顶幅背景，视觉冲击力强',
+  },
+  {
+    id: 'asu-05',
+    name: '灰调侧栏 (05)',
+    description: '左侧浅灰背景功能侧栏，右侧主经历',
+  },
+  {
+    id: 'asu-06',
+    name: '纯黑时间轴双页 (06)',
+    description: '沉稳黑灰时间轴双页设计，适合资深技术',
+  },
+  {
+    id: 'asu-07',
+    name: '右侧蓝轨 (07)',
+    description: '右侧纵向蓝轨边线，版式独特鲜明',
+  },
+  {
+    id: 'asu-08',
+    name: '色块双栏双页 (08)',
+    description: '双栏结构双页排版，信息密度充实',
+  },
+  {
+    id: 'asu-09',
+    name: '卡片分区双页 (09)',
+    description: '模块轻微卡片边框包围，层级井然',
+  },
+  {
+    id: 'asu-10',
+    name: '丝带标签 (10)',
+    description: '丝带切角标题标签，活泼有致',
+  },
+  {
+    id: 'asu-11',
+    name: '衬线分割头 (11)',
+    description: '衬线优雅字体与双线分割头',
+  },
+  {
+    id: 'asu-12',
+    name: '居中作品集双页 (12)',
+    description: '头部居中对齐，作品项目特化双页',
+  },
+  {
+    id: 'asu-13',
+    name: '纯黑紧凑侧栏 (13)',
+    description: '深黑高对比紧凑侧栏，专业硬核',
+  },
+  {
+    id: 'asu-14',
+    name: '蓝线紧凑双栏双页 (14)',
+    description: '蓝线主题紧凑双栏双页版式',
+  },
+  {
+    id: 'asu-15',
+    name: '色块现代序号 (15)',
+    description: '模块标题带圆圈序号微标',
+  },
+  {
+    id: 'asu-16',
+    name: '超高密度双栏双页 (16)',
+    description: '极端高密度双栏双页技术版式',
+  },
+  {
+    id: 'asu-17',
+    name: '纯黑学术风双页 (17)',
+    description: '纯黑严谨学术风双页排版',
+  },
+  {
+    id: 'asu-18',
+    name: '蓝线现代紧凑双页 (18)',
+    description: '现代极简蓝线双页排版',
   },
 ]
 

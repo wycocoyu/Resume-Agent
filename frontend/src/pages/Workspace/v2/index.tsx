@@ -231,6 +231,28 @@ export default function WorkspaceV2() {
     }
   }, [loading, resumeData.templateType, scheduleRender])
 
+  // 引擎偏好持久化恢复与即时渲染调度
+  useEffect(() => {
+    try {
+      const preferred = localStorage.getItem('cococv_preferred_render_engine')
+      if (preferred === 'html' || preferred === 'latex') {
+        setResumeData((prev) => {
+          if (prev.templateType === preferred) return prev
+          return { ...prev, templateType: preferred }
+        })
+      }
+    } catch {}
+  }, [setResumeData])
+
+  const prevTemplateTypeRef = useRef(resumeData.templateType)
+  useEffect(() => {
+    if (prevTemplateTypeRef.current === 'html' && resumeData.templateType === 'latex' && !pdfBlob) {
+      hasPendingRenderRef.current = true
+      scheduleRender(0)
+    }
+    prevTemplateTypeRef.current = resumeData.templateType
+  }, [resumeData.templateType, pdfBlob, scheduleRender])
+
   useEffect(() => {
     return () => {
       if (renderTimerRef.current) clearTimeout(renderTimerRef.current)
