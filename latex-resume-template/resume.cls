@@ -75,21 +75,22 @@
 
 % 时间列统一固定宽度（使用绝对单位，避免不同字号导致列宽漂移）
 \newcommand{\daterightcolwidth}{4.6cm}
-\newcommand{\dateleftcolwidth}{\dimexpr\textwidth-\daterightcolwidth\relax}
-\newcommand{\datedsection}[2]{%
-  \section[#1]{%
-    \parbox[t]{\dateleftcolwidth}{\raggedright #1}%
+\newcommand{\dateleftcolwidth}{\dimexpr\textwidth-\daterightcolwidth-0.3cm\relax}
+\newcommand{\datedtwocol}[2]{%
+  \ifthenelse{\isempty{#2}}{%
+    \parbox[t]{\textwidth}{\raggedright\strut #1}%
+  }{%
+    \parbox[t]{\dateleftcolwidth}{\raggedright\strut #1}%
     \hfill
-    {\normalsize\makebox[\daterightcolwidth][r]{#2}}%
+    \parbox[t]{\daterightcolwidth}{\raggedleft\normalsize\strut #2}%
   }%
+}
+\newcommand{\datedsection}[2]{%
+  \section[#1]{\datedtwocol{#1}{#2}}%
 }
 % 时间线固定宽度右对齐，各模块（教育/实习/项目/开源）严格共用同一列
 \newcommand{\datedsubsection}[2]{%
-  \subsection[#1]{%
-    \parbox[t]{\dateleftcolwidth}{\raggedright #1}%
-    \hfill
-    {\normalsize\makebox[\daterightcolwidth][r]{#2}}%
-  }%
+  \subsection[#1]{\datedtwocol{#1}{#2}}%
 }
 % 开源项目的“标题 + 右侧仓库地址 + 日期”专用排版。
 % 标题与仓库地址各自拥有独立列，长链接只在右侧列内换行，不会挤乱项目名。
@@ -110,11 +111,7 @@
   \vspace{0.5ex}%
 }
 \newcommand{\datedline}[2]{%
-  {\par
-    \parbox[t]{\dateleftcolwidth}{\raggedright #1}%
-    \hfill
-    {\normalsize\makebox[\daterightcolwidth][r]{#2}}
-  \par}%
+  {\par\noindent\datedtwocol{#1}{#2}\par}%
 }
 
 \newcommand{\name}[1]{

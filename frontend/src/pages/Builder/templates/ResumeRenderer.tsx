@@ -71,9 +71,13 @@ export const ResumeRenderer: React.FC<ResumeRendererProps> = ({ resumeData, sett
         <ResumeVivid data={resumeData} showContactIcons={showContactIcons} />
       )}
       {mergedSettings.template === 'asu-tech' && (
-        <ResumeAsuTech data={resumeData} showContactIcons={showContactIcons} />
+        <ResumeAsuTech
+          data={resumeData}
+          showContactIcons={showContactIcons}
+          compactMode={mergedSettings.compactMode}
+        />
       )}
-      {mergedSettings.template.startsWith('asu-') && (
+      {mergedSettings.template !== 'asu-tech' && mergedSettings.template.startsWith('asu-') && (
         <ResumeAsuVariant
           data={resumeData}
           variantId={mergedSettings.template as AsuVariantId}

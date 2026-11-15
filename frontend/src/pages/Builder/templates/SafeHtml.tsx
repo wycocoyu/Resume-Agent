@@ -30,7 +30,10 @@ export const SafeHtml: React.FC<SafeHtmlProps> = ({ html, className, as: Compone
 
   return (
     <Component
-      className={['[&_a]:text-inherit [&_a]:underline [&_strong]:font-bold [&_strong]:[-webkit-text-stroke:0.3px_currentColor]', className].filter(Boolean).join(' ')}
+      className={[
+        '[&_a]:text-inherit [&_a]:underline [&_strong]:font-bold [&_strong]:[-webkit-text-stroke:0.3px_currentColor] [&_code]:px-1 [&_code]:py-0 [&_code]:rounded-[2px] [&_code]:bg-[#eef0f3] [&_code]:font-mono [&_code]:text-[0.9em]',
+        className,
+      ].filter(Boolean).join(' ')}
       style={style}
       dangerouslySetInnerHTML={{ __html: cleanHtml }}
     />

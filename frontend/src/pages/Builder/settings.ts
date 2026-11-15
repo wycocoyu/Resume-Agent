@@ -371,6 +371,25 @@ export function applyTemplatePreset(
   settings: TemplateSettings,
   template: TemplateType
 ): TemplateSettings {
+  if (template === 'asu-tech') {
+    return {
+      ...settings,
+      template,
+      showContactIcons: true,
+      margins: { top: 7, bottom: 8, left: 10, right: 10 },
+    }
+  }
+  if (template.startsWith('asu-')) {
+    return {
+      ...settings,
+      template,
+      showContactIcons: true,
+      margins:
+        template === 'asu-12'
+          ? { top: 7, bottom: 8, left: 10, right: 10 }
+          : { top: 10, bottom: 10, left: 12, right: 12 },
+    }
+  }
   const preset = TEMPLATE_FONT_PRESETS[template]
   if (!preset) return { ...settings, template }
   return {

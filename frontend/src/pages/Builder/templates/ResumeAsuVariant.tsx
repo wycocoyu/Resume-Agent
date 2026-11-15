@@ -1,10 +1,10 @@
 /**
  * ASu 18 套变体原子模板实现
- * 规范实现：Issue #45
+ * 规范实现：Issue #45, #72（对齐 Hisn00w/ASu-skills 01..18-大厂极简简历模板.html 与 frame/base.css）
  */
 import React from 'react'
-import { Mail, Phone, MapPin, Globe, Github, ExternalLink } from 'lucide-react'
-import type { BuilderResumeData, Project, Experience, Education } from '../types'
+import { Mail, Phone, MapPin, Github, Globe } from 'lucide-react'
+import type { BuilderResumeData, Project, Experience, Education, CustomSectionItem } from '../types'
 import { getSortedSections, formatDateRange } from '../types'
 import { SafeHtml, InlineBold } from './SafeHtml'
 import { TemplateLogo } from './TemplateLogo'
@@ -16,28 +16,55 @@ interface VariantConfig {
   classNames: string[]
   hasTimeline?: boolean
   hasTopBanner?: boolean
+  showEnglish?: boolean
+  hasModernIndex?: boolean
   isTwoPage?: boolean
 }
 
 export const ASU_VARIANTS_CONFIG: Record<AsuVariantId, VariantConfig> = {
   'asu-01': { layout: 'single-column', classNames: [styles.variantBlueLine] },
   'asu-02': { layout: 'single-column', classNames: [styles.variantBand] },
-  'asu-03': { layout: 'single-column', classNames: [styles.variantTimeline], hasTimeline: true },
+  'asu-03': { layout: 'single-column', classNames: [styles.variantEnglish, styles.wideHeader, styles.variantTimeline], hasTimeline: true, showEnglish: true },
   'asu-04': { layout: 'single-column', classNames: [styles.variantTopBanner], hasTopBanner: true },
-  'asu-05': { layout: 'sidebar', classNames: [styles.variantSidebar] },
+  'asu-05': { layout: 'sidebar', classNames: [styles.variantGray, styles.variantSidebar] },
   'asu-06': { layout: 'single-column', classNames: [styles.variantBlack, styles.variantTimeline, styles.variantTwoPage], hasTimeline: true, isTwoPage: true },
   'asu-07': { layout: 'single-column', classNames: [styles.variantRightRail] },
   'asu-08': { layout: 'two-column', classNames: [styles.variantBand, styles.variantTwoPage], isTwoPage: true },
   'asu-09': { layout: 'single-column', classNames: [styles.variantBlack, styles.variantCards, styles.variantTwoPage], isTwoPage: true },
-  'asu-10': { layout: 'single-column', classNames: [styles.variantRibbon] },
-  'asu-11': { layout: 'single-column', classNames: [styles.variantSerif] },
-  'asu-12': { layout: 'single-column', classNames: [styles.variantCentered, styles.variantTwoPage], isTwoPage: true },
-  'asu-13': { layout: 'sidebar', classNames: [styles.variantBlack, styles.variantSidebar] },
-  'asu-14': { layout: 'two-column', classNames: [styles.variantBlueLine, styles.variantTwoPage], isTwoPage: true },
-  'asu-15': { layout: 'single-column', classNames: [styles.variantBand, styles.variantModern] },
+  'asu-10': { layout: 'single-column', classNames: [styles.variantRibbon], showEnglish: true },
+  'asu-11': { layout: 'single-column', classNames: [styles.variantGray, styles.variantSerif, styles.variantSplit] },
+  'asu-12': { layout: 'single-column', classNames: [styles.variantCentered, styles.variantCompact, styles.variantTwoPage], showEnglish: true, isTwoPage: true },
+  'asu-13': { layout: 'sidebar', classNames: [styles.variantBlack, styles.variantCompact, styles.variantSidebar] },
+  'asu-14': { layout: 'two-column', classNames: [styles.variantBlueLine, styles.variantCompact, styles.variantTwoPage], isTwoPage: true },
+  'asu-15': { layout: 'single-column', classNames: [styles.variantBand, styles.variantModern], hasModernIndex: true },
   'asu-16': { layout: 'two-column', classNames: [styles.variantDense, styles.variantTwoPage], isTwoPage: true },
-  'asu-17': { layout: 'single-column', classNames: [styles.variantBlack, styles.variantSerif, styles.variantTwoPage], isTwoPage: true },
-  'asu-18': { layout: 'single-column', classNames: [styles.variantBlueLine, styles.variantModern, styles.variantTwoPage], isTwoPage: true },
+  'asu-17': { layout: 'single-column', classNames: [styles.variantBlack, styles.variantCompact, styles.variantTwoPage, styles.variantAcademic, styles.variantSerif], showEnglish: true, isTwoPage: true },
+  'asu-18': { layout: 'single-column', classNames: [styles.variantBlueLine, styles.variantCompact, styles.variantTwoPage, styles.variantModern], hasModernIndex: true, isTwoPage: true },
+}
+
+const SECTION_EN_MAP: Record<string, string> = {
+  education: 'Education',
+  workExperience: 'Experience',
+  personalProjects: 'Projects',
+  openSource: 'Open Source',
+  skills: 'Skills',
+  awards: 'Honors & Awards',
+  summary: 'Summary',
+}
+
+const SHORT_ROLE_MAX_LEN = 24
+const SENTENCE_PUNCT_RE = /[。！？；;\n]/
+
+function isShortRole(role?: string): boolean {
+  if (!role || typeof role !== 'string') return false
+  const trimmed = role.trim()
+  return trimmed.length > 0 && trimmed.length <= SHORT_ROLE_MAX_LEN && !SENTENCE_PUNCT_RE.test(trimmed)
+}
+
+function normalizeSectionTitle(displayName?: string, fallback?: string): string {
+  const raw = (displayName || fallback || '').trim()
+  if (!raw) return fallback || ''
+  return raw.split(' / ')[0].trim() || raw
 }
 
 interface ResumeAsuVariantProps {
@@ -51,19 +78,39 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
   variantId,
   showContactIcons = true,
 }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource, skills, awards } = data
+  const { personalInfo, summary, workExperience, education, personalProjects, openSource, skills, awards, customSections } = data
   const config = ASU_VARIANTS_CONFIG[variantId] || ASU_VARIANTS_CONFIG['asu-01']
   const sortedSections = getSortedSections(data)
 
+  const renderSectionTitle = (title: string, secKey: string, idx: number) => {
+    const numPrefix = config.hasModernIndex ? (
+      <span className={styles.sectionNum}>{String(idx + 1).padStart(2, '0')}</span>
+    ) : null
+    const enLabel = config.showEnglish ? SECTION_EN_MAP[secKey] : undefined
+    return (
+      <h2 className={styles.sectionTitle}>
+        <span className={styles.sectionMain}>
+          {numPrefix}
+          <span>{title}</span>
+        </span>
+        {enLabel && <span className={styles.sectionEn}>{enLabel}</span>}
+      </h2>
+    )
+  }
+
   const renderBullets = (items?: string[]) => {
     if (!items || items.length === 0) return null
+    const valid = items.filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+    if (valid.length === 0) return null
     return (
       <ul className={styles.bulletList}>
-        {items.map((bullet, idx) => {
-          if (!bullet || typeof bullet !== 'string') return null
+        {valid.map((bullet, idx) => {
+          const isNested = bullet.startsWith('  ') || bullet.startsWith('\t') || bullet.trimStart().startsWith('○')
+          const cleanText = bullet.replace(/^[\s\t]*[○▪]\s*/, '').trim()
+          if (!cleanText) return null
           return (
-            <li key={idx} className={styles.bulletItem}>
-              <SafeHtml html={bullet.trim()} />
+            <li key={idx} className={isNested ? `${styles.bulletItem} ${styles.nested}` : styles.bulletItem}>
+              <SafeHtml html={cleanText} />
             </li>
           )
         })}
@@ -71,16 +118,17 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     )
   }
 
-  const renderWorkExperience = (items?: Experience[]) => {
+  const renderWorkExperience = (items?: Experience[], title = '实习经历', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>工作与实习经历 / Experience</div>
+        {renderSectionTitle(title, 'workExperience', idx)}
         <div className={config.hasTimeline ? styles.timelineContainer : undefined}>
           {items.map((exp) => (
-            <div key={exp.id} className={config.hasTimeline ? styles.timelineNode : undefined}>
-              <div className={styles.itemBar}>
-                <div className={styles.itemMain}>
+            <div key={exp.id} className={styles.entryItem}>
+              <div className={styles.entryHead}>
+                <span className={styles.entryDate}>{formatDateRange(exp.years)}</span>
+                <span className={styles.entryOrg}>
                   {exp.companyLogoUrl && (
                     <TemplateLogo
                       src={exp.companyLogoUrl}
@@ -89,9 +137,8 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
                     />
                   )}
                   <InlineBold text={exp.company || ''} />
-                  {exp.title && <span className={styles.itemSub}>({exp.title})</span>}
-                </div>
-                <div className={styles.itemDate}>{formatDateRange(exp.years)}</div>
+                </span>
+                {exp.title && <span className={styles.entryRole}>{exp.title}</span>}
               </div>
               {renderBullets(exp.description)}
             </div>
@@ -101,15 +148,16 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     )
   }
 
-  const renderEducation = (items?: Education[]) => {
+  const renderEducation = (items?: Education[], title = '教育背景', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>教育背景 / Education</div>
+        {renderSectionTitle(title, 'education', idx)}
         {items.map((edu) => (
-          <div key={edu.id}>
-            <div className={styles.itemBar}>
-              <div className={styles.itemMain}>
+          <div key={edu.id} className={styles.entryItem}>
+            <div className={styles.entryHead}>
+              <span className={styles.entryDate}>{formatDateRange(edu.years)}</span>
+              <span className={styles.entryOrg}>
                 {edu.schoolLogoUrl && (
                   <TemplateLogo
                     src={edu.schoolLogoUrl}
@@ -118,9 +166,8 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
                   />
                 )}
                 <InlineBold text={edu.institution || ''} />
-                {edu.degree && <span className={styles.itemSub}>({edu.degree})</span>}
-              </div>
-              <div className={styles.itemDate}>{formatDateRange(edu.years)}</div>
+              </span>
+              {edu.degree && <span className={styles.entryRole}>{edu.degree}</span>}
             </div>
             {renderBullets(edu.description)}
           </div>
@@ -129,89 +176,147 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     )
   }
 
-  const renderProjects = (items?: Project[], title: string = '项目经历 / Projects') => {
+  const renderProjects = (items?: Project[], title = '项目经历', secKey = 'personalProjects', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>{title}</div>
+        {renderSectionTitle(title, secKey, idx)}
         <div className={config.hasTimeline ? styles.timelineContainer : undefined}>
-          {items.map((proj) => (
-            <div key={proj.id} className={config.hasTimeline ? styles.timelineNode : undefined}>
-              <div className={styles.itemBar}>
-                <div className={styles.itemMain}>
-                  <span>{proj.name}</span>
-                  {proj.role && <span className={styles.itemSub}>({proj.role})</span>}
+          {items.map((proj) => {
+            const roleText = proj.role?.trim() || ''
+            const shortRoleText = isShortRole(roleText) ? roleText : ''
+            const longRoleText = roleText && !shortRoleText ? roleText : ''
+
+            return (
+              <div key={proj.id} className={styles.entryItem}>
+                <div className={styles.entryHead}>
+                  <span className={styles.entryDate}>{formatDateRange(proj.years)}</span>
+                  <span className={styles.entryOrg}>
+                    {proj.name}
+                    {(proj.github || proj.website) && (
+                      <a
+                        href={(proj.github || proj.website)!.startsWith('http') ? (proj.github || proj.website)! : `https://${proj.github || proj.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-current opacity-70 hover:opacity-100"
+                      >
+                        <Github size={12} />
+                      </a>
+                    )}
+                  </span>
+                  {shortRoleText && <span className={styles.entryRole}>{shortRoleText}</span>}
                 </div>
-                <div className={styles.itemDate}>{formatDateRange(proj.years)}</div>
+                {longRoleText && <div className={styles.entryOverview}>{longRoleText}</div>}
+                {renderBullets(proj.description)}
               </div>
-              {renderBullets(proj.description)}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     )
   }
 
-  const renderSkills = (items?: string[]) => {
+  const renderSkills = (items?: string[], title = '专业技能', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>专业技能 / Skills</div>
+        {renderSectionTitle(title, 'skills', idx)}
         {renderBullets(items)}
       </div>
     )
   }
 
-  const renderAwards = (items?: string[]) => {
+  const renderAwards = (items?: string[], title = '荣誉奖项', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>荣誉奖项 / Awards</div>
+        {renderSectionTitle(title, 'awards', idx)}
         {renderBullets(items)}
       </div>
     )
   }
 
-  const renderSummary = (items?: string[]) => {
+  const renderSummary = (items?: string[], title = '自我评价', idx = 0) => {
+    const valid = (items || []).filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    if (valid.length === 0) return null
+    return (
+      <div className={styles.sectionBlock}>
+        {renderSectionTitle(title, 'summary', idx)}
+        {valid.length === 1 ? (
+          <p className={styles.sectionCopy}>
+            <SafeHtml html={valid[0].trim()} />
+          </p>
+        ) : (
+          renderBullets(valid)
+        )}
+      </div>
+    )
+  }
+
+  const renderCustomSection = (items?: CustomSectionItem[], title = '其他经历', secKey = 'custom', idx = 0) => {
     if (!items || items.length === 0) return null
     return (
       <div className={styles.sectionBlock}>
-        <div className={styles.sectionTitle}>自我评价 / Summary</div>
-        {renderBullets(items)}
+        {renderSectionTitle(title, secKey, idx)}
+        {items.map((item) => (
+          <div key={item.id} className={styles.entryItem}>
+            <div className={styles.entryHead}>
+              <span className={styles.entryDate}>{formatDateRange(item.years)}</span>
+              <span className={styles.entryOrg}>
+                <InlineBold text={item.title || ''} />
+              </span>
+              {item.subtitle && <span className={styles.entryRole}>{item.subtitle}</span>}
+            </div>
+            {renderBullets(item.description)}
+          </div>
+        ))}
       </div>
     )
   }
 
   const headerElement = (
     <div className={`${styles.headerBlock} ${config.hasTopBanner ? styles.topBanner : ''}`}>
-      <h1 className={styles.candidateName}>{personalInfo?.name || 'Your Name'}</h1>
-      {personalInfo?.title && <div className={styles.candidateTitle}>{personalInfo.title}</div>}
-      <div className={styles.metaRow}>
-        {personalInfo?.phone && (
-          <span className={styles.metaItem}>
-            {showContactIcons && <Phone size={10} />}
-            <span>{personalInfo.phone}</span>
-          </span>
-        )}
-        {personalInfo?.email && (
-          <span className={styles.metaItem}>
-            {showContactIcons && <Mail size={10} />}
-            <span>{personalInfo.email}</span>
-          </span>
-        )}
-        {personalInfo?.location && (
-          <span className={styles.metaItem}>
-            {showContactIcons && <MapPin size={10} />}
-            <span>{personalInfo.location}</span>
-          </span>
-        )}
-        {personalInfo?.github && (
-          <span className={styles.metaItem}>
-            {showContactIcons && <Github size={10} />}
-            <span>{personalInfo.github.replace(/^https?:\/\//, '')}</span>
-          </span>
-        )}
+      <div className={styles.identity}>
+        <h1 className={styles.candidateName}>{personalInfo?.name || 'Your Name'}</h1>
+        {personalInfo?.title && <div className={styles.candidateTitle}>{personalInfo.title}</div>}
+        <div className={styles.contactGrid}>
+          {personalInfo?.phone && (
+            <span className={styles.metaItem}>
+              {showContactIcons && <Phone size={11} />}
+              <span>{personalInfo.phone}</span>
+            </span>
+          )}
+          {personalInfo?.email && (
+            <span className={styles.metaItem}>
+              {showContactIcons && <Mail size={11} />}
+              <span>{personalInfo.email}</span>
+            </span>
+          )}
+          {personalInfo?.location && (
+            <span className={styles.metaItem}>
+              {showContactIcons && <MapPin size={11} />}
+              <span>{personalInfo.location}</span>
+            </span>
+          )}
+          {personalInfo?.github && (
+            <span className={styles.metaItem}>
+              {showContactIcons && <Github size={11} />}
+              <span>{personalInfo.github.replace(/^https?:\/\//, '')}</span>
+            </span>
+          )}
+          {personalInfo?.website && (
+            <span className={styles.metaItem}>
+              {showContactIcons && <Globe size={11} />}
+              <span>{personalInfo.website.replace(/^https?:\/\//, '')}</span>
+            </span>
+          )}
+        </div>
       </div>
+      {personalInfo?.photo && (
+        <figure className={styles.photoFrame}>
+          <img src={personalInfo.photo} alt="Profile" className={styles.photoImg} />
+        </figure>
+      )}
     </div>
   )
 
@@ -226,15 +331,15 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
         <div className={styles.layoutSidebar}>
           <div className={styles.sidebar}>
             {headerElement}
-            {renderEducation(education)}
-            {renderSkills(skills)}
-            {renderAwards(awards)}
+            {renderEducation(education, '教育背景', 0)}
+            {renderSkills(skills, '专业技能', 1)}
+            {renderAwards(awards, '荣誉奖项', 2)}
           </div>
           <div className={styles.sidebarContent}>
-            {renderWorkExperience(workExperience)}
-            {renderProjects(personalProjects, '项目经历 / Projects')}
-            {renderProjects(openSource, '开源经历 / Open Source')}
-            {renderSummary(summary)}
+            {renderWorkExperience(workExperience, '实习经历', 0)}
+            {renderProjects(personalProjects, '项目经历', 'personalProjects', 1)}
+            {renderProjects(openSource, '开源经历', 'openSource', 2)}
+            {renderSummary(summary, '自我评价', 3)}
           </div>
         </div>
       </div>
@@ -247,44 +352,48 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
         {headerElement}
         <div className={styles.layoutTwoColumn}>
           <div className={styles.colLeft}>
-            {renderWorkExperience(workExperience)}
-            {renderProjects(personalProjects, '项目经历 / Projects')}
+            {renderWorkExperience(workExperience, '实习经历', 0)}
+            {renderProjects(personalProjects, '项目经历', 'personalProjects', 1)}
           </div>
           <div className={styles.colRight}>
-            {renderEducation(education)}
-            {renderSkills(skills)}
-            {renderProjects(openSource, '开源经历 / Open Source')}
-            {renderAwards(awards)}
-            {renderSummary(summary)}
+            {renderEducation(education, '教育背景', 0)}
+            {renderSkills(skills, '专业技能', 1)}
+            {renderProjects(openSource, '开源经历', 'openSource', 2)}
+            {renderAwards(awards, '荣誉奖项', 3)}
+            {renderSummary(summary, '自我评价', 4)}
           </div>
         </div>
       </div>
     )
   }
 
-  // Single-column default
   return (
     <div className={containerClasses}>
       {headerElement}
       <div className={styles.layoutSingleColumn}>
-        {sortedSections.map((sec) => {
+        {sortedSections.map((sec, idx) => {
           switch (sec.key) {
             case 'education':
-              return <React.Fragment key={sec.id}>{renderEducation(education)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderEducation(education, normalizeSectionTitle(sec.displayName, '教育背景'), idx)}</React.Fragment>
             case 'workExperience':
-              return <React.Fragment key={sec.id}>{renderWorkExperience(workExperience)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderWorkExperience(workExperience, normalizeSectionTitle(sec.displayName, '实习经历'), idx)}</React.Fragment>
             case 'personalProjects':
-              return <React.Fragment key={sec.id}>{renderProjects(personalProjects, `${sec.displayName} / Projects`)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderProjects(personalProjects, normalizeSectionTitle(sec.displayName, '项目经历'), 'personalProjects', idx)}</React.Fragment>
             case 'openSource':
-              return <React.Fragment key={sec.id}>{renderProjects(openSource, `${sec.displayName} / Open Source`)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderProjects(openSource, normalizeSectionTitle(sec.displayName, '开源经历'), 'openSource', idx)}</React.Fragment>
             case 'skills':
-              return <React.Fragment key={sec.id}>{renderSkills(skills)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderSkills(skills, normalizeSectionTitle(sec.displayName, '专业技能'), idx)}</React.Fragment>
             case 'awards':
-              return <React.Fragment key={sec.id}>{renderAwards(awards)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderAwards(awards, normalizeSectionTitle(sec.displayName, '荣誉奖项'), idx)}</React.Fragment>
             case 'summary':
-              return <React.Fragment key={sec.id}>{renderSummary(summary)}</React.Fragment>
-            default:
+              return <React.Fragment key={sec.id}>{renderSummary(summary, normalizeSectionTitle(sec.displayName, '自我评价'), idx)}</React.Fragment>
+            default: {
+              const custom = customSections?.[sec.key]
+              if (custom?.items?.length) {
+                return <React.Fragment key={sec.id}>{renderCustomSection(custom.items, normalizeSectionTitle(sec.displayName, sec.key), sec.key, idx)}</React.Fragment>
+              }
               return null
+            }
           }
         })}
       </div>

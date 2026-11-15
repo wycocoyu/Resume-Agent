@@ -762,27 +762,30 @@ def generate_section_opensource(resume_data: Dict[str, Any], section_titles: Dic
         content.append(f"\\section{{{escape_latex(title)}}}")
         for os_idx, os_item in enumerate(open_source):
             # 兼容两种字段名
-            item_title = escape_latex(
-                os_item.get('title') or os_item.get('name') or ''
-            )
+            raw_name = (os_item.get('title') or os_item.get('name') or '').strip()
+            item_title = escape_latex(raw_name)
             item_title = _apply_px_font_size(
                 f"\\textbf{{{item_title}}}",
                 os_item.get('projectNameFontSize'),
                 15,
             )
-            subtitle = escape_latex(
-                os_item.get('subtitle') or os_item.get('role') or ''
-            )
+            raw_subtitle = (os_item.get('subtitle') or os_item.get('role') or '').strip()
+            subtitle = escape_latex(raw_subtitle)
             # 兼容多种字段名获取仓库链接
             repo_url = (os_item.get('repo') or  # 前端使用 repo
                        os_item.get('repoUrl') or
                        os_item.get('link') or
                        os_item.get('url') or '')
 
-            # 获取日期（如果有）
-            date = escape_latex(os_item.get('date') or '')
-            if date:
-                subtitle = f"{subtitle} ({date})" if subtitle else date
+            # 获取并过滤占位日期（如 未提及 / N/A / -）
+            raw_date = (os_item.get('date') or '').strip()
+            if raw_date in {'未提及', '未知', 'N/A', 'n/a', '-', '无'}:
+                raw_date = ''
+            date = escape_latex(raw_date)
+
+            has_sentence_punct = any(ch in raw_subtitle for ch in '。！？；;\n')
+            is_short_role = bool(raw_subtitle) and len(raw_subtitle) <= 16 and not has_sentence_punct
+            overview_line = ''
 
             # 根据设置决定仓库链接位置
             if repo_display == 'icon' and repo_url:
@@ -811,11 +814,38 @@ def generate_section_opensource(resume_data: Dict[str, Any], section_titles: Dic
                 subsection_title = item_title
 
             if repo_display == 'inline' and repo_url:
+                if date and is_short_role:
+                    if len(raw_subtitle) + len(raw_date) <= 20:
+                        right_col = f"{subtitle} ({date})"
+                    else:
+                        right_col = date
+                        overview_line = subtitle
+                elif date:
+                    right_col = date
+                    if subtitle:
+                        overview_line = subtitle
+                elif is_short_role:
+                    right_col = subtitle
+                else:
+                    right_col = ''
+                    if subtitle:
+                        overview_line = subtitle
                 content.append(
-                    f"\\datedsubsectionwithrepo{{{item_title}}}{{{repo_content}}}{{{subtitle}}}"
+                    f"\\datedsubsectionwithrepo{{{item_title}}}{{{repo_content}}}{{{right_col}}}"
                 )
             else:
-                content.append(f"\\datedsubsection{{{subsection_title}}}{{{subtitle}}}")
+                if not date and is_short_role:
+                    content.append(f"\\datedsubsection{{{subsection_title}}}{{{subtitle}}}")
+                elif is_short_role and (len(raw_name) + len(raw_subtitle) <= 34):
+                    inline_title = f"{subsection_title}\\hspace{{0.5em}}{{\\normalsize {subtitle}}}"
+                    content.append(f"\\datedsubsection{{{inline_title}}}{{{date}}}")
+                else:
+                    content.append(f"\\datedsubsection{{{subsection_title}}}{{{date}}}")
+                    if subtitle:
+                        overview_line = subtitle
+
+            if overview_line:
+                content.append(f"{{\\normalsize\\noindent {overview_line}\\par\\vspace{{0.2ex}}}}")
 
             # 处理贡献描述 - description 是 HTML 格式
             description = os_item.get('description') or ''

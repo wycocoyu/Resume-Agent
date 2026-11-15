@@ -1,57 +1,92 @@
-/* ASu-Tech 默认高密度单栏技术简历样式 */
+/* ASu-Tech 单栏高密度技术简历样式（对齐 Hisn00w/ASu-skills assets/frame/asu/base.css） */
 
 .container {
   box-sizing: border-box;
   width: 100%;
-  max-width: 210mm;
-  min-height: 297mm;
-  margin: 0 auto;
-  padding: 7mm 10mm 8mm;
-  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+  margin: 0;
+  padding: 0;
+  font-family: "Times New Roman", "SimHei", "黑体", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 10.5pt;
   line-height: 1.34;
-  color: #1f2937;
+  color: #151515;
   background-color: #ffffff;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
+.container strong {
+  font-weight: 700;
+  -webkit-text-stroke: 0;
+}
+
+/* 紧凑一页模式（对齐 data-fit-spacing="tight" / data-fit-lh="tight"） */
+.compact {
+  line-height: 1.24;
+}
+
+.compact .sectionBlock {
+  margin-top: 5px;
+}
+
+.compact .sectionTitle {
+  margin-bottom: 2px;
+  padding-bottom: 1px;
+}
+
+.compact .companyBar {
+  margin: 4px 0 2px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.compact .projectEntry {
+  margin: 2px 0;
+}
+
+.compact .bulletItem {
+  margin: 0;
+}
+
 /* 顶部个人信息区域 */
 .headerGrid {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28mm;
+  gap: 8mm;
+  align-items: start;
+  margin-bottom: 6px;
 }
 
 .headerLeft {
-  flex: 1;
   min-width: 0;
 }
 
 .candidateName {
-  font-size: 22pt;
+  margin: 0 0 3px 0;
+  font-family: "Microsoft YaHei", "PingFang SC", "Arial", sans-serif;
+  font-size: 24pt;
+  line-height: 1.08;
   font-weight: 700;
-  line-height: 1.15;
-  color: #111827;
-  margin: 0 0 4px 0;
-}
-
-.candidateTitle {
-  font-size: 11pt;
-  font-weight: 600;
-  color: #374151;
-  margin: 0 0 6px 0;
+  color: #151515;
 }
 
 .metaRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  font-size: 9.5pt;
-  color: #4b5563;
+  gap: 4px;
+  margin: 2px 0;
+  font-size: 11.5pt;
+  line-height: 1.42;
+  color: #151515;
+}
+
+.metaRow a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.metaRow a:hover {
+  text-decoration: underline;
 }
 
 .metaItem {
@@ -60,66 +95,90 @@
   gap: 4px;
 }
 
+.metaIcon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: #151515;
+}
+
 .metaDivider {
-  color: #d1d5db;
+  color: #2d2d2d;
+  padding: 0 5px;
 }
 
 .photoSlot {
+  position: relative;
   width: 28mm;
   height: 36mm;
   flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  background-color: #f9fafb;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  border: 1px dashed #a8adb7;
+  background-color: #fafafa;
+  color: #8b919c;
+  font: 9pt/1.2 "Microsoft YaHei", Arial, sans-serif;
+  text-align: center;
+}
+
+.photoSlotHasPhoto {
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.photoSlotNoPhoto {
+  border: 1px dashed #a8adb7;
 }
 
 .photoSlotEmpty {
-  border: 1px dashed #d1d5db;
-  color: #9ca3af;
-  font-size: 8pt;
+  pointer-events: none;
+  font-size: 8.5pt;
+  color: #8b919c;
 }
 
 .photoImg {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* 章节通用标题 */
+/* 章节容器与蓝色 18.5pt 纯中文标题 */
 .sectionBlock {
-  margin-top: 10px;
-  margin-bottom: 4px;
-  break-inside: avoid;
-  page-break-inside: avoid;
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 
 .sectionTitle {
-  font-size: 14pt;
-  font-weight: 700;
-  color: #2458b8;
-  border-bottom: 2px solid #2458b8;
+  margin: 0 0 4px 0;
   padding-bottom: 2px;
-  margin-top: 10px;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  border-bottom: 2px solid #2458b8;
+  color: #2458b8;
+  font-family: "Microsoft YaHei", "PingFang SC", "Arial", sans-serif;
+  font-size: 18.5pt;
+  line-height: 1.03;
+  font-weight: 700;
+  break-after: avoid;
 }
 
-/* 公司与学校条目条 (灰底圆角胶囊块) */
+/* 公司 / 学校 / 开源与项目通用灰底圆角条目条 */
+.experienceItem,
+.educationItem {
+  margin: 0;
+}
+
 .companyBar {
-  background: #f2f3f5;
-  border-radius: 6px;
-  padding: 5px 8px;
-  min-height: 31px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-top: 6px;
-  margin-bottom: 4px;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 31px;
+  margin: 6px 0 4px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #f2f3f5;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -127,7 +186,7 @@
 .companyBarLeft {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex: 1;
   min-width: 0;
 }
@@ -135,144 +194,147 @@
 .companyLogo {
   width: 27px;
   height: 27px;
-  border-radius: 4px;
   object-fit: contain;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  border-radius: 4px;
+}
+
+.companyIcon {
+  width: 19px;
+  height: 19px;
+  color: #151515;
+  flex: 0 0 auto;
 }
 
 .institutionName {
   font-size: 11.2pt;
   font-weight: 700;
-  color: #111827;
+  color: #151515;
+  line-height: 1.3;
 }
 
-.institutionSubtitle {
-  font-size: 10pt;
-  color: #374151;
-  margin-left: 6px;
+.educationMajor {
+  margin-left: 14px;
+  font-size: 11.2pt;
+  font-weight: 700;
+  color: #151515;
 }
 
 .entryDate {
   font-size: 9.5pt;
-  color: #4b5563;
+  color: #202020;
   white-space: nowrap;
-  font-weight: 500;
-  margin-left: 12px;
+  flex-shrink: 0;
+  font-weight: 400;
+  margin-left: 10px;
 }
 
-/* 项目与开源条目 */
+/* 项目与开源条目主体 */
 .projectEntry {
-  margin-top: 6px;
-  margin-bottom: 4px;
+  margin: 3px 0 4px;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
-.projectHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 2px;
+.projectLead {
+  margin: 2px 0 3px;
+  color: #151515;
+  font-size: 10.2pt;
+  line-height: 1.35;
 }
 
-.projectTitleRow {
+.evidenceLink {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  margin: 2px 0 4px;
+  color: #2458b8;
+  font-size: 10.8pt;
+  font-weight: 700;
+}
+
+.evidenceLink a {
+  color: #2458b8;
+  text-decoration: underline;
+  word-break: break-all;
 }
 
 .projectTitle {
-  font-size: 11.5pt;
-  font-weight: 700;
+  margin: 3px 0 2px;
   color: #244b9b;
+  font-size: 11.5pt;
+  line-height: 1.15;
+  font-weight: 700;
+  break-after: avoid;
 }
 
-.projectRole {
-  font-size: 10pt;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.projectLinkPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 8.5pt;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background-color: #eff6ff;
-  color: #2563eb;
-  text-decoration: none;
-  border: 1px solid #bfdbfe;
-}
-
-.projectLinkPill:hover {
-  background-color: #dbeafe;
-}
-
-/* 列表与多级 Bullet */
+/* 列表与多级 Bullet（• / ○ / ▪） */
 .bulletList {
-  margin: 2px 0 4px 0;
-  padding-left: 14px;
-  list-style: none;
+  margin: 1px 0 3px 17px;
+  padding: 0;
+  list-style-type: disc;
 }
 
 .bulletItem {
-  position: relative;
-  margin-bottom: 2px;
-  padding-left: 10px;
-  font-size: 10pt;
+  margin: 1px 0;
+  font-size: 10.5pt;
   line-height: 1.34;
+  color: #151515;
+  break-inside: avoid;
 }
 
-.bulletItem::before {
-  content: "•";
-  position: absolute;
-  left: 0;
-  color: #2458b8;
-  font-weight: bold;
+.bulletItem::marker {
+  font-size: 0.8em;
+  color: #151515;
 }
 
 .bulletItem.nested {
-  margin-left: 12px;
-  font-size: 9.5pt;
+  margin-left: 18px;
+  list-style-type: circle;
+  font-size: 10.2pt;
 }
 
-.bulletItem.nested::before {
-  content: "○";
-  color: #6b7280;
-  font-size: 8.5pt;
+.bulletItem.nested::marker {
+  font-size: 0.85em;
+  color: #374151;
 }
 
 .bulletItem.nestedDeep {
-  margin-left: 24px;
-  font-size: 9pt;
+  margin-left: 35px;
+  list-style-type: square;
+  font-size: 9.8pt;
 }
 
-.bulletItem.nestedDeep::before {
-  content: "▪";
-  color: #9ca3af;
-  font-size: 8pt;
+.bulletItem.nestedDeep::marker {
+  font-size: 0.75em;
+  color: #6b7280;
 }
 
-/* 行内代码样式 */
-.code {
-  background-color: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 9pt;
-  color: #1f2937;
+/* 技能紧凑分类块 */
+.skillsBlock {
+  margin: 2px 0 4px;
+}
+
+.skillLine {
+  margin: 1.5px 0;
+  font-size: 10.2pt;
+  line-height: 1.36;
+  color: #151515;
+}
+
+.summaryParagraph {
+  margin: 3px 0;
+  font-size: 10.2pt;
+  line-height: 1.36;
+  color: #151515;
 }
 
 /* 打印样式适配 */
 @media print {
   .container {
     padding: 0 !important;
-    width: 210mm !important;
-    max-width: 210mm !important;
+    width: 100% !important;
     box-shadow: none !important;
   }
 
@@ -281,7 +343,9 @@
     display: none !important;
   }
 
-  .sectionBlock, .companyBar, .projectEntry {
+  .companyBar,
+  .projectEntry,
+  .bulletItem {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }

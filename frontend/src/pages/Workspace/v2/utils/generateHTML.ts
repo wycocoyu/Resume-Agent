@@ -24,7 +24,7 @@ function escapeHtml(text?: string | null): string {
     .replace(/'/g, '&#039;')
 }
 
-const ALLOWED_RICH_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'p', 'br'])
+const ALLOWED_RICH_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'p', 'br', 'code'])
 
 /**
  * 针对简历中富文本字段进行 XSS 白名单清洗
@@ -256,19 +256,42 @@ function generateSectionHTML(
         <section class="template-section">
           <h2 class="section-title" ${editableAttr}>${escapeHtml(sectionTitle)}</h2>
           <div class="section-content">
-            ${openSource.map(os => `
+            ${openSource.map(rawOs => {
+              const os = rawOs as {
+                project?: string
+                name?: string
+                role?: string
+                stars?: number | string
+                startDate?: string
+                endDate?: string
+                date?: string
+                repo?: string
+                description?: string
+              }
+              const projectName = os.project || os.name || ''
+              const roleText = (os.role || '').trim()
+              const isLongRole = roleText.length > 24 || /[。！？；;\n]/.test(roleText)
+              const shortRole = roleText && !isLongRole ? roleText : ''
+              const longRole = roleText && isLongRole ? roleText : ''
+              const dateText = (os.startDate || os.endDate)
+                ? `${os.startDate || ''} - ${os.endDate || ''}`
+                : (os.date || '')
+              return `
               <div class="item open-source-item">
                 <div class="item-header">
                   <div class="item-title-group">
-                    <span class="item-title" ${editableAttr}>${escapeHtml(os.project)}</span>
-                    ${os.role ? `<span class="item-subtitle" ${editableAttr}>${escapeHtml(os.role)}</span>` : ''}
+                    <span class="item-title" ${editableAttr}>${escapeHtml(projectName)}</span>
+                    ${shortRole ? `<span class="item-subtitle" ${editableAttr}>${escapeHtml(shortRole)}</span>` : ''}
                     ${os.stars ? `<span class="item-stars">★ ${escapeHtml(String(os.stars))}</span>` : ''}
+                    ${os.repo && isValidHttpUrl(os.repo) ? `<a href="${escapeHtml(os.repo.trim())}" target="_blank" rel="noopener noreferrer" class="item-link no-print">GitHub</a>` : ''}
                   </div>
-                  ${os.startDate || os.endDate ? `<span class="item-date" ${editableAttr}>${escapeHtml(os.startDate)} - ${escapeHtml(os.endDate)}</span>` : ''}
+                  ${dateText ? `<span class="item-date" ${editableAttr}>${escapeHtml(dateText)}</span>` : ''}
                 </div>
+                ${longRole ? `<div class="item-overview" ${editableAttr}>${escapeHtml(longRole)}</div>` : ''}
                 ${os.description ? `<div class="item-description" ${editableAttr}>${sanitizeRichText(os.description)}</div>` : ''}
               </div>
-            `).join('')}
+              `
+            }).join('')}
           </div>
         </section>
       `
@@ -303,7 +326,8 @@ export function generateHTML(
   options?: GenerateHTMLOptions
 ): string {
   const isEditable = options?.editable ?? true
-  const themeColor = options?.themeColor || '#2563eb'
+  const isAsuTech = templateId === 'asu-tech'
+  const themeColor = options?.themeColor || (isAsuTech ? '#2458b8' : '#2563eb')
   const editableAttr = isEditable ? 'contenteditable="true" spellcheck="false"' : ''
   const { basic, globalSettings, sectionOrder } = resumeData
 
@@ -502,6 +526,60 @@ export function generateHTML(
       margin-bottom: var(--list-item-gap);
     }
 
+    .item-overview {
+      margin: 3px 0 4px;
+      font-size: 9.5pt;
+      line-height: 1.38;
+      color: #334155;
+    }
+
+    .item-description code {
+      display: inline-block;
+      padding: 0 5px;
+      margin: 0 1px;
+      font-size: 9pt;
+      border-radius: 3px;
+      background: #f3f5f8;
+      border: 1px solid #e3e7ee;
+      color: #20242c;
+      font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+    }
+
+    .html-template-container.template-asu-tech {
+      --theme-color: #2458b8;
+      color: #181a1f;
+      padding: 18px 24px 20px;
+    }
+
+    .html-template-container.template-asu-tech .template-header {
+      border-bottom: none;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+    }
+
+    .html-template-container.template-asu-tech .candidate-name {
+      font-size: 24pt;
+      font-weight: 800;
+      color: #151515;
+    }
+
+    .html-template-container.template-asu-tech .section-title {
+      font-size: 18.5pt;
+      font-weight: 800;
+      color: #2458b8;
+      border-bottom: 2px solid #2458b8;
+      padding-bottom: 3px;
+      margin-bottom: 8px;
+    }
+
+    .html-template-container.template-asu-tech .item-header {
+      min-height: 31px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: #f2f3f5;
+      margin-bottom: 5px;
+    }
+
     /* 行内编辑模式高亮 */
     [contenteditable="true"] {
       outline: none;
@@ -649,7 +727,7 @@ export function generateHTML(
   </div>` : ''}
 
   <!-- 简历主容器 -->
-  <div class="html-template-container" id="resume-container">
+  <div class="html-template-container${isAsuTech ? ' template-asu-tech' : ''}" id="resume-container">
     <!-- Header -->
     <header class="template-header">
       <div class="header-left">

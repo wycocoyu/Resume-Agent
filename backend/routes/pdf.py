@@ -57,6 +57,46 @@ PDF_EVENT_HEX = "pdf"
 PDF_EVENT_BASE64 = "pdf_b64"
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_LATEX_FINGERPRINT_FILES = (
+    _PROJECT_ROOT / "latex-resume-template" / "resume.cls",
+    _PROJECT_ROOT / "backend" / "latex_sections.py",
+    _PROJECT_ROOT / "backend" / "latex_generator.py",
+    _PROJECT_ROOT / "backend" / "html_to_latex.py",
+)
+_TEMPLATE_FP_LOCK = threading.Lock()
+_TEMPLATE_FP_STAT_KEY: Optional[tuple] = None
+_TEMPLATE_FP_VALUE: str = ""
+
+
+def _get_latex_template_fingerprint() -> str:
+    """Compute a fast stat-cached content SHA256 across core LaTeX template/generator files."""
+    global _TEMPLATE_FP_STAT_KEY, _TEMPLATE_FP_VALUE
+    stats = []
+    for path in _LATEX_FINGERPRINT_FILES:
+        try:
+            st = path.stat()
+            stats.append((str(path), st.st_mtime_ns, st.st_size))
+        except OSError:
+            stats.append((str(path), -1, -1))
+    stat_key = tuple(stats)
+
+    with _TEMPLATE_FP_LOCK:
+        if _TEMPLATE_FP_STAT_KEY == stat_key and _TEMPLATE_FP_VALUE:
+            return _TEMPLATE_FP_VALUE
+        hasher = hashlib.sha256()
+        for path in _LATEX_FINGERPRINT_FILES:
+            hasher.update(path.name.encode("utf-8"))
+            try:
+                hasher.update(path.read_bytes())
+            except OSError:
+                hasher.update(b"<missing>")
+        fp = hasher.hexdigest()[:16]
+        _TEMPLATE_FP_STAT_KEY = stat_key
+        _TEMPLATE_FP_VALUE = fp
+        return fp
+
+
 class PDFCache:
     """
     基于 LRU 策略的 PDF 内存缓存
@@ -68,12 +108,17 @@ class PDFCache:
         self._lock = threading.Lock()
 
     def get_cache_key(self, resume_data: Any, section_order: Optional[List[Any]] = None) -> str:
-        payload = {"resume": resume_data, "order": section_order or []}
+        payload = {
+            "resume": resume_data,
+            "order": section_order or [],
+            "tpl": _get_latex_template_fingerprint(),
+        }
         normalized = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def get_latex_cache_key(self, latex_content: str) -> str:
-        return hashlib.sha256(latex_content.encode("utf-8")).hexdigest()
+        fp = _get_latex_template_fingerprint()
+        return hashlib.sha256(f"{fp}::{latex_content}".encode("utf-8")).hexdigest()
 
     def get(self, key: str) -> Optional[bytes]:
         with self._lock:

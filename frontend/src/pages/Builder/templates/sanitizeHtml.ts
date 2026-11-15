@@ -3,7 +3,7 @@
  * 仅保留 strong/b/em/i/u/a,a 的 href 限 http/https/mailto/tel;其余标签拍平为纯文本。
  */
 
-const INLINE_TAGS = new Set(['STRONG', 'B', 'EM', 'I', 'U', 'A'])
+const INLINE_TAGS = new Set(['STRONG', 'B', 'EM', 'I', 'U', 'A', 'CODE'])
 
 export function escapeText(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

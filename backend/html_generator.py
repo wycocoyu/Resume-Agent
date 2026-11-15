@@ -51,7 +51,7 @@ SVG_ICONS = {
     ),
 }
 
-ALLOWED_RICH_TAGS = {"b", "strong", "i", "em", "u", "ul", "ol", "li", "p", "br"}
+ALLOWED_RICH_TAGS = {"b", "strong", "i", "em", "u", "ul", "ol", "li", "p", "br", "code"}
 
 
 def escape_html(text: Any) -> str:
@@ -426,15 +426,18 @@ def _render_section(
             return ""
         items_html = []
         for os_entry in oss:
-            pname = os_entry.get("project") or ""
-            role = os_entry.get("role") or ""
+            pname = os_entry.get("project") or os_entry.get("name") or ""
+            role = (os_entry.get("role") or "").strip()
             stars = os_entry.get("stars")
             start = os_entry.get("startDate") or ""
             end = os_entry.get("endDate") or ""
             desc = os_entry.get("description") or ""
 
-            date_str = f"{escape_html(start)} - {escape_html(end)}" if (start or end) else ""
-            sub_str = role
+            date_str = f"{escape_html(start)} - {escape_html(end)}" if (start or end) else escape_html(os_entry.get("date") or "")
+            is_long_role = len(role) > 24 or any(ch in role for ch in "。！？；;\n")
+            short_role = "" if is_long_role else role
+            long_role = role if is_long_role else ""
+            sub_str = short_role
             if stars is not None:
                 sub_str = f"{sub_str} (★ {stars})" if sub_str else f"★ {stars}"
 
@@ -445,6 +448,7 @@ def _render_section(
                     date_str=date_str,
                     description=desc,
                     template_id=template_id,
+                    overview=long_role,
                 )
             )
         return _wrap_section(title, "".join(items_html), template_id)
@@ -500,10 +504,12 @@ def _render_item_bar(
     description: str,
     template_id: str,
     is_title_html: bool = False,
+    overview: str = "",
 ) -> str:
     escaped_title = title if is_title_html else escape_html(title)
     escaped_sub = escape_html(subtitle)
     escaped_date = escape_html(date_str)
+    overview_html = f'<div class="item-overview">{escape_html(overview)}</div>' if overview else ""
     desc_html = f'<div class="item-desc">{sanitize_rich_text(description)}</div>' if description else ""
 
     if template_id == "asu-tech":
@@ -516,6 +522,7 @@ def _render_item_bar(
             </div>
             {f'<span class="itemDate">{escaped_date}</span>' if escaped_date else ''}
           </div>
+          {overview_html}
           {desc_html}
         </div>
         """
@@ -529,6 +536,7 @@ def _render_item_bar(
         </div>
         {f'<span class="item-date">{escaped_date}</span>' if escaped_date else ''}
       </div>
+      {overview_html}
       {desc_html}
     </div>
     """
@@ -727,6 +735,21 @@ def _build_styles(template_id: str, primary_color: str, print_background: bool) 
       margin-bottom: 2px;
     }}
 
+    .item-desc code, .rich-content code {{
+      padding: 0 3px;
+      border-radius: 2px;
+      background: #eef0f3;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.9em;
+    }}
+
+    .item-overview {{
+      font-size: 9.8pt;
+      color: #151515;
+      line-height: 1.36;
+      margin: 2px 0 3px;
+    }}
+
     /* A4 print media */
     @page {{
       size: A4 portrait;
@@ -757,15 +780,19 @@ def _build_styles(template_id: str, primary_color: str, print_background: bool) 
     # Template-specific style overrides
     if template_id == "asu-tech":
         template_css = """
+        .candidate-name {
+          font-size: 24pt;
+          color: #151515;
+        }
         .companyBar {
           background: #f2f3f5;
           border-radius: 6px;
           padding: 5px 8px;
-          min-height: 28px;
+          min-height: 31px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-top: 4px;
+          margin-top: 6px;
           margin-bottom: 4px;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
@@ -773,30 +800,32 @@ def _build_styles(template_id: str, primary_color: str, print_background: bool) 
         .companyBarLeft {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 7px;
           flex: 1;
+          min-width: 0;
         }
         .institutionName {
-          font-size: 10.5pt;
+          font-size: 11.2pt;
           font-weight: 700;
-          color: #111827;
+          color: #151515;
         }
         .institutionSubtitle {
-          font-size: 9.5pt;
-          color: #4b5563;
+          font-size: 10.2pt;
+          color: #374151;
         }
         .itemDate {
-          font-size: 9pt;
-          color: #6b7280;
+          font-size: 9.5pt;
+          color: #202020;
+          white-space: nowrap;
         }
         .section-title {
-          font-size: 13pt;
+          font-size: 18.5pt;
           font-weight: 700;
           color: var(--primary-color);
           border-bottom: 2px solid var(--primary-color);
           padding-bottom: 2px;
           margin-top: 8px;
-          margin-bottom: 6px;
+          margin-bottom: 4px;
         }
         """
     elif template_id in ("asu-02", "asu-08", "asu-15"):  # Band style

@@ -1,307 +1,626 @@
-/* 18 套 ASu 变体模板主题与版式矩阵样式 */
+/* 18 套 ASu 变体模板主题与版式矩阵样式（对齐 Hisn00w/ASu-skills assets/frame/base.css） */
 
 .container {
   box-sizing: border-box;
   width: 100%;
-  max-width: 210mm;
-  min-height: 297mm;
-  margin: 0 auto;
-  padding: 8mm 10mm;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 10pt;
-  line-height: 1.35;
-  color: #1f2937;
+  margin: 0;
+  padding: 0;
+  --blue: #2c5b95;
+  --ink: #20252b;
+  --muted: #5e6773;
+  --rule: #315f98;
+  font-family: "Times New Roman", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-size: 9.8pt;
+  line-height: 1.38;
+  color: var(--ink);
   background-color: #ffffff;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-/* 布局构型 1: 单栏 (Single Column) */
+.container strong {
+  font-weight: 700;
+  -webkit-text-stroke: 0;
+}
+
+/* 顶部个人信息 */
+.headerBlock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.identity {
+  min-width: 0;
+}
+
+.candidateName {
+  margin: 0 0 3px 0;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 22pt;
+  line-height: 1.12;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #121417;
+}
+
+.candidateTitle {
+  margin: 0 0 8px 0;
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 11pt;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  font-size: 9pt;
+  color: #424b56;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.photoFrame {
+  width: 24mm;
+  height: 31mm;
+  border: 1px solid #cbd4de;
+  padding: 2px;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.photoImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 宽头：左图右文（asu-03） */
+.wideHeader .headerBlock {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.wideHeader .photoFrame {
+  order: -1;
+}
+
+/* 布局构型 */
 .layoutSingleColumn {
   display: flex;
   flex-direction: column;
   width: 100%;
 }
 
-/* 布局构型 2: 左侧栏 (Sidebar) */
 .layoutSidebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 31% minmax(0, 1fr);
   gap: 16px;
+  align-items: start;
   width: 100%;
 }
 
 .sidebar {
-  width: 32%;
-  min-width: 180px;
-  padding: 8px 12px;
-  background-color: #f8fafc;
-  border-radius: 6px;
-  border-right: 1px solid #e2e8f0;
+  padding: 12px;
+  background-color: #eef2f5;
+  border-top: 8px solid var(--blue);
+  border-radius: 2px;
+}
+
+.sidebar .headerBlock {
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: 8px;
+  border-bottom: 1px solid #cbd4de;
+}
+
+.sidebar .candidateName {
+  font-size: 17pt;
+}
+
+.sidebar .contactGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar .sectionBlock:first-of-type {
+  margin-top: 4px;
+}
+
+.sidebar .sectionTitle {
+  font-size: 11.5pt;
+  border-bottom: 0;
+  margin-bottom: 4px;
+  color: #283d56;
+}
+
+.sidebar .entryHead {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+}
+
+.sidebar .entryRole {
+  text-align: left;
+  color: #334b68;
 }
 
 .sidebarContent {
-  flex: 1;
   min-width: 0;
 }
 
-/* 布局构型 3: 双栏 (Two Column) */
 .layoutTwoColumn {
   display: grid;
-  grid-template-columns: 1.25fr 0.95fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr);
+  gap: 18px;
+  align-items: start;
   width: 100%;
 }
 
-.colLeft, .colRight {
+.colLeft,
+.colRight {
   min-width: 0;
 }
 
-/* 基础通用 Header */
-.headerBlock {
-  margin-bottom: 12px;
+.layoutTwoColumn .sectionBlock {
+  margin-top: 0;
 }
 
-.candidateName {
-  font-size: 20pt;
-  font-weight: 700;
-  line-height: 1.2;
-  color: #111827;
+.layoutTwoColumn .sectionBlock + .sectionBlock {
+  margin-top: 12px;
 }
 
-.candidateTitle {
-  font-size: 10.5pt;
-  font-weight: 600;
-  color: #4b5563;
-  margin-top: 2px;
-}
-
-.metaRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  font-size: 9pt;
-  color: #4b5563;
-  margin-top: 4px;
-}
-
-.metaItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* 模块标题通用 */
-.sectionTitle {
+.layoutTwoColumn .sectionTitle {
   font-size: 12.5pt;
-  font-weight: 700;
-  margin-top: 10px;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
-/* 条目与经历通用 */
-.itemBar {
+.layoutTwoColumn .entryHead {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+}
+
+.layoutTwoColumn .entryOrg {
+  grid-column: 1 / -1;
+}
+
+.layoutTwoColumn .entryRole {
+  grid-column: 1 / -1;
+  text-align: left;
+  color: var(--blue);
+}
+
+/* 章节标题 */
+.sectionBlock {
+  margin-top: 10px;
+}
+
+.sectionTitle {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  margin-top: 4px;
+  gap: 8px;
+  margin: 0 0 6px 0;
+  padding: 0 0 4px 0;
+  color: var(--blue);
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 13.5pt;
+  font-weight: 700;
+  line-height: 1.18;
+  border-bottom: 2px solid var(--rule);
+  break-after: avoid;
+}
+
+.sectionMain {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.sectionEn {
+  color: #8993a0;
+  font-size: 8.5pt;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.sectionNum {
+  color: #77a8c2;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
+}
+
+/* 三列对齐条目头：[时间 | 组织/项目 | 角色] */
+.entryItem {
+  margin: 0 0 8px 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.entryHead {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) minmax(72px, auto);
+  column-gap: 8px;
+  align-items: baseline;
   margin-bottom: 2px;
 }
 
-.itemMain {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.entryDate {
+  color: #4f5965;
+  font-size: 8.8pt;
   font-weight: 700;
-  font-size: 10.5pt;
-  color: #111827;
-}
-
-.itemSub {
-  font-size: 9.5pt;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.itemDate {
-  font-size: 9pt;
-  color: #6b7280;
   white-space: nowrap;
 }
 
+.entryOrg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 10pt;
+  font-weight: 700;
+  color: #1d2630;
+}
+
+.entryRole {
+  text-align: right;
+  font-size: 9.2pt;
+  font-weight: 600;
+  color: #293846;
+}
+
+.entryOverview {
+  margin: 2px 0 3px;
+  font-size: 9.2pt;
+  line-height: 1.36;
+  color: #293846;
+}
+
 .bulletList {
-  margin: 2px 0 6px 0;
-  padding-left: 14px;
+  margin: 2px 0 0 0;
+  padding-left: 17px;
   list-style-type: disc;
 }
 
 .bulletItem {
-  font-size: 9.5pt;
-  line-height: 1.34;
-  margin-bottom: 2px;
+  margin: 2px 0;
+  font-size: 9.4pt;
+  line-height: 1.36;
+  color: #20252b;
 }
 
-/* 变体修饰符 01: 经典蓝线 */
+.bulletItem.nested {
+  margin-left: 14px;
+  list-style-type: circle;
+}
+
+.sectionCopy {
+  margin: 4px 0;
+  font-size: 9.4pt;
+  line-height: 1.38;
+}
+
+/* 01: 经典蓝线 */
+.variantBlueLine .headerBlock {
+  border-bottom: 3px solid var(--rule);
+}
+
 .variantBlueLine .sectionTitle {
-  color: #1d4ed8;
-  border-bottom: 2px solid #1d4ed8;
-  padding-bottom: 2px;
+  font-weight: 800;
 }
 
-/* 变体修饰符 02: 蓝底色块条 */
+/* 02, 08, 15: 双色色块横条 */
 .variantBand .sectionTitle {
-  background-color: #1e40af;
-  color: #ffffff;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11pt;
+  gap: 0;
+  padding: 0;
+  color: #1d2630;
+  background: #edf0f3;
+  border-bottom: 0;
 }
 
-/* 变体修饰符 03: 时间轴 */
+.variantBand .sectionMain {
+  min-width: 96px;
+  padding: 4px 10px;
+  background: var(--blue);
+  color: #ffffff;
+}
+
+.variantBand .sectionEn {
+  padding: 4px 8px;
+}
+
+/* 03, 06: 纵向时间轴（含圆点外圈） */
 .variantTimeline .timelineContainer {
   position: relative;
-  padding-left: 16px;
-  border-left: 2px solid #cbd5e1;
-  margin-left: 6px;
+  margin-left: 4px;
 }
 
-.variantTimeline .timelineNode {
+.variantTimeline .entryItem {
   position: relative;
+  margin-left: 8px;
+  padding: 0 0 6px 16px;
+  border-left: 2px solid #a9b8c7;
 }
 
-.variantTimeline .timelineNode::before {
+.variantTimeline .entryItem::before {
   content: "";
   position: absolute;
-  left: -21px;
+  left: -6px;
   top: 4px;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background-color: #2563eb;
-  border: 2px solid #ffffff;
+  background: var(--blue);
+  box-shadow: 0 0 0 3px #e7edf3;
 }
 
-/* 变体修饰符 04: 深蓝通栏顶幅 */
+.variantTimeline .entryHead {
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+
+.variantTimeline .entryRole {
+  grid-column: 2;
+  text-align: left;
+  color: var(--blue);
+}
+
+/* 04: 深蓝通栏顶幅 */
 .variantTopBanner .topBanner {
-  background-color: #1e3a8a;
+  background: #243b5a;
   color: #ffffff;
-  margin: -8mm -10mm 12px -10mm;
-  padding: 12px 14px;
+  border-bottom: 6px solid #8db4dc;
+  padding: 14px 16px;
+  margin-bottom: 12px;
 }
 
-.variantTopBanner .topBanner .candidateName {
+.variantTopBanner .topBanner .candidateName,
+.variantTopBanner .topBanner .candidateTitle,
+.variantTopBanner .topBanner .contactGrid {
   color: #ffffff;
 }
 
 .variantTopBanner .topBanner .candidateTitle {
-  color: #bfdbfe;
+  opacity: 0.9;
 }
 
-.variantTopBanner .topBanner .metaRow {
-  color: #e0e7ff;
+.variantTopBanner .topBanner .photoFrame {
+  border-color: #ffffff;
 }
 
-/* 变体修饰符 06, 09, 13, 17: 纯黑系列 */
+/* 05, 11: 灰调稳重 */
+.variantGray .headerBlock {
+  border-bottom: 1px solid #7a858f;
+}
+
+.variantGray .sectionTitle {
+  color: #303841;
+  border-color: #818a94;
+}
+
+/* 06, 09, 13, 17: 纯黑硬核（标题前小方块） */
+.variantBlack {
+  --blue: #14171a;
+  --rule: #14171a;
+}
+
 .variantBlack .sectionTitle {
-  color: #000000;
-  border-bottom: 2px solid #000000;
-  padding-bottom: 2px;
+  color: #14171a;
+  border-bottom: 2.5px solid #14171a;
 }
 
-.variantBlack .itemMain {
-  color: #000000;
+.variantBlack .sectionTitle::before {
+  content: "";
+  width: 6px;
+  height: 15px;
+  background: #14171a;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
-/* 变体修饰符 07: 右侧蓝轨 */
+.variantBlack .sidebar {
+  border-top-color: #14171a;
+}
+
+/* 07: 右侧蓝轨 + 左侧标题竖条 */
 .variantRightRail {
-  border-right: 5px solid #2563eb;
+  border-right: 10px solid var(--blue);
   padding-right: 12px;
 }
 
-/* 变体修饰符 09: 卡片分区 */
-.variantCards .cardBlock {
-  border: 1px solid #e5e7eb;
+.variantRightRail .headerBlock {
+  border-bottom: 1px solid #b8c3ce;
+}
+
+.variantRightRail .sectionTitle {
+  border-left: 8px solid var(--blue);
+  padding-left: 9px;
+  border-bottom: 1px solid #9eabb8;
+}
+
+/* 09: 卡片分区 */
+.variantCards .sectionBlock {
+  padding: 10px 12px;
+  background: #f7f9fb;
+  border: 1px solid #d6dee7;
   border-radius: 6px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  background-color: #fafafa;
 }
 
-/* 变体修饰符 10: 丝带标签 */
+.variantCards .sectionTitle {
+  border-bottom: 0;
+  margin-bottom: 6px;
+}
+
+.variantCards .entryItem {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #dfe5eb;
+}
+
+.variantCards .entryItem:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* 10: 丝带双色标签 */
+.variantRibbon .candidateName {
+  color: #2c5b95;
+}
+
 .variantRibbon .sectionTitle {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: #ffffff;
-  display: inline-block;
-  padding: 3px 12px;
-  border-radius: 0 4px 4px 0;
-  clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%);
-  margin-left: -10mm;
-  padding-left: 10mm;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: #eff1f3;
 }
 
-/* 变体修饰符 11, 17: 衬线/学术 */
-.variantSerif {
-  font-family: "Georgia", "Songti SC", "SimSun", "Times New Roman", serif;
+.variantRibbon .sectionMain {
+  min-width: 112px;
+  padding: 4px 12px;
+  background: #315f98;
+  color: #ffffff;
+  clip-path: polygon(0 0, 100% 0, 94% 100%, 0 100%);
+}
+
+.variantRibbon .sectionEn {
+  padding: 4px 10px;
+}
+
+/* 11, 17: 衬线与分割头 */
+.variantSerif .candidateName,
+.variantSerif .sectionTitle {
+  font-family: Georgia, "Times New Roman", "Songti SC", "Microsoft YaHei", serif;
 }
 
 .variantSerif .sectionTitle {
-  font-family: inherit;
-  font-style: italic;
-  border-bottom: 1px double #4b5563;
+  color: #33414e;
+  border-bottom: 1px solid #33414e;
 }
 
-/* 变体修饰符 12: 居中作品集 */
+.variantSplit .headerBlock {
+  border-bottom: 1px solid #263746;
+}
+
+/* 12: 居中作品集（两侧横线扩展标题） */
 .variantCentered .headerBlock {
+  grid-template-columns: 1fr;
   text-align: center;
 }
 
-.variantCentered .metaRow {
-  justify-content: center;
+.variantCentered .photoFrame {
+  order: -1;
+  margin: 0 auto 4px;
 }
 
-/* 变体修饰符 15, 18: 现代序号 */
-.variantModern .numberBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  background-color: #2563eb;
-  color: #ffffff;
-  border-radius: 50%;
-  font-size: 8.5pt;
-  font-weight: bold;
+.variantCentered .contactGrid {
+  max-width: 560px;
+  margin: 0 auto;
+  justify-items: center;
 }
 
-/* 变体修饰符 16: 超高密度 */
+.variantCentered .sectionTitle {
+  justify-content: center;
+  border-bottom: 0;
+  letter-spacing: 0.06em;
+}
+
+.variantCentered .sectionTitle::before,
+.variantCentered .sectionTitle::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #9daab6;
+}
+
+/* 03/10 英文 / 虚线分隔 */
+.variantEnglish .entryHead {
+  border-bottom: 1px dotted #aab4c0;
+  padding-bottom: 3px;
+}
+
+/* 15, 18: 现代序号主题色 */
+.variantModern .headerBlock {
+  border-bottom: 8px solid #e8eef4;
+}
+
+.variantModern .sectionTitle {
+  color: #1e6792;
+  border-bottom: 1px solid #77a8c2;
+}
+
+.variantBand.variantModern .sectionTitle {
+  border-bottom: 0;
+}
+
+.variantBand.variantModern .sectionNum {
+  color: #dbeafe;
+}
+
+/* 17: 学术双页顶部粗线 */
+.variantAcademic {
+  border-top: 10px solid #17191b;
+  padding-top: 8px;
+}
+
+.variantAcademic .sectionEn {
+  color: #17191b;
+}
+
+/* 紧凑 & 超高密度 */
+.variantCompact {
+  font-size: 9.2pt;
+  line-height: 1.32;
+}
+
+.variantCompact .sectionBlock {
+  margin-top: 8px;
+}
+
+.variantCompact .entryItem {
+  margin-bottom: 6px;
+}
+
 .variantDense {
-  padding: 5mm 8mm;
-  font-size: 9pt;
-  line-height: 1.25;
+  font-size: 8.8pt;
+  line-height: 1.26;
+}
+
+.variantDense .headerBlock {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.variantDense .sectionBlock {
+  margin-top: 7px;
 }
 
 .variantDense .sectionTitle {
-  font-size: 11pt;
-  margin-top: 6px;
-  margin-bottom: 3px;
+  font-size: 11.5pt;
+  margin-bottom: 4px;
 }
 
-.variantDense .bulletItem {
-  font-size: 8.5pt;
-  margin-bottom: 1px;
+.variantDense .entryHead {
+  grid-template-columns: 108px minmax(0, 1fr);
 }
 
-/* 变体修饰符 双页 */
+.variantDense .entryItem {
+  margin-bottom: 5px;
+}
+
 .variantTwoPage {
-  min-height: 594mm;
+  /* 允许自然延续两页，不再硬写 min-height: 594mm 制造空页 */
 }
 
 @media print {
   .container {
     padding: 0 !important;
-    width: 210mm !important;
+    width: 100% !important;
   }
 }

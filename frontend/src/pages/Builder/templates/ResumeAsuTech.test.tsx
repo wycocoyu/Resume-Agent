@@ -121,4 +121,74 @@ describe('ResumeAsuTech & ResumeAsuVariant hardening', () => {
     expect(container.textContent).toContain('主导前端微前端架构演进')
     expect(container.textContent).toContain('GPA 3.9')
   })
+
+  it('aligns ResumeAsuTech headings, 3-row header, inline code, and long openSource role placement with ASu-skills spec', () => {
+    const longRole =
+      '开源核心作者，基于多代理编排与流式生成流水线构建交互式技术文档助手。支持实时结构化预览、模板渲染工具链调用与多格式导出扩展。'
+    const specData = {
+      ...baseData,
+      personalInfo: {
+        ...baseData.personalInfo,
+        title: '全栈开发工程师',
+        location: '深圳',
+        github: 'github.com/example-demo',
+      },
+      openSource: [
+        {
+          id: 'os-long-role',
+          name: 'OpenAgent 示例框架',
+          role: longRole,
+          github: 'https://github.com/example/openagent-demo',
+          years: '2025.11 - 至今',
+          description: ['设计插件化渲染管线与流式状态机'],
+        },
+      ],
+      skills: ['后端：熟悉 <code>Python</code> 与 <code>Go</code> 服务开发'],
+    }
+
+    act(() => {
+      root.render(<ResumeAsuTech data={specData} />)
+    })
+
+    const headingTexts = Array.from(container.querySelectorAll('h2')).map((el) => el.textContent?.trim() || '')
+    expect(headingTexts.length).toBeGreaterThan(0)
+    expect(headingTexts).toContain('教育经历')
+    expect(headingTexts).toContain('开源经历')
+    expect(headingTexts.every((t) => !/\s\/\s[A-Za-z]/.test(t))).toBe(true)
+
+    expect(container.textContent).toContain('深圳 · 全栈开发工程师')
+    expect(container.textContent).toContain('github.com/example-demo')
+
+    const codeNodes = Array.from(container.querySelectorAll('code')).map((el) => el.textContent)
+    expect(codeNodes).toContain('Python')
+    expect(codeNodes).toContain('Go')
+
+    const companyBarTexts = Array.from(container.querySelectorAll('[class*="companyBar"]')).map(
+      (el) => el.textContent || ''
+    )
+    const projectLeadTexts = Array.from(container.querySelectorAll('[class*="projectLead"]')).map(
+      (el) => el.textContent || ''
+    )
+    expect(companyBarTexts.some((t) => t.includes(longRole))).toBe(false)
+    expect(projectLeadTexts.some((t) => t.includes(longRole))).toBe(true)
+  })
+
+  it('applies asu-tech preset with contact icons and tight margins, and renders all 18 ASu variants without crashing', async () => {
+    const { applyTemplatePreset, DEFAULT_TEMPLATE_SETTINGS } = await import('../settings')
+    const { ASU_VARIANTS_CONFIG } = await import('./ResumeAsuVariant')
+
+    const asuTechPreset = applyTemplatePreset(DEFAULT_TEMPLATE_SETTINGS, 'asu-tech')
+    expect(asuTechPreset.showContactIcons).toBe(true)
+    expect(asuTechPreset.margins).toEqual({ top: 7, bottom: 8, left: 10, right: 10 })
+
+    const variantIds = Object.keys(ASU_VARIANTS_CONFIG) as Array<keyof typeof ASU_VARIANTS_CONFIG>
+    expect(variantIds).toHaveLength(18)
+
+    for (const variantId of variantIds) {
+      act(() => {
+        root.render(<ResumeAsuVariant data={baseData} variantId={variantId} />)
+      })
+      expect(container.textContent).toContain('主导前端微前端架构演进')
+    }
+  })
 })
