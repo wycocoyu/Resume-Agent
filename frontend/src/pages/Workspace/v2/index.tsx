@@ -21,6 +21,7 @@ import JdOptimizeDialog from './shared/JdOptimizeDialog'
 import JdMatchDialog from './shared/JdMatchDialog'
 import TranslateDialog from './shared/TranslateDialog'
 import HealthCheckDialog from './shared/HealthCheckDialog'
+import type { SettingsDrawerTab } from './SidePanel/SettingsDrawer'
 // AI 助手悬浮气泡暂不开放（2026-07-17），恢复时连同下方渲染处一起取消注释
 // import AiAssistantChat from './shared/AiAssistantChat'
 import { scoreResume, type JdOptimizeField } from '@/services/api'
@@ -46,6 +47,7 @@ export default function WorkspaceV2() {
   const [showJdOptimize, setShowJdOptimize] = useState(false)
   const [showTranslate, setShowTranslate] = useState(false)
   const [showHealthCheck, setShowHealthCheck] = useState(false)
+  const [settingsDrawerTab, setSettingsDrawerTab] = useState<SettingsDrawerTab | null>(null)
   // 首次进入编辑页且从未选过皮肤时,弹皮肤选择框
   const [showSkinPicker, setShowSkinPicker] = useState(() => getStoredSkin() === null)
   // 简历数据管理
@@ -389,10 +391,17 @@ export default function WorkspaceV2() {
             resumeName={resumeData?.basic?.name || '我的简历'}
             pdfBlob={pdfBlob}
             onDownloadPDF={handleDownloadByTemplate}
+            onOpenJdMatch={() => setSettingsDrawerTab((prev) => (prev === 'jd' ? null : 'jd'))}
           />
         }
         resumeData={resumeData}
         setResumeData={setResumeData}
+        currentResumeId={currentResumeId}
+        jdFields={jdFields}
+        applyTextReplacement={applyTextReplacement}
+        applyTextReplacements={applyTextReplacements}
+        settingsDrawerTab={settingsDrawerTab}
+        onToggleSettingsDrawerTab={setSettingsDrawerTab}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
         toggleSectionVisibility={toggleSectionVisibility}

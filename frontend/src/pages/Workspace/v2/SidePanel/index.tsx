@@ -99,6 +99,7 @@ function SettingsSegmented({
   const items: { key: SettingsDrawerTab; label: string }[] = [
     { key: 'template', label: '🎨 模板' },
     { key: 'format', label: '⚙ 排版' },
+    { key: 'jd', label: '🎯 岗位匹配' },
   ]
   return (
     <div className="flex items-stretch border border-black fresh:border-slate-200 dark:border-slate-100 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[2px_2px_0px_0px_#ffffff]">

@@ -13,6 +13,7 @@ import { FormattingControls } from '../../../Builder/components/FormattingContro
 import { TemplateThumbnail } from '../../../Builder/components/TemplateSelector'
 import { withSettingsDefaults, TEMPLATE_OPTIONS, type TemplateType } from '../../../Builder/settings'
 import type { TemplateSelection } from './index'
+import { JdMatchDrawerContent } from './JdMatchDrawerContent'
 
 const DRAWER_WIDTH = 560
 
@@ -573,7 +574,7 @@ function FormatTab({
   )
 }
 
-export type SettingsDrawerTab = 'template' | 'format'
+export type SettingsDrawerTab = 'template' | 'format' | 'jd'
 
 interface SettingsDrawerProps {
   /** 当前展开的 tab；null 表示收起 */
@@ -589,11 +590,17 @@ interface SettingsDrawerProps {
   globalSettings: GlobalSettings
   onSelectTemplate: (selection: TemplateSelection) => void
   updateGlobalSettings: (settings: Partial<GlobalSettings>) => void
+  resumeData?: any
+  currentResumeId?: string | null
+  jdFields?: { key: string; label: string; content: string }[]
+  onApplyTextReplacement?: (key: string, original: string, suggested: string) => void
+  onApplyTextReplacements?: (items: { key: string; original: string; suggested: string }[]) => void
 }
 
 const TAB_META: { key: SettingsDrawerTab; label: string }[] = [
   { key: 'template', label: '🎨 模板' },
   { key: 'format', label: '⚙ 排版' },
+  { key: 'jd', label: '🎯 岗位匹配' },
 ]
 
 export default function SettingsDrawer({
@@ -606,6 +613,11 @@ export default function SettingsDrawer({
   globalSettings,
   onSelectTemplate,
   updateGlobalSettings,
+  resumeData,
+  currentResumeId,
+  jdFields,
+  onApplyTextReplacement,
+  onApplyTextReplacements,
 }: SettingsDrawerProps) {
   // 抽屉右缘从轨道右缘（trackWidth）滑出到 DRAWER_WIDTH，初始位移为负
   const slideOffset = trackWidth - DRAWER_WIDTH
@@ -673,13 +685,22 @@ export default function SettingsDrawer({
                   globalSettings={globalSettings}
                   onSelectTemplate={onSelectTemplate}
                 />
-              ) : (
+              ) : activeTab === 'format' ? (
                 <FormatTab
                   templateType={templateType}
                   globalSettings={globalSettings}
                   updateGlobalSettings={updateGlobalSettings}
                 />
-              )}
+              ) : activeTab === 'jd' ? (
+                <JdMatchDrawerContent
+                  resumeData={resumeData}
+                  currentResumeId={currentResumeId}
+                  jdFields={jdFields}
+                  onApplyTextReplacement={onApplyTextReplacement || (() => {})}
+                  onApplyTextReplacements={onApplyTextReplacements}
+                  onClose={onClose}
+                />
+              ) : null}
             </div>
           </motion.div>
 

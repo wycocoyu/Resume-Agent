@@ -71,3 +71,6 @@ edge-tts>=6.1.0
 # torchaudio>=2.0.0
 # librosa>=0.10.0
 # soundfile>=0.12.0
+
+# Official MCP Server (Feature 19 / Issue #57)
+mcp>=1.5.0

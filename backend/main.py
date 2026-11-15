@@ -88,6 +88,7 @@ semantic_search_router = routes_module.semantic_search_router
 admin_router = routes_module.admin_router
 leetcode_router = routes_module.leetcode_router
 billing_router = routes_module.billing_router
+jd_router = getattr(routes_module, "jd_router", None)
 
 # 初始化 FastAPI 应用
 app = FastAPI(title="Resume API")
@@ -136,6 +137,16 @@ app.include_router(semantic_search_router)
 app.include_router(admin_router)
 app.include_router(leetcode_router)
 app.include_router(billing_router)
+if jd_router:
+    app.include_router(jd_router)
+
+# 注册官方 CocoCV MCP Server (Feature 19 / Issue #57)
+try:
+    from backend.mcp.server import create_sse_app
+    app.mount("/mcp", create_sse_app())
+    logger.info("[MCP] Official CocoCV MCP Server mounted at /mcp")
+except Exception as exc:
+    logger.warning(f"[MCP] Failed to mount MCP SSE app: {exc}")
 
 # 注册 resume agent 路由（合并后）
 AGENT_BACKEND_BASE_URL = os.getenv("AGENT_BACKEND_BASE_URL", "").strip().rstrip("/")
