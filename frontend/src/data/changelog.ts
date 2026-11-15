@@ -15,11 +15,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.10.0',
+    version: '3.12.0',
     date: '2026-11-15',
     added: [
+      '新增客户端本地隐私脱敏保护模式：在向 AI 发起对话与润色前自动匿名化姓名、手机号、邮箱与身份证，并在本地无缝还原，敏感信息零外泄',
+      '全新设计系统与工作台视觉重构：升级 A4 纸张多层拟真阴影与浮动操作栏，设置页凭据卡片支持官方矢量图标、呼吸状态指示与延迟测速',
+      '设置页支持密钥脱敏预览一键快速复制至剪贴板，并提供客户端本地隐私保护开关',
       '新增 ASu-Tech 单栏高密度技术简历模板及 18 套大厂极简变体模板矩阵，支持实时渲染',
       '支持导出自包含可编辑 HTML 简历与三档渐进式「自动一页」高度自适应算法，零网络依赖自带编辑工具栏',
+      '支持通过命令行工具与通用 Agent 技能直接导出 HTML 简历与 Headless Chrome 高保真 A4 PDF',
+      '完善通用 Agent 技能载体，支持在 Claude、Codex、Pi 与 WorkBuddy 中通过 --harness all 一键挂载与卸载',
       '工作台新增 LaTeX 与 HTML 双引擎自由切换与偏好记忆，优化 PDF.js 资源本地化与 LaTeX 缓存编译',
       '全面升级 CocoCV 品牌并支持 cococv 命令行工具，提供历史存储与配置的无缝向下兼容',
       '强化 XeLaTeX PDF 编译与 /ToUnicode CMap 中文字符提取，彻底杜绝中文复制乱码',

@@ -13,6 +13,7 @@ import { fetchLogos, onLogosLoaded } from '../constants/companyLogos'
 import { fetchSchoolLogos } from '../constants/schoolLogos'
 import { withSettingsDefaults } from '../../../Builder/settings'
 import { PAGE_DIMENSIONS } from '../../../Builder/pageDimensions'
+import { FloatingPreviewToolbar } from '../components/FloatingPreviewToolbar'
 import type { ResumeData } from '../types'
 import type { PDFRenderMode } from '@/services/pdfRenderMode'
 import { logPDFRenderModeChange } from '@/services/api'
@@ -331,7 +332,7 @@ export function PreviewPanel({
           // LaTeX 模板：PDF 预览（缩放/边距/页数在 PDF 渲染区下方的底部栏）
           <>
             {pdfBlob ? (
-              <div className="flex-1 flex flex-col min-h-0 bg-[#F6F3EC] fresh:bg-slate-100 overflow-hidden">
+              <div className="flex-1 flex flex-col min-h-0 bg-[#F6F3EC] fresh:bg-slate-100 overflow-hidden relative">
                 <div
                   ref={containerRef}
                   className="flex-1 min-h-0 overflow-auto p-2"
@@ -347,6 +348,20 @@ export function PreviewPanel({
                     />
                   </div>
                 </div>
+
+                {/* 浮动操作栏：支持引擎切换、缩放、边距及快速导出 */}
+                <FloatingPreviewToolbar
+                  engine="latex"
+                  onEngineChange={onEngineChange}
+                  scale={effectiveScale}
+                  onZoomIn={handleZoomIn}
+                  onZoomOut={handleZoomOut}
+                  onFitWidth={handleFitWidth}
+                  isUserScale={userScale !== null}
+                  showMargin={showMargin}
+                  onToggleMargin={() => setShowMargin((s) => !s)}
+                  onDownload={onDownload}
+                />
 
                 {/* 缩放 + 边距 + 页数：从顶部工具栏挪到 PDF 渲染区下方（第三列底部） */}
                 <div className="shrink-0 flex items-center justify-center gap-1 flex-wrap px-4 py-2 border-t border-slate-200/50 dark:border-slate-700/50 bg-white/70 dark:bg-slate-800/70 backdrop-blur-sm">

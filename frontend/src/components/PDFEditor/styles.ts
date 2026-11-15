@@ -31,7 +31,8 @@ export const editorStyles = {
   pageContainer: {
     position: 'relative',
     backgroundColor: 'white',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 0 rgba(0, 0, 0, 0.04)',
+    borderRadius: '2px',
   } as CSSProperties,
 
   // PDF Canvas

@@ -17,7 +17,18 @@ import {
   EyeOff,
   Loader2,
   RefreshCw,
+  Copy,
+  Check,
+  ShieldCheck,
 } from 'lucide-react'
+import {
+  DeepSeekLogo,
+  ZhipuLogo,
+  OpenAILogo,
+  AnthropicLogo,
+  GeminiLogo,
+  ProviderLogo,
+} from '@/components/common/ProviderLogos'
 import WorkspaceLayout from '@/pages/WorkspaceLayout'
 import { Avatar } from '@/components/Avatar'
 import { useAuth } from '@/contexts/AuthContext'
@@ -55,6 +66,41 @@ interface KeysStatusResponse {
 interface ProviderTestState {
   status: 'idle' | 'testing' | 'ok' | 'error'
   error?: string
+  latencyMs?: number
+}
+
+function StatusBreathingDot({
+  status,
+  configured,
+}: {
+  status: 'idle' | 'testing' | 'ok' | 'error'
+  configured: boolean
+}) {
+  if (!configured) {
+    return <span className="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block shrink-0" />
+  }
+  if (status === 'testing') {
+    return (
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 shadow-glow-amber" />
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-glow-rose" />
+      </span>
+    )
+  }
+  return (
+    <span className="relative flex h-2.5 w-2.5 shrink-0">
+      <span className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-glow-emerald" />
+    </span>
+  )
 }
 
 function getRoleFromToken(): string {
@@ -164,10 +210,38 @@ export default function SettingsPage() {
   const [savingProvider, setSavingProvider] = useState<ProviderId | null>(null)
   const [testingAll, setTestingAll] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<ProviderId | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [privacyMode, setPrivacyMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cococv_privacy_mode') !== 'false'
+    } catch {
+      return true
+    }
+  })
   const [testStates, setTestStates] = useState<Record<ProviderId, ProviderTestState>>({
     deepseek: { status: 'idle' },
     zhipu: { status: 'idle' },
   })
+
+  const handleCopyPreview = (preview: string, label: string) => {
+    if (!preview) return
+    navigator.clipboard.writeText(preview).then(() => {
+      setCopiedKey(preview)
+      toast.success(`已复制 ${label} 脱敏密钥`)
+      setTimeout(() => setCopiedKey(null), 2000)
+    }).catch(() => {
+      toast.error('复制失败，请手动复制')
+    })
+  }
+
+  const handleTogglePrivacyMode = () => {
+    const next = !privacyMode
+    setPrivacyMode(next)
+    try {
+      localStorage.setItem('cococv_privacy_mode', String(next))
+    } catch {}
+    toast.success(next ? '已开启客户端隐私脱敏模式' : '已关闭客户端隐私脱敏模式')
+  }
 
   const fetchKeysStatus = useCallback(async () => {
     if (!canManageKeys) return
@@ -294,10 +368,12 @@ export default function SettingsPage() {
 
     try {
       const query = provider ? `?provider=${provider}` : ''
+      const startTime = performance.now()
       const resp = await fetch(`${getApiBaseUrl()}/api/ai/test-keys${query}`, {
         headers: getAuthHeaders(),
         credentials: 'include',
       })
+      const latency = Math.round(performance.now() - startTime)
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
         throw new Error(err?.detail || `HTTP ${resp.status}`)
@@ -310,7 +386,7 @@ export default function SettingsPage() {
           if (!item || !item.configured) {
             next[p] = { status: 'idle' }
           } else if (item.ok) {
-            next[p] = { status: 'ok' }
+            next[p] = { status: 'ok', latencyMs: latency }
           } else {
             next[p] = { status: 'error', error: item.error || '连通性测试未通过' }
           }
@@ -509,6 +585,7 @@ export default function SettingsPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <DeepSeekLogo size={20} className="shrink-0" />
                         <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                           1. DeepSeek 官方 API Key
                         </span>
@@ -517,12 +594,13 @@ export default function SettingsPage() {
                         </span>
                         <span
                           className={cn(
-                            'px-2 py-0.5 text-xs font-semibold rounded',
+                            'px-2 py-0.5 text-xs font-semibold rounded flex items-center gap-1.5',
                             keysStatus.deepseek.configured
                               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                               : 'bg-red-500/15 text-red-600 dark:text-red-400'
                           )}
                         >
+                          <StatusBreathingDot status={testStates.deepseek.status} configured={keysStatus.deepseek.configured} />
                           {keysStatus.deepseek.configured ? '● 已配置' : '○ 未配置'}
                         </span>
                       </div>
@@ -553,14 +631,31 @@ export default function SettingsPage() {
                         <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">
                           {keysStatus.deepseek.preview}
                         </code>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPreview(keysStatus.deepseek.preview, 'DeepSeek')}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition rounded"
+                          title="复制脱敏密钥预览"
+                        >
+                          {copiedKey === keysStatus.deepseek.preview ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                         {testStates.deepseek.status === 'testing' && (
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400">
                             检测中...
                           </span>
                         )}
                         {testStates.deepseek.status === 'ok' && (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                             ✓ 连通正常
+                            {testStates.deepseek.latencyMs !== undefined && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                                {testStates.deepseek.latencyMs}ms
+                              </span>
+                            )}
                           </span>
                         )}
                         {testStates.deepseek.status === 'error' && (
@@ -643,6 +738,7 @@ export default function SettingsPage() {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <ZhipuLogo size={20} className="shrink-0" />
                         <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                           2. 智谱 GLM-OCR API Key
                         </span>
@@ -651,12 +747,13 @@ export default function SettingsPage() {
                         </span>
                         <span
                           className={cn(
-                            'px-2 py-0.5 text-xs font-semibold rounded',
+                            'px-2 py-0.5 text-xs font-semibold rounded flex items-center gap-1.5',
                             keysStatus.zhipu.configured
                               ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                               : 'bg-red-500/15 text-red-600 dark:text-red-400'
                           )}
                         >
+                          <StatusBreathingDot status={testStates.zhipu.status} configured={keysStatus.zhipu.configured} />
                           {keysStatus.zhipu.configured ? '● 已配置' : '○ 未配置'}
                         </span>
                       </div>
@@ -687,14 +784,31 @@ export default function SettingsPage() {
                         <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">
                           {keysStatus.zhipu.preview}
                         </code>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPreview(keysStatus.zhipu.preview, '智谱 GLM-OCR')}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition rounded"
+                          title="复制脱敏密钥预览"
+                        >
+                          {copiedKey === keysStatus.zhipu.preview ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
                         {testStates.zhipu.status === 'testing' && (
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400">
                             检测中...
                           </span>
                         )}
                         {testStates.zhipu.status === 'ok' && (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                             ✓ 连通正常
+                            {testStates.zhipu.latencyMs !== undefined && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                                {testStates.zhipu.latencyMs}ms
+                              </span>
+                            )}
                           </span>
                         )}
                         {testStates.zhipu.status === 'error' && (
@@ -774,6 +888,57 @@ export default function SettingsPage() {
               </div>
             </Card>
           )}
+
+          <Card
+            icon={<ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+            title="隐私安全与脱敏保护"
+            desc="保护求职者个人隐私信息，在发起 AI 改写、诊断与流式对话前执行本地匿名化脱敏。"
+            badge={
+              <span
+                className={cn(
+                  'px-2 py-0.5 text-xs font-semibold rounded-full',
+                  privacyMode
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                )}
+              >
+                {privacyMode ? '● 已开启本地脱敏' : '○ 已关闭'}
+              </span>
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40">
+              <div className="space-y-1 max-w-xl">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    客户端 PII 本地双向脱敏 (Client-Side Privacy De-identification)
+                  </span>
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    安全推荐
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  在向云端 AI 模型发送对话、润色改写请求时，自动将求职者真实姓名、手机号、邮箱、身份证号及详细住址替换为匿名占位符（如 <code className="font-mono text-indigo-600 dark:text-indigo-400">{'{{PHONE_1}}'}</code>），模型返回补丁后再于浏览器本地逆向还原。真实敏感信息零外泄、不离境。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleTogglePrivacyMode}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2',
+                  privacyMode ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
+                )}
+                role="switch"
+                aria-checked={privacyMode}
+              >
+                <span
+                  className={cn(
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    privacyMode ? 'translate-x-5' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+          </Card>
 
           <Card icon={<Shield className="w-4 h-4" />} title="账号与权限" desc="账号基础信息与当前权限角色。">
             <div className="flex items-center gap-4 mb-5">

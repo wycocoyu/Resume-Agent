@@ -198,3 +198,8 @@ def require_admin_only(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="仅管理员可访问")
     return current_user
+
+
+# 别名兼容：支持 get_optional_current_user 命名
+get_optional_current_user = get_current_user_optional
+

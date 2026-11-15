@@ -53,7 +53,7 @@ export function PageContainer({
           CSS 变量，不影响 PreviewPanel 里离屏渲染给 html2pdf 导出用的容器，
           导出结果始终是印刷标准的白底黑字。 */}
       <div
-        className="relative bg-white dark:bg-black border-2 border-black dark:border-white shadow-[6px_6px_0px_0px_#000000] dark:shadow-[6px_6px_0px_0px_#ffffff] origin-top
+        className="relative bg-white dark:bg-black border border-slate-200/80 dark:border-zinc-800 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-top
           dark:[--resume-text-primary:#f5f5f5] dark:[--resume-text-secondary:#d1d5db]
           dark:[--resume-text-tertiary:#9ca3af] dark:[--resume-text-body:#e5e7eb]
           dark:[--resume-border-primary:#6b7280] dark:[--resume-border-secondary:#4b5563]
