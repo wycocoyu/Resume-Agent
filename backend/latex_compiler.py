@@ -15,12 +15,14 @@ try:
         subprocess_env_with_xelatex_bin,
         xelatex_install_hint,
     )
+    from .latex_generator import _ensure_cjk_tounicode_cmaps
 except ImportError:
     from latex_utils import (
         resolve_xelatex_executable,
         subprocess_env_with_xelatex_bin,
         xelatex_install_hint,
     )
+    from latex_generator import _ensure_cjk_tounicode_cmaps
 
 
 def compile_latex_raw(latex_content: str) -> BytesIO:
@@ -60,10 +62,14 @@ def compile_latex_raw(latex_content: str) -> BytesIO:
                 dest_file = Path(temp_dir) / file_name
                 shutil.copy2(src_file, dest_file)
         
-        # 复制字体目录
+        # 挂载字体目录（优先符号链接，失败时回退全量拷贝）
         fonts_dir = template_dir / 'fonts'
         if fonts_dir.exists():
-            shutil.copytree(fonts_dir, Path(temp_dir) / 'fonts', dirs_exist_ok=True)
+            dest_fonts = Path(temp_dir) / 'fonts'
+            try:
+                dest_fonts.symlink_to(fonts_dir.resolve(), target_is_directory=True)
+            except (OSError, NotImplementedError):
+                shutil.copytree(fonts_dir, dest_fonts, dirs_exist_ok=True)
         
         # 写入 LaTeX 文件
         tex_file = Path(temp_dir) / 'resume.tex'
@@ -109,12 +115,12 @@ def compile_latex_raw(latex_content: str) -> BytesIO:
             print(f"[LaTeX 编译] 错误: {error_msg}")
             raise RuntimeError(f"LaTeX 编译失败: {error_msg}")
         
-        # 读取生成的 PDF
+        # 读取生成的 PDF 并补齐 CJK CIDFontType0 缺失的 ToUnicode CMap
         pdf_file = Path(temp_dir) / 'resume.pdf'
         if not pdf_file.exists():
             raise RuntimeError("PDF 文件未生成")
         
-        pdf_bytes = pdf_file.read_bytes()
+        pdf_bytes = _ensure_cjk_tounicode_cmaps(pdf_file.read_bytes(), template_dir)
         print(f"[LaTeX 编译] 成功，PDF 大小: {len(pdf_bytes)} 字节")
         
         pdf_io = BytesIO(pdf_bytes)
@@ -124,4 +130,8 @@ def compile_latex_raw(latex_content: str) -> BytesIO:
     finally:
         # 清理临时目录
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# 高层与底层编译别名对齐
+compile_latex = compile_latex_raw
 

@@ -15,6 +15,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.10.0',
+    date: '2026-11-15',
+    added: [
+      '新增 ASu-Tech 单栏高密度技术简历模板及 18 套大厂极简变体模板矩阵，支持实时渲染',
+      '支持导出自包含可编辑 HTML 简历与三档渐进式「自动一页」高度自适应算法，零网络依赖自带编辑工具栏',
+      '工作台新增 LaTeX 与 HTML 双引擎自由切换与偏好记忆，优化 PDF.js 资源本地化与 LaTeX 缓存编译',
+      '全面升级 CocoCV 品牌并支持 cococv 命令行工具，提供历史存储与配置的无缝向下兼容',
+      '强化 XeLaTeX PDF 编译与 /ToUnicode CMap 中文字符提取，彻底杜绝中文复制乱码',
+    ],
+  },
+  {
     version: '3.8.0',
     date: '2026-11-11',
     added: [
@@ -168,7 +179,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '3.2.2',
-    date: '2026-07-11 10:48',
+    date: '2026-07-11',
     fixed: [
       '修复点击「导出」时格式选择弹窗被压缩、看不见的问题',
       '多段项目经历之间的间距默认改为 1ex，多段时不再挤在一起',
@@ -218,7 +229,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '2.15.2',
-    date: '2026-07-08 21:05',
+    date: '2026-07-08',
     added: [
       '编辑器排版设置默认展开，进入即可直接调整字体、边距、行距等',
     ],

@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+cococv = "backend.cli:main"
 resume-agent = "backend.cli:main"
 
 [tool.setuptools.packages.find]

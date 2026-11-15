@@ -10,6 +10,7 @@
 | [数据库表结构参考 (`database-schema.md`)](database-schema.md) | PostgreSQL + BetterAuth 统一身份体系下的 15 张表字段、索引与外键参考 |
 | [密钥防呆、多进程热更新与 PDF 中文嵌入 (`ai-ocr-and-pdf-cjk.md`)](ai-ocr-and-pdf-cjk.md) | `/settings` 跨平台密钥校验、多 Worker `.env` 热同步及 XeLaTeX PDF `/ToUnicode` CMap 兜底机制 |
 | [ADR-0001：Manus 运行时接缝拆分 (`adr/0001-wave2-manus-decomposition.md`)](adr/0001-wave2-manus-decomposition.md) | 进程内 Agent 编排层与流式运行时职责边界的架构决策记录 |
+| [ADR-0002：全栈 TypeScript 绞杀者演进架构 (`adr/0002-typescript-strangler-fig-architecture.md`)](adr/0002-typescript-strangler-fig-architecture.md) | 全栈 TS 绞杀者 4 波次演进规划、五象限审计及 XeLaTeX CJK 零退化硬防线 |
 
 ### 模块级专项文档
 - **CLI 与 Agent Skill 规范**：[`../skills/resume-agent/SKILL.md`](../skills/resume-agent/SKILL.md) 与 [`../skills/resume-agent/references/schema.md`](../skills/resume-agent/references/schema.md)

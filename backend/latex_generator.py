@@ -674,10 +674,14 @@ def compile_latex_to_pdf(
             else:
                 raise RuntimeError(f"LaTeX 模板缺少必要文件: {src_file}")
 
-        # 复制字体目录（如果存在）
+        # 挂载字体目录（优先符号链接，失败时回退全量拷贝）
         fonts_dir = template_dir / 'fonts'
         if fonts_dir.exists():
-            shutil.copytree(fonts_dir, Path(temp_dir) / 'fonts', dirs_exist_ok=True)
+            dest_fonts = Path(temp_dir) / 'fonts'
+            try:
+                dest_fonts.symlink_to(fonts_dir.resolve(), target_is_directory=True)
+            except (OSError, NotImplementedError):
+                shutil.copytree(fonts_dir, dest_fonts, dirs_exist_ok=True)
 
         # 下载/复制公司与学校 Logo 到临时目录
         local_photo = None
@@ -1418,3 +1422,7 @@ def render_pdf_from_resume_latex(
     print(f"[性能] PDF 生成总耗时: {total_time*1000:.0f}ms")
     
     return pdf_io
+
+
+# 统一导出高层编译函数别名
+compile_latex = compile_latex_to_pdf
