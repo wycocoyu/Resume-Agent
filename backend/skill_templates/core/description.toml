@@ -1,0 +1,3 @@
+name = "resume-agent"
+long = "Create, edit, validate, and render Resume-Agent JSON resumes into local XeLaTeX PDFs, or sync resumes with the Resume-Agent Web workspace via the resume-agent CLI. Use when the user asks to draft a new resume, tailor or update a ResumeData JSON file, export a resume PDF locally, or pull and push resumes to Resume-Agent."
+short = "Create, validate, render, and sync Resume-Agent resumes"

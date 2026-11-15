@@ -41,6 +41,12 @@ _VALUE_TAKING_OPTIONS = frozenset(
         "--alias",
         "--offset",
         "--limit",
+        "--harness",
+        "--out",
+        "--layout",
+        "--scope",
+        "--strategy",
+        "--path",
     }
 )
 
