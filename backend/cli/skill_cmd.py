@@ -193,7 +193,7 @@ def register_skill_commands(app: typer.Typer, get_output_context: Callable[..., 
     @skill_app.command("path")
     def path_cmd(
         ctx: typer.Context,
-        harness: str = typer.Option(..., "--harness", help="Harness id."),
+        harness: str = typer.Option(..., "--harness", help="Harness id or 'all'."),
         scope: str = typer.Option("user", "--scope", help="'user' or 'project'."),
         target: str = typer.Option(
             None, "--path", help="Explicit skill directory (overrides adapter discovery paths)."
@@ -207,38 +207,73 @@ def register_skill_commands(app: typer.Typer, get_output_context: Callable[..., 
         try:
             adapters = _adapters()
             scope = _scope_value(scope)
-            adapter = render_mod.select_adapters(adapters, harness)[0]
-            resolved = resolve_target(adapter, scope, target)
-            candidates = [str(p / adapter.name) for p in candidate_paths(adapter, scope)]
+            selected = render_mod.select_adapters(adapters, harness)
+            if len(selected) > 1 and target is not None:
+                raise CLIError("--path cannot be used when --harness all is specified.", code="invalid_argument")
         except _KNOWN_ERRORS as exc:
             raise _fail(exc, "skill.path") from exc
 
-        payload = {
-            "ok": True,
-            "command": "skill.path",
-            "harness": adapter.id,
-            "status": adapter.status,
-            "scope": scope,
-            "target": str(resolved),
-            "exists": resolved.exists(),
-            "candidates": candidates,
-            "invoke_syntax": adapter.invoke_syntax,
-        }
-        if json_mode:
-            emit_json(payload, stream=stdout)
-            return
-        stdout.write(f"harness:  {adapter.id} ({adapter.status})\n")
-        stdout.write(f"scope:    {scope}\n")
-        stdout.write(f"target:   {resolved}\n")
-        stdout.write(f"exists:   {payload['exists']}\n")
-        if candidates:
-            stdout.write(f"detected: {', '.join(candidates)}\n")
-        stdout.flush()
+        if len(selected) == 1:
+            adapter = selected[0]
+            resolved = resolve_target(adapter, scope, target)
+            candidates = [str(p / adapter.name) for p in candidate_paths(adapter, scope)]
+            payload = {
+                "ok": True,
+                "command": "skill.path",
+                "harness": adapter.id,
+                "status": adapter.status,
+                "scope": scope,
+                "target": str(resolved),
+                "exists": resolved.exists(),
+                "candidates": candidates,
+                "invoke_syntax": adapter.invoke_syntax,
+            }
+            if json_mode:
+                emit_json(payload, stream=stdout)
+                return
+            stdout.write(f"harness:  {adapter.id} ({adapter.status})\n")
+            stdout.write(f"scope:    {scope}\n")
+            stdout.write(f"target:   {resolved}\n")
+            stdout.write(f"exists:   {payload['exists']}\n")
+            if candidates:
+                stdout.write(f"detected: {', '.join(candidates)}\n")
+            stdout.flush()
+        else:
+            items = []
+            for adapter in selected:
+                resolved = resolve_target(adapter, scope, target)
+                candidates = [str(p / adapter.name) for p in candidate_paths(adapter, scope)]
+                items.append({
+                    "harness": adapter.id,
+                    "status": adapter.status,
+                    "scope": scope,
+                    "target": str(resolved),
+                    "exists": resolved.exists(),
+                    "candidates": candidates,
+                    "invoke_syntax": adapter.invoke_syntax,
+                })
+            payload = {
+                "ok": True,
+                "command": "skill.path",
+                "harness": "all",
+                "scope": scope,
+                "items": items,
+            }
+            if json_mode:
+                emit_json(payload, stream=stdout)
+                return
+            for item in items:
+                stdout.write(f"--- {item['harness']} ({item['status']}) ---\n")
+                stdout.write(f"target:   {item['target']}\n")
+                stdout.write(f"exists:   {item['exists']}\n")
+                if item["candidates"]:
+                    stdout.write(f"detected: {', '.join(item['candidates'])}\n")
+            stdout.flush()
 
     @skill_app.command("install")
     def install_cmd(
         ctx: typer.Context,
-        harness: str = typer.Option(..., "--harness", help="Harness id."),
+        harness: str = typer.Option(..., "--harness", help="Harness id or 'all'."),
         scope: str = typer.Option("user", "--scope", help="'user' or 'project'."),
         target: str = typer.Option(None, "--path", help="Explicit destination skill directory."),
         strategy: str = typer.Option(None, "--strategy", help="'copy' or 'link'."),
@@ -257,28 +292,55 @@ def register_skill_commands(app: typer.Typer, get_output_context: Callable[..., 
         try:
             adapters = _adapters()
             scope = _scope_value(scope)
-            adapter = render_mod.select_adapters(adapters, harness)[0]
-            result = install_skill(
-                adapter,
-                scope=scope,
-                target_override=target,
-                strategy=strategy,
-                force=force,
-                dry_run=dry_run,
-            )
+            selected = render_mod.select_adapters(adapters, harness)
+            if len(selected) > 1 and target is not None:
+                raise CLIError("--path cannot be used when --harness all is specified.", code="invalid_argument")
+            results = []
+            for adapter in selected:
+                res = install_skill(
+                    adapter,
+                    scope=scope,
+                    target_override=target,
+                    strategy=strategy,
+                    force=force,
+                    dry_run=dry_run,
+                )
+                results.append(res)
         except _KNOWN_ERRORS as exc:
             raise _fail(exc, "skill.install") from exc
 
-        if json_mode:
-            emit_json(result, stream=stdout)
-            return
-        prefix = "would install" if result.get("dry_run") else "installed"
-        stdout.write(f"{prefix} {result['harness']} -> {result['target']} ({result['strategy']})\n")
-        for rel in result["files"]:
-            stdout.write(f"  {rel}\n")
-        if result.get("alternates"):
-            stdout.write(f"alternate discovery paths: {', '.join(result['alternates'])}\n")
-        stdout.flush()
+        if len(selected) == 1:
+            result = results[0]
+            if json_mode:
+                emit_json(result, stream=stdout)
+                return
+            prefix = "would install" if result.get("dry_run") else "installed"
+            stdout.write(f"{prefix} {result['harness']} -> {result['target']} ({result['strategy']})\n")
+            for rel in result["files"]:
+                stdout.write(f"  {rel}\n")
+            if result.get("alternates"):
+                stdout.write(f"alternate discovery paths: {', '.join(result['alternates'])}\n")
+            stdout.flush()
+        else:
+            if json_mode:
+                emit_json(
+                    {
+                        "ok": True,
+                        "command": "skill.install",
+                        "harness": "all",
+                        "installs": results,
+                    },
+                    stream=stdout,
+                )
+                return
+            for result in results:
+                prefix = "would install" if result.get("dry_run") else "installed"
+                stdout.write(f"{prefix} {result['harness']} -> {result['target']} ({result['strategy']})\n")
+                for rel in result["files"]:
+                    stdout.write(f"  {rel}\n")
+                if result.get("alternates"):
+                    stdout.write(f"alternate discovery paths: {', '.join(result['alternates'])}\n")
+            stdout.flush()
 
     @skill_app.command("status")
     def status_cmd(
@@ -322,7 +384,7 @@ def register_skill_commands(app: typer.Typer, get_output_context: Callable[..., 
     @skill_app.command("uninstall")
     def uninstall_cmd(
         ctx: typer.Context,
-        harness: str = typer.Option(..., "--harness", help="Harness id."),
+        harness: str = typer.Option(..., "--harness", help="Harness id or 'all'."),
         target: str = typer.Option(None, "--path", help="Restrict to one installed target."),
         dry_run: bool = typer.Option(
             False, "--dry-run", help="Report what would be removed without deleting."
@@ -334,6 +396,8 @@ def register_skill_commands(app: typer.Typer, get_output_context: Callable[..., 
         """Remove only files this installer created and the user never edited."""
         json_mode, stdout = get_output_context(ctx, json_output)
         try:
+            if harness == "all" and target is not None:
+                raise CLIError("--path cannot be used when --harness all is specified.", code="invalid_argument")
             result = uninstall_skill(harness, dry_run=dry_run, target_override=target)
         except _KNOWN_ERRORS as exc:
             raise _fail(exc, "skill.uninstall") from exc

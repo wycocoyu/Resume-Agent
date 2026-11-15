@@ -36,8 +36,16 @@ def cli_version() -> str:
 
 
 def state_dir() -> Path:
-    override = os.environ.get(_ENV_STATE_DIR)
-    return Path(override).expanduser() if override else Path.home() / ".resume-agent"
+    override = os.environ.get("COCOCV_STATE_DIR") or os.environ.get(_ENV_STATE_DIR)
+    if override:
+        return Path(override).expanduser()
+    cococv_dir = Path.home() / ".cococv"
+    legacy_dir = Path.home() / ".resume-agent"
+    if cococv_dir.exists():
+        return cococv_dir
+    if legacy_dir.exists():
+        return legacy_dir
+    return cococv_dir
 
 
 def manifest_path() -> Path:
@@ -263,7 +271,10 @@ def status_entries() -> list[dict[str, Any]]:
 def uninstall(harness: str, *, dry_run: bool = False, target_override: str | None = None) -> dict[str, Any]:
     """Remove only files this installer created and the user has not modified."""
     manifest = load_manifest()
-    entries = [e for e in manifest.get("installs", []) if e.get("harness") == harness]
+    if harness == "all":
+        entries = list(manifest.get("installs", []))
+    else:
+        entries = [e for e in manifest.get("installs", []) if e.get("harness") == harness]
     if target_override:
         resolved = str(Path(target_override).expanduser().resolve())
         entries = [e for e in entries if e.get("target") == resolved]
@@ -314,7 +325,7 @@ def uninstall(harness: str, *, dry_run: bool = False, target_override: str | Non
         manifest["installs"] = [
             e
             for e in manifest.get("installs", [])
-            if not (e.get("harness") == harness and str(e.get("target")) in drop)
+            if not ((harness == "all" or e.get("harness") == harness) and str(e.get("target")) in drop)
         ]
         manifest["installs"].extend(remaining)
         save_manifest(manifest)

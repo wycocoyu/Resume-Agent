@@ -6,10 +6,11 @@ Invoke this skill in {{harness_display}} with `{{invoke_syntax}}`.
 
 ## Core Guardrails
 
-1. **Never fabricate candidate facts.** Do not invent employers, schools, degrees, dates, GPAs, project metrics, open-source links, or awards. Populate only facts stated by the user or present in user-provided source files. When key facts are missing, ask concise follow-up questions or disable unused sections via `menuSections[*].enabled = false`.
+1. **Never fabricate candidate facts.** Do not invent employers, schools, degrees, dates, GPAs, project metrics, open-source links, or awards. Populate only facts stated by the user or present in user-provided source files. When key facts (such as exact metrics, project scale, performance improvements, dates, awards) are missing or not provided by the candidate, mark them explicitly with `【待补】` (e.g. `峰值 QPS 由 2000 提升至【待补】`) or ask concise follow-up questions, or disable unused sections via `menuSections[*].enabled = false`. Never invent quantitative metrics or employment histories.
 2. **Keep validation read-only and mandatory.** Always run `resume-agent validate` before `render` or `sync push`. Fix reported field paths directly in the JSON file.
 3. **Stay offline by default.** `resume-agent render` runs with zero network access unless the user explicitly asks to fetch remote COS/HTTP logos or avatars via `--online`.
 4. **Sync only on explicit user intent.** Never run `resume-agent sync push` or overwrite local files with `--force` unless the user asked for it.
+5. **Page balance and density self-check.** After rendering, check whether the resume fills the page cleanly. Avoid sparse overflow where a second page contains only 2-3 orphan lines. Tailor bullet points and margins so that a 1-page resume is compact and complete, or a 2-page resume is substantively filled on both pages.
 
 ## Prerequisites & Skill Discovery
 
@@ -56,13 +57,30 @@ resume-agent validate resume.json --json
 - Exit code `0` (`"valid": true`) is required before rendering or pushing.
 - If exit code is `1`, inspect `errors[*].path` (for example `menuSections[0].enabled` or `education[0].school`) and repair the JSON.
 
-### 4. Render Local XeLaTeX PDF
+### 4. Render Local Resume (HTML, Headless Chrome CDP PDF, or XeLaTeX)
 
-```bash
-resume-agent render resume.json -o resume.pdf --force --json
-```
+- **Render self-contained HTML:**
+  ```bash
+  cococv render resume.json -o resume.html --template asu-tech --json
+  ```
+- **Render A4 PDF via Headless Chrome CDP (recommended for HTML templates):**
+  ```bash
+  cococv render resume.json -o resume.pdf --template asu-tech --json
+  ```
+- **Render XeLaTeX PDF (for LaTeX templates):**
+  ```bash
+  cococv render resume.json -o resume.pdf --template default --engine latex --json
+  ```
 
-- Uses local XeLaTeX and repository `latex-resume-template/` offline (`offline: true`).
+#### Template Recommendation Matrix
+- **`asu-tech` (Recommended default)**: High-density single-column technology template, grey capsule badges, multi-level STAR bullet points. Ideal for technical and engineering roles.
+- **`asu-01` ~ `asu-04`, `asu-07`, `asu-10`, `asu-11`, `asu-15`**: Single-column distinctive themes (classic blue accent line, solid header band, vertical timeline, ribbon badge, serif typography).
+- **`asu-05`, `asu-13`**: Two-column sidebar themes (light grey sidebar, pure black sidebar) ideal for separating skills and basic info on the left with experience on the right.
+- **`asu-06`, `asu-08`, `asu-09`, `asu-12`, `asu-14`, `asu-16` ~ `asu-18`**: Two-page / high-density / academic themes (timeline two-page, cards, ultra-dense two-column, pure black academic).
+- **`default`**: XeLaTeX classic single-column layout, optimal for academic or ATS plaintext extraction.
+
+Notes:
+- Uses local XeLaTeX or headless Chrome offline (`offline: true`).
 - Local PNG/JPEG/PDF avatars in `basic.photo` (file path or `data:image/png;base64,...`) are validated by magic bytes at the CLI boundary; WebP/SVG or missing logos degrade gracefully and are reported in `warnings`.
 - Add `--online` only when the user wants remote COS/HTTP logo or avatar downloads.
 

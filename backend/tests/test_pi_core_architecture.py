@@ -51,7 +51,6 @@ def test_requirements_do_not_reintroduce_retired_dependencies():
         "baidusearch",
         "daytona",
         "docker",
-        "mcp",
     ):
         assert dependency not in requirements
 

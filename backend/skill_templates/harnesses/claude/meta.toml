@@ -15,7 +15,7 @@ name = "resume-agent"
 description = "long"
 
 [frontmatter.extra]
-allowed-tools = ["Bash(resume-agent:*)", "Read", "Write", "Edit"]
+allowed-tools = ["Bash(cococv:*)", "Bash(resume-agent:*)", "Read", "Write", "Edit"]
 
 [constraints]
 description_min = 20

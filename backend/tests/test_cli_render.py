@@ -18,6 +18,7 @@ import backend.latex_generator as latex_generator
 import backend.school_logos as school_logos
 from backend.cli import run_cli
 from backend.cli.schema import build_initial_resume
+from backend.html_generator import generate_html_resume
 
 
 def _make_valid_png_bytes(width: int = 8, height: int = 8) -> bytes:
@@ -568,5 +569,216 @@ def test_cjk_tounicode_stdlib_fallback_when_pymupdf_missing(
                 assert "/ToUnicode" in fixed_doc.xref_object(xref), (
                     f"{variant_name}: Type0 font XREF {xref} still missing /ToUnicode"
                 )
+
+
+def test_html_generator_and_xss_sanitization() -> None:
+    from backend.html_generator import generate_html_resume, sanitize_rich_text
+
+    # XSS sanitization tests
+    dirty = '<script>alert(1)</script><p onclick="steal()">Hello <b>World</b></p><iframe src="evil.com"></iframe>'
+    clean = sanitize_rich_text(dirty)
+    assert "<script>" not in clean
+    assert "alert" not in clean
+    assert "onclick" not in clean
+    assert "<iframe>" not in clean
+    assert "<p>Hello <b>World</b></p>" in clean
+
+    resume_data = {
+        "id": "test_resume_001",
+        "title": "测试简历",
+        "createdAt": "2026-11-15T00:00:00Z",
+        "updatedAt": "2026-11-15T00:00:00Z",
+        "templateId": "asu-tech",
+        "basic": {
+            "name": "李四",
+            "title": "高级系统架构师",
+            "email": "lisi@example.com",
+            "phone": "13800138000",
+            "location": "北京",
+            "github": "https://github.com/lisi",
+        },
+        "education": [
+            {
+                "school": "北京大学",
+                "major": "计算机科学与技术",
+                "degree": "硕士",
+                "startDate": "2018-09",
+                "endDate": "2021-06",
+                "description": "<p>研究分布式一致性协议与高并发架构</p>",
+            }
+        ],
+        "workExperience": [
+            {
+                "company": "字节跳动",
+                "position": "架构师",
+                "department": "基础架构部",
+                "startDate": "2021-07",
+                "endDate": "2026-10",
+                "description": "<ul><li>主导微服务治理框架重构，P99 延迟降低 35%</li></ul>",
+            }
+        ],
+        "skills": "熟练掌握 Python、Go、分布式存储",
+        "awards": [
+            {"name": "国家奖学金", "date": "2020", "description": "学业排名前 1%"}
+        ],
+    }
+
+    # Test asu-tech
+    html_tech = generate_html_resume(resume_data, template="asu-tech")
+    assert "@page" in html_tech
+    assert "A4 portrait" in html_tech
+    assert "李四" in html_tech
+    assert "高级系统架构师" in html_tech
+    assert "companyBar" in html_tech
+    assert "北京大学" in html_tech
+    assert "字节跳动" in html_tech
+
+    # Test all 18 variant templates
+    for i in range(1, 19):
+        var_id = f"asu-{i:02d}"
+        var_html = generate_html_resume(resume_data, template=var_id)
+        assert "@page" in var_html
+        assert "A4 portrait" in var_html
+        assert "李四" in var_html
+        assert f"template-{var_id}" in var_html
+
+
+def test_chrome_export_and_missing_binary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.chrome_export import export_html_to_pdf, find_chrome_executable
+    from backend.cli.errors import CLIError
+
+    # 1. Real discovery on macOS
+    chrome = find_chrome_executable()
+    assert chrome is not None
+    assert chrome.exists()
+
+    # 2. Real HTML to PDF export
+    html_content = "<!DOCTYPE html><html><head><style>@page{size:A4;margin:0;}</style></head><body><h1>Hello PDF</h1></body></html>"
+    out_pdf = tmp_path / "test_chrome.pdf"
+    pdf_bytes = export_html_to_pdf(html_content, out_pdf)
+    assert out_pdf.exists()
+    assert pdf_bytes.startswith(b"%PDF-")
+
+    # 3. Missing Chrome raises structured chrome_not_found CLIError
+    monkeypatch.setattr("backend.chrome_export.find_chrome_executable", lambda: None)
+    with pytest.raises(CLIError) as exc_info:
+        export_html_to_pdf(html_content, tmp_path / "fail.pdf")
+    assert exc_info.value.code == "chrome_not_found"
+
+
+def test_cli_render_html_export_and_engine_mismatch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resume_data = build_initial_resume(title="测试")
+    resume_data["basic"]["name"] = "王五"
+    resume_data["basic"]["email"] = "wangwu@example.com"
+    resume_json = tmp_path / "resume.json"
+    resume_json.write_text(json.dumps(resume_data, ensure_ascii=False), encoding="utf-8")
+
+    # 1. Render to .html directly
+    out_html = tmp_path / "resume.html"
+    code = run_cli(["render", str(resume_json), "-o", str(out_html), "--template", "asu-tech", "--json"])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["engine"] == "html"
+    assert out_html.exists()
+    assert "王五" in out_html.read_text(encoding="utf-8")
+
+    # 2. --engine latex with .html output must raise engine_mismatch
+    out_bad = tmp_path / "bad.html"
+    code_bad = run_cli(["render", str(resume_json), "-o", str(out_bad), "--engine", "latex", "--json"])
+    assert code_bad != 0
+    bad_payload = json.loads(capsys.readouterr().out)
+    assert bad_payload["error"]["code"] == "engine_mismatch"
+
+
+def test_chrome_export_standalone_import() -> None:
+    """Verify that backend.chrome_export can be imported standalone in a clean process without circular import."""
+    import subprocess
+    import sys
+
+    res = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import backend.chrome_export; from backend.chrome_export import export_html_to_pdf; assert callable(export_html_to_pdf)",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode == 0, f"Standalone import failed: {res.stderr}"
+
+
+def test_html_generator_project_url_xss_escaped() -> None:
+    """Verify project title is HTML-escaped when an outbound link is present to prevent XSS."""
+    data = {
+        "basic": {"name": "张三"},
+        "projects": [
+            {
+                "name": '<script>alert("XSS")</script>',
+                "role": "Lead",
+                "link": "https://example.com/project",
+            }
+        ],
+    }
+    rendered_html = generate_html_resume(data, template="asu-tech")
+    assert '<script>alert("XSS")</script>' not in rendered_html
+    assert '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;' in rendered_html
+    assert '<a href="https://example.com/project"' in rendered_html
+    assert '<h2 class="section-title"><span class="title-text">项目经历</span></h2>' in rendered_html
+
+
+def test_html_generator_projects_section_header_not_shadowed() -> None:
+    """Verify projects section header is preserved and not shadowed by item titles."""
+    data = {
+        "basic": {"name": "张三"},
+        "projects": [
+            {
+                "name": "项目一",
+                "role": "研发",
+                "link": "https://example.com/proj1",
+            },
+            {
+                "name": "项目二",
+                "role": "架构师",
+                "link": "https://example.com/proj2",
+            },
+        ],
+    }
+    html = generate_html_resume(data, template="asu-tech")
+    assert '<h2 class="section-title"><span class="title-text">项目经历</span></h2>' in html
+    assert "项目一" in html
+    assert "项目二" in html
+
+
+def test_html_generator_avatar_attribute_escaped() -> None:
+    """Verify candidate photo URL quotes are escaped to prevent HTML attribute breakout."""
+    data = {
+        "basic": {
+            "name": "李四",
+            "photo": 'https://example.com/avatar.png" onerror="alert(1)"',
+        }
+    }
+    rendered_html = generate_html_resume(data, template="asu-tech")
+    assert 'onerror="alert(1)"' not in rendered_html
+    assert '<img src="https://example.com/avatar.png&quot; onerror=&quot;alert(1)&quot;" alt="头像" />' in rendered_html
+
+
+def test_html_generator_print_background_toggle() -> None:
+    """Verify print_background toggles between exact and economy print-color-adjust CSS rules."""
+    data = {"basic": {"name": "王五"}}
+    html_exact = generate_html_resume(data, template="asu-tech", print_background=True)
+    html_economy = generate_html_resume(data, template="asu-tech", print_background=False)
+
+    assert html_exact != html_economy
+    assert "print-color-adjust: exact !important;" in html_exact
+    assert "-webkit-print-color-adjust: exact !important;" in html_exact
+    assert "print-color-adjust: economy !important;" in html_economy
+    assert "-webkit-print-color-adjust: economy !important;" in html_economy
+
+
 
 

@@ -303,3 +303,103 @@ def test_manifest_is_plain_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert payload["version"] == 1
     assert payload["installs"][0]["harness"] == "codex"
     assert payload["installs"][0]["files"], "manifest must record per-file hashes"
+
+
+def test_claude_allowed_tools_contains_dual_aliases() -> None:
+    adapter = _adapters()["claude"]
+    skill = render_harness(adapter)["SKILL.md"]
+    assert "Bash(cococv:*)" in skill
+    assert "Bash(resume-agent:*)" in skill
+
+
+def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
+    body = (templates_root() / "core" / "body.md").read_text(encoding="utf-8")
+    assert "【待补】" in body
+    assert "Page balance and density self-check" in body
+    assert "asu-tech" in body
+    assert "asu-01" in body
+    assert "cococv render" in body
+    assert "Headless Chrome CDP" in body
+
+
+def test_install_and_uninstall_harness_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESUME_AGENT_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir(parents=True)
+
+    from backend.cli import app
+    from typer.testing import CliRunner
+
+    runner = CliRunner()
+
+    # 1. Test install --harness all --dry-run
+    res_dry = runner.invoke(app, ["skill", "install", "--harness", "all", "--dry-run", "--json"])
+    assert res_dry.exit_code == 0
+    dry_data = json.loads(res_dry.stdout)
+    assert dry_data["ok"] is True
+    assert dry_data["harness"] == "all"
+    assert len(dry_data["installs"]) == 4
+    harness_ids = {item["harness"] for item in dry_data["installs"]}
+    assert harness_ids == {"claude", "codex", "pi", "workbuddy"}
+
+    # 2. Test install --harness all disallows --path
+    res_bad = runner.invoke(app, ["skill", "install", "--harness", "all", "--path", str(tmp_path / "foo")])
+    assert res_bad.exit_code != 0
+
+    # 3. Test install --harness all real execution
+    res_install = runner.invoke(app, ["skill", "install", "--harness", "all", "--json"])
+    assert res_install.exit_code == 0
+    inst_data = json.loads(res_install.stdout)
+    assert inst_data["ok"] is True
+    assert len(inst_data["installs"]) == 4
+
+    # Verify manifest has 4 installs
+    manifest = json.loads((tmp_path / "state" / "state.json").read_text(encoding="utf-8"))
+    assert len(manifest["installs"]) == 4
+
+    # 4. Test path --harness all
+    res_path = runner.invoke(app, ["skill", "path", "--harness", "all", "--json"])
+    assert res_path.exit_code == 0
+    path_data = json.loads(res_path.stdout)
+    assert path_data["ok"] is True
+    assert len(path_data["items"]) == 4
+
+    # 5. Test uninstall --harness all
+    res_uninstall = runner.invoke(app, ["skill", "uninstall", "--harness", "all", "--json"])
+    assert res_uninstall.exit_code == 0
+    uninst_data = json.loads(res_uninstall.stdout)
+    assert uninst_data["ok"] is True
+    assert len(uninst_data["removed"]) > 0
+
+    # Verify manifest now has 0 installs
+    manifest_after = json.loads((tmp_path / "state" / "state.json").read_text(encoding="utf-8"))
+    assert len(manifest_after["installs"]) == 0
+
+
+def test_state_dir_priority_and_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.skillkit.install import state_dir
+
+    fake_home = tmp_path / "userhome"
+    fake_home.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.delenv("RESUME_AGENT_STATE_DIR", raising=False)
+    monkeypatch.delenv("COCOCV_STATE_DIR", raising=False)
+
+    # When neither exists, defaults to ~/.cococv
+    assert state_dir() == fake_home / ".cococv"
+
+    # When legacy ~/.resume-agent exists, falls back to legacy
+    legacy_dir = fake_home / ".resume-agent"
+    legacy_dir.mkdir()
+    assert state_dir() == legacy_dir
+
+    # When ~/.cococv exists, ~/.cococv takes priority over legacy
+    cococv_dir = fake_home / ".cococv"
+    cococv_dir.mkdir()
+    assert state_dir() == cococv_dir
+
+    # Environment variable override takes highest priority
+    custom_override = tmp_path / "custom_state"
+    monkeypatch.setenv("COCOCV_STATE_DIR", str(custom_override))
+    assert state_dir() == custom_override
+

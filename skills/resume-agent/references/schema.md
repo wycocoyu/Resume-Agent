@@ -37,7 +37,7 @@ Run `resume-agent schema` at any time to inspect the live JSON Schema generated 
 
 | Key | Type | Notes |
 | :--- | :--- | :--- |
-| `templateType` | `"latex" \| "html" \| null` | Default `"latex"`. Note: CLI always renders via LaTeX and emits a warning if `"html"` |
+| `templateType` | `"latex" \| "html" \| null` | Default `"latex"`. Supports both `"latex"` (XeLaTeX engine) and `"html"` (HTML templates & Chrome CDP A4 PDF export) |
 | `alias` | `string \| null` | Optional workspace remark/tag |
 | `workExperience` | `Experience[] \| null` | Full-time work experience (`工作经历`), separate from `experience` (`实习经历`) |
 

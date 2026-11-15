@@ -12,8 +12,10 @@ from typing import Any
 
 import typer
 
+from backend.chrome_export import export_html_to_pdf
 from backend.cli.errors import CLIError, emit_json
 from backend.cli.schema import load_and_validate_resume_file
+from backend.html_generator import generate_html_resume
 from backend.latex_generator import (
     _detect_xelatex_image_ext,
     compile_latex_to_pdf,
@@ -129,7 +131,22 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             ...,
             "-o",
             "--output",
-            help="Output PDF file path.",
+            help="Output PDF or HTML file path.",
+        ),
+        template: str = typer.Option(
+            "default",
+            "--template",
+            help="Template name ('default', 'asu-tech', 'asu-01'..'asu-18').",
+        ),
+        engine: str | None = typer.Option(
+            None,
+            "--engine",
+            help="Rendering engine ('latex' or 'html').",
+        ),
+        print_background: bool = typer.Option(
+            True,
+            "--print-background/--no-print-background",
+            help="Print background graphics in Chrome CDP.",
         ),
         template_dir: Path | None = typer.Option(
             None,
@@ -144,7 +161,7 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
         force: bool = typer.Option(
             False,
             "--force",
-            help="Overwrite target PDF file if it already exists.",
+            help="Overwrite target file if it already exists.",
         ),
         json_output: bool = typer.Option(
             False,
@@ -152,14 +169,22 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             help="Emit a single machine-readable JSON object on stdout.",
         ),
     ) -> None:
-        """Render a ResumeData JSON file to PDF via local XeLaTeX (strictly offline by default)."""
+        """Render a ResumeData JSON file to PDF or HTML via local XeLaTeX or Headless Chrome CDP."""
         json_mode, stdout_stream = get_output_context(ctx, json_output)
         offline = not online
         warnings: list[str] = []
 
+        ext = output.suffix.lower()
+        if ext not in {".pdf", ".html"}:
+            raise CLIError(
+                f"Unsupported output extension '{ext}': expected .pdf or .html",
+                code="invalid_argument",
+                extra={"command": "render", "input": str(file), "output": str(output)},
+            )
+
         if output.exists() and not force:
             raise CLIError(
-                f"Target PDF already exists: {output} (use --force to overwrite)",
+                f"Target file already exists: {output} (use --force to overwrite)",
                 code="file_exists",
                 extra={"command": "render", "input": str(file), "output": str(output), "warnings": warnings},
             )
@@ -185,72 +210,135 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             )
 
         assert raw_data is not None
-        resolved_template_dir = _resolve_template_dir(template_dir)
-        if not resolved_template_dir.is_dir() or not (resolved_template_dir / "resume.cls").is_file():
-            raise CLIError(
-                f"LaTeX template directory missing or incomplete (expected resume.cls): {resolved_template_dir}",
-                code="template_not_found",
-                extra={
-                    "command": "render",
-                    "input": str(file),
-                    "output": str(output),
-                    "template_dir": str(resolved_template_dir),
-                    "warnings": warnings,
-                },
-            )
 
-        if raw_data.get("templateType") == "html":
-            warnings.append(
-                "当前简历 templateType='html'：CLI 使用 LaTeX 模板渲染，与 Web HTML 模板视觉不等价"
-            )
-
-        backend_data = convert_to_backend_format(raw_data)
-        photo_marker, local_photo_bytes = _resolve_cli_photo(
-            backend_data.get("photo"),
-            input_file=file,
-            warnings=warnings,
-        )
-        if photo_marker is None:
-            backend_data.pop("photo", None)
+        # Resolve engine
+        html_templates = {"asu-tech", "html-classic"} | {f"asu-{i:02d}" for i in range(1, 19)}
+        if ext == ".html":
+            if engine == "latex":
+                raise CLIError(
+                    "Cannot render HTML output using LaTeX engine. Use --engine html or omit --engine.",
+                    code="engine_mismatch",
+                    extra={"command": "render", "input": str(file), "output": str(output)},
+                )
+            resolved_engine = "html"
         else:
-            backend_data["photo"] = photo_marker
+            if engine is not None:
+                eng_lower = engine.lower()
+                if eng_lower not in {"latex", "html"}:
+                    raise CLIError(
+                        f"Invalid engine '{engine}': expected 'latex' or 'html'.",
+                        code="invalid_engine",
+                        extra={"command": "render", "input": str(file), "output": str(output)},
+                    )
+                resolved_engine = eng_lower
+            else:
+                if template in html_templates:
+                    resolved_engine = "html"
+                else:
+                    resolved_engine = "latex"
 
-        section_order = list(backend_data.get("sectionOrder") or [])
+        if resolved_engine == "html":
+            try:
+                html_content = generate_html_resume(
+                    raw_data,
+                    template=template,
+                    print_background=print_background,
+                )
+                if ext == ".html":
+                    html_bytes = html_content.encode("utf-8")
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_bytes(html_bytes)
+                    result_bytes = len(html_bytes)
+                else:
+                    pdf_bytes = export_html_to_pdf(
+                        html_content,
+                        output_path=output,
+                        print_background=print_background,
+                    )
+                    result_bytes = len(pdf_bytes)
+            except CLIError:
+                raise
+            except Exception as exc:
+                deduped_warnings = list(dict.fromkeys(warnings))
+                raise CLIError(
+                    str(exc),
+                    code="render_failed",
+                    extra={
+                        "command": "render",
+                        "input": str(file),
+                        "output": str(output),
+                        "offline": offline,
+                        "warnings": deduped_warnings,
+                    },
+                ) from exc
+        else:
+            resolved_template_dir = _resolve_template_dir(template_dir)
+            if not resolved_template_dir.is_dir() or not (resolved_template_dir / "resume.cls").is_file():
+                raise CLIError(
+                    f"LaTeX template directory missing or incomplete (expected resume.cls): {resolved_template_dir}",
+                    code="template_not_found",
+                    extra={
+                        "command": "render",
+                        "input": str(file),
+                        "output": str(output),
+                        "template_dir": str(resolved_template_dir),
+                        "warnings": warnings,
+                    },
+                )
 
-        try:
-            with contextlib.redirect_stdout(sys.stderr):
-                latex_content = json_to_latex(
-                    backend_data,
-                    section_order,
-                    offline=offline,
-                    warnings_out=warnings,
+            if raw_data.get("templateType") == "html":
+                warnings.append(
+                    "当前简历 templateType='html'：CLI 使用 LaTeX 模板渲染，与 Web HTML 模板视觉不等价"
                 )
-                pdf_io = compile_latex_to_pdf(
-                    latex_content,
-                    resolved_template_dir,
-                    resume_data=backend_data,
-                    section_order=section_order,
-                    offline=offline,
-                    local_photo_bytes=local_photo_bytes,
-                    warnings_out=warnings,
-                )
-            pdf_bytes = pdf_io.getvalue()
-            if not pdf_bytes.startswith(b"%PDF-"):
-                raise RuntimeError("Generated output is not a valid PDF document")
-            _atomic_write_pdf(output, pdf_bytes)
-        except Exception as exc:
-            deduped_warnings = list(dict.fromkeys(warnings))
-            raise CLIError(
-                str(exc),
-                code="render_failed",
-                extra={
-                    "command": "render",
-                    "input": str(file),
-                    "output": str(output),
-                    "offline": offline,
-                    "warnings": deduped_warnings,
-                },
-            ) from exc
+
+            backend_data = convert_to_backend_format(raw_data)
+            photo_marker, local_photo_bytes = _resolve_cli_photo(
+                backend_data.get("photo"),
+                input_file=file,
+                warnings=warnings,
+            )
+            if photo_marker is None:
+                backend_data.pop("photo", None)
+            else:
+                backend_data["photo"] = photo_marker
+
+            section_order = list(backend_data.get("sectionOrder") or [])
+
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    latex_content = json_to_latex(
+                        backend_data,
+                        section_order,
+                        offline=offline,
+                        warnings_out=warnings,
+                    )
+                    pdf_io = compile_latex_to_pdf(
+                        latex_content,
+                        resolved_template_dir,
+                        resume_data=backend_data,
+                        section_order=section_order,
+                        offline=offline,
+                        local_photo_bytes=local_photo_bytes,
+                        warnings_out=warnings,
+                    )
+                pdf_bytes = pdf_io.getvalue()
+                if not pdf_bytes.startswith(b"%PDF-"):
+                    raise RuntimeError("Generated output is not a valid PDF document")
+                _atomic_write_pdf(output, pdf_bytes)
+                result_bytes = len(pdf_bytes)
+            except Exception as exc:
+                deduped_warnings = list(dict.fromkeys(warnings))
+                raise CLIError(
+                    str(exc),
+                    code="render_failed",
+                    extra={
+                        "command": "render",
+                        "input": str(file),
+                        "output": str(output),
+                        "offline": offline,
+                        "warnings": deduped_warnings,
+                    },
+                ) from exc
 
         deduped_warnings = list(dict.fromkeys(warnings))
         if json_mode:
@@ -260,7 +348,9 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                     "command": "render",
                     "input": str(file),
                     "output": str(output),
-                    "bytes": len(pdf_bytes),
+                    "engine": resolved_engine,
+                    "template": template,
+                    "bytes": result_bytes,
                     "offline": offline,
                     "warnings": deduped_warnings,
                 },
@@ -271,6 +361,6 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                 sys.stderr.write(f"Warning: {warn}\n")
             sys.stderr.flush()
             stdout_stream.write(
-                f"Rendered PDF to {output} ({len(pdf_bytes)} bytes, offline={offline})\n"
+                f"Rendered {output.suffix[1:].upper()} to {output} ({result_bytes} bytes, engine={resolved_engine}, offline={offline})\n"
             )
             stdout_stream.flush()
