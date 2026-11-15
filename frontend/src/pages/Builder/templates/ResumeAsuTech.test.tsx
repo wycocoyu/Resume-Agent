@@ -191,4 +191,83 @@ describe('ResumeAsuTech & ResumeAsuVariant hardening', () => {
       expect(container.textContent).toContain('主导前端微前端架构演进')
     }
   })
+
+  it('deduplicates workExperience and experience sections in toBuilderResumeData and omits blank education entries', async () => {
+    const { toBuilderResumeData, normalizeResumeData } = await import('../adapter')
+
+    const raw = normalizeResumeData({
+      basic: {
+        name: '张示例',
+        title: '全栈开发工程师',
+        email: 'demo@example.org',
+        phone: '13800000000',
+        location: '深圳',
+      },
+      education: [
+        {
+          id: 'edu-blank',
+          school: '',
+          major: '',
+          degree: '',
+          startDate: '2022.09',
+          endDate: '2026.06',
+          description: '',
+          visible: true,
+        },
+      ],
+      workExperience: [
+        {
+          id: 'w1',
+          company: 'Alpha FullTime',
+          position: '全职工程师',
+          date: '2025.07 - 至今',
+          details: '<ul><li>主导核心架构</li></ul>',
+          visible: true,
+        },
+      ],
+      experience: [
+        {
+          id: 'e1',
+          company: 'Beta Intern One',
+          position: '后端实习生',
+          date: '2024.06 - 2024.09',
+          details: '<ul><li>完成检索优化</li></ul>',
+          visible: true,
+        },
+        {
+          id: 'e2',
+          company: 'Gamma Intern Two',
+          position: '算法实习生',
+          date: '2025.01 - 2025.05',
+          details: '<ul><li>负责服务拆分</li></ul>',
+          visible: true,
+        },
+      ],
+      menuSections: [
+        { id: 'basic', title: '基本信息', icon: '👤', enabled: true, order: 0 },
+        { id: 'education', title: '教育经历', icon: '🎓', enabled: true, order: 1 },
+        { id: 'workExperience', title: '工作经历', icon: '🏢', enabled: true, order: 2 },
+        { id: 'experience', title: '实习经历', icon: '💼', enabled: true, order: 3 },
+      ],
+    })
+
+    const built = toBuilderResumeData(raw)
+    const ids = (built.sectionMeta || []).map((s) => s.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(built.education).toHaveLength(0)
+    expect(built.fullTimeExperience).toHaveLength(1)
+    expect(built.internships).toHaveLength(2)
+
+    act(() => {
+      root.render(<ResumeAsuTech data={built} />)
+    })
+
+    const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent?.trim())
+    expect(headings).toEqual(['工作经历', '实习经历'])
+
+    const fullText = container.textContent || ''
+    expect(fullText.split('Alpha FullTime').length - 1).toBe(1)
+    expect(fullText.split('Beta Intern One').length - 1).toBe(1)
+    expect(fullText.split('Gamma Intern Two').length - 1).toBe(1)
+  })
 })

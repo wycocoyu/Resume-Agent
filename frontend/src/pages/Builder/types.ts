@@ -91,6 +91,10 @@ export interface BuilderResumeData {
   /** 自我评价:1 条渲染为正文段,多条渲染为 bullets */
   summary?: string[]
   workExperience?: Experience[]
+  /** 独立全职工作经历（与实习经历拆分，不破坏老模板 workExperience 聚合行为） */
+  fullTimeExperience?: Experience[]
+  /** 独立实习经历（对应 Workspace experience） */
+  internships?: Experience[]
   education?: Education[]
   personalProjects?: Project[]
   /** 开源经历:独立 section,各模板复用 projects 的渲染语言(repo → github pill) */
@@ -123,7 +127,14 @@ export const DEFAULT_SECTION_META: SectionMeta[] = [
  */
 export function getSortedSections(resumeData: BuilderResumeData): SectionMeta[] {
   const meta = resumeData.sectionMeta?.length ? resumeData.sectionMeta : DEFAULT_SECTION_META
-  return [...meta].filter((s) => s.isVisible).sort((a, b) => a.order - b.order)
+  const seenIds = new Set<string>()
+  return meta
+    .filter((s) => {
+      if (!s.isVisible || seenIds.has(s.id)) return false
+      seenIds.add(s.id)
+      return true
+    })
+    .sort((a, b) => a.order - b.order)
 }
 
 /**

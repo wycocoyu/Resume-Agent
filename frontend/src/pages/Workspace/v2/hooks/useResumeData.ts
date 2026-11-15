@@ -158,6 +158,7 @@ export function useResumeData() {
           ...prev,
           basic: { ...prev.basic, ...(data.basic || {}), name: saved.name },
           education: data.education || prev.education,
+          workExperience: data.workExperience || prev.workExperience,
           experience: data.experience || prev.experience,
           projects: data.projects || prev.projects,
           openSource: data.openSource || prev.openSource,  // 加载开源经历

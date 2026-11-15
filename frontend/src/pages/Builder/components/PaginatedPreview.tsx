@@ -50,12 +50,23 @@ export function PaginatedPreview({ resumeData, settings }: PaginatedPreviewProps
     setZoom(Math.max(MIN_ZOOM, Math.min(optimalZoom, MAX_ZOOM)))
   }, [settings.pageSize, autoZoom])
 
-  // Auto-zoom on mount and when page size changes
+  // Auto-zoom on mount, container resize, and when page size changes
   useEffect(() => {
     calculateAutoZoom()
     const handleResize = () => calculateAutoZoom()
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    const target = containerRef.current
+    const observer =
+      target && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => calculateAutoZoom())
+        : null
+    if (target && observer) {
+      observer.observe(target)
+    }
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      observer?.disconnect()
+    }
   }, [calculateAutoZoom])
 
   const handleZoomIn = () => {

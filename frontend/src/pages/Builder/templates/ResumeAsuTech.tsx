@@ -51,7 +51,20 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
   showContactIcons = true,
   compactMode = false,
 }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource, skills, awards, customSections } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+    skills,
+    awards,
+    customSections,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
   const sortedSections = getSortedSections(data)
 
   const renderBullets = (items?: string[], allowProjectSubheaders = false) => {
@@ -120,7 +133,7 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
       <div className={styles.sectionBlock}>
         <h2 className={styles.sectionTitle}>{title}</h2>
         {items.map((exp) => (
-          <div key={exp.id} className={styles.experienceItem}>
+          <div key={exp.id} data-no-break="true" className={styles.experienceItem}>
             <div className={styles.companyBar}>
               <div className={styles.companyBarLeft}>
                 {exp.companyLogoUrl ? (
@@ -152,7 +165,7 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
       <div className={styles.sectionBlock}>
         <h2 className={styles.sectionTitle}>{title}</h2>
         {items.map((edu) => (
-          <div key={edu.id} className={styles.educationItem}>
+          <div key={edu.id} data-no-break="true" className={styles.educationItem}>
             <div className={styles.companyBar}>
               <div className={styles.companyBarLeft}>
                 {edu.schoolLogoUrl ? (
@@ -192,7 +205,7 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
           const secondaryLink = proj.github && proj.website ? proj.website : ''
 
           return (
-            <div key={proj.id} className={styles.projectEntry}>
+            <div key={proj.id} data-no-break="true" className={styles.projectEntry}>
               <div className={styles.companyBar}>
                 <div className={styles.companyBarLeft}>
                   {(isOpenSource || proj.github) && (
@@ -288,7 +301,7 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
       <div className={styles.sectionBlock}>
         <h2 className={styles.sectionTitle}>{title}</h2>
         {items.map((item) => (
-          <div key={item.id} className={styles.projectEntry}>
+          <div key={item.id} data-no-break="true" className={styles.projectEntry}>
             <div className={styles.companyBar}>
               <div className={styles.companyBarLeft}>
                 <span className={styles.institutionName}>
@@ -425,10 +438,16 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
                 {renderEducation(education, normalizeSectionTitle(sec.displayName, '教育经历'))}
               </React.Fragment>
             )
+          case 'fullTimeExperience':
+            return (
+              <React.Fragment key={sec.id}>
+                {renderWorkExperience(fullTimeExperience, normalizeSectionTitle(sec.displayName, '工作经历'))}
+              </React.Fragment>
+            )
           case 'workExperience':
             return (
               <React.Fragment key={sec.id}>
-                {renderWorkExperience(workExperience, normalizeSectionTitle(sec.displayName, '实习经历'))}
+                {renderWorkExperience(internshipItems, normalizeSectionTitle(sec.displayName, '实习经历'))}
               </React.Fragment>
             )
           case 'personalProjects':

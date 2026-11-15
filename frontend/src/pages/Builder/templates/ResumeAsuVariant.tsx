@@ -78,7 +78,20 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
   variantId,
   showContactIcons = true,
 }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource, skills, awards, customSections } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+    skills,
+    awards,
+    customSections,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
   const config = ASU_VARIANTS_CONFIG[variantId] || ASU_VARIANTS_CONFIG['asu-01']
   const sortedSections = getSortedSections(data)
 
@@ -125,7 +138,7 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
         {renderSectionTitle(title, 'workExperience', idx)}
         <div className={config.hasTimeline ? styles.timelineContainer : undefined}>
           {items.map((exp) => (
-            <div key={exp.id} className={styles.entryItem}>
+            <div key={exp.id} data-no-break="true" className={styles.entryItem}>
               <div className={styles.entryHead}>
                 <span className={styles.entryDate}>{formatDateRange(exp.years)}</span>
                 <span className={styles.entryOrg}>
@@ -154,7 +167,7 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
       <div className={styles.sectionBlock}>
         {renderSectionTitle(title, 'education', idx)}
         {items.map((edu) => (
-          <div key={edu.id} className={styles.entryItem}>
+          <div key={edu.id} data-no-break="true" className={styles.entryItem}>
             <div className={styles.entryHead}>
               <span className={styles.entryDate}>{formatDateRange(edu.years)}</span>
               <span className={styles.entryOrg}>
@@ -188,7 +201,7 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
             const longRoleText = roleText && !shortRoleText ? roleText : ''
 
             return (
-              <div key={proj.id} className={styles.entryItem}>
+              <div key={proj.id} data-no-break="true" className={styles.entryItem}>
                 <div className={styles.entryHead}>
                   <span className={styles.entryDate}>{formatDateRange(proj.years)}</span>
                   <span className={styles.entryOrg}>
@@ -259,7 +272,7 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
       <div className={styles.sectionBlock}>
         {renderSectionTitle(title, secKey, idx)}
         {items.map((item) => (
-          <div key={item.id} className={styles.entryItem}>
+          <div key={item.id} data-no-break="true" className={styles.entryItem}>
             <div className={styles.entryHead}>
               <span className={styles.entryDate}>{formatDateRange(item.years)}</span>
               <span className={styles.entryOrg}>
@@ -336,7 +349,8 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
             {renderAwards(awards, '荣誉奖项', 2)}
           </div>
           <div className={styles.sidebarContent}>
-            {renderWorkExperience(workExperience, '实习经历', 0)}
+            {fullTimeExperience?.length ? renderWorkExperience(fullTimeExperience, '工作经历', 0) : null}
+            {renderWorkExperience(internshipItems, '实习经历', 0)}
             {renderProjects(personalProjects, '项目经历', 'personalProjects', 1)}
             {renderProjects(openSource, '开源经历', 'openSource', 2)}
             {renderSummary(summary, '自我评价', 3)}
@@ -352,7 +366,8 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
         {headerElement}
         <div className={styles.layoutTwoColumn}>
           <div className={styles.colLeft}>
-            {renderWorkExperience(workExperience, '实习经历', 0)}
+            {fullTimeExperience?.length ? renderWorkExperience(fullTimeExperience, '工作经历', 0) : null}
+            {renderWorkExperience(internshipItems, '实习经历', 0)}
             {renderProjects(personalProjects, '项目经历', 'personalProjects', 1)}
           </div>
           <div className={styles.colRight}>
@@ -375,8 +390,10 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
           switch (sec.key) {
             case 'education':
               return <React.Fragment key={sec.id}>{renderEducation(education, normalizeSectionTitle(sec.displayName, '教育背景'), idx)}</React.Fragment>
+            case 'fullTimeExperience':
+              return <React.Fragment key={sec.id}>{renderWorkExperience(fullTimeExperience, normalizeSectionTitle(sec.displayName, '工作经历'), idx)}</React.Fragment>
             case 'workExperience':
-              return <React.Fragment key={sec.id}>{renderWorkExperience(workExperience, normalizeSectionTitle(sec.displayName, '实习经历'), idx)}</React.Fragment>
+              return <React.Fragment key={sec.id}>{renderWorkExperience(internshipItems, normalizeSectionTitle(sec.displayName, '实习经历'), idx)}</React.Fragment>
             case 'personalProjects':
               return <React.Fragment key={sec.id}>{renderProjects(personalProjects, normalizeSectionTitle(sec.displayName, '项目经历'), 'personalProjects', idx)}</React.Fragment>
             case 'openSource':

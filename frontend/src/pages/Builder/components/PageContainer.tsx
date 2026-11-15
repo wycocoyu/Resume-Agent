@@ -48,12 +48,20 @@ export function PageContainer({
 
   return (
     <div className="relative flex flex-col items-center">
+      {/* 按缩放后实际占位包住纸张，避免未缩放宽框在窄预览列被裁切 */}
+      <div
+        className="relative shrink-0"
+        style={{
+          width: pageWidthPx * scale,
+          height: pageHeightPx * scale,
+        }}
+      >
       {/* Page wrapper with scale transform。
           深色模式（仅管理员可见）下纸张整体反色为黑底浅字：只覆盖屏幕预览这一份
           CSS 变量，不影响 PreviewPanel 里离屏渲染给 html2pdf 导出用的容器，
           导出结果始终是印刷标准的白底黑字。 */}
       <div
-        className="relative bg-white dark:bg-black border border-slate-200/80 dark:border-zinc-800 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-top
+        className="relative bg-white dark:bg-black border border-slate-200/80 dark:border-zinc-800 shadow-[0_4px_24px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.5)] origin-top-left
           dark:[--resume-text-primary:#f5f5f5] dark:[--resume-text-secondary:#d1d5db]
           dark:[--resume-text-tertiary:#9ca3af] dark:[--resume-text-body:#e5e7eb]
           dark:[--resume-border-primary:#6b7280] dark:[--resume-border-secondary:#4b5563]
@@ -62,7 +70,6 @@ export function PageContainer({
           width: pageWidthPx,
           height: pageHeightPx,
           transform: `scale(${scale})`,
-          marginBottom: `${pageHeightPx * scale - pageHeightPx + 16}px`,
         }}
       >
         {/* Margin guides overlay */}
@@ -114,6 +121,7 @@ export function PageContainer({
         >
           第 {pageNumber} 页 · 共 {totalPages} 页
         </div>
+      </div>
       </div>
     </div>
   )

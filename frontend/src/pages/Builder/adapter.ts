@@ -43,6 +43,7 @@ export function htmlToBullets(html: string | undefined | null): string[] {
 const SECTION_KEY_MAP: Record<string, { key: string; sectionType: SectionType }> = {
   basic: { key: 'personalInfo', sectionType: 'personalInfo' },
   education: { key: 'education', sectionType: 'itemList' },
+  workExperience: { key: 'fullTimeExperience', sectionType: 'itemList' },
   experience: { key: 'workExperience', sectionType: 'itemList' },
   projects: { key: 'personalProjects', sectionType: 'itemList' },
   openSource: { key: 'openSource', sectionType: 'itemList' },
@@ -67,42 +68,73 @@ function toPersonalInfo(data: ResumeData): PersonalInfo {
   }
 }
 
-function toWorkExperience(data: ResumeData): Experience[] {
-  const globalLogoSize = data.globalSettings?.companyLogoSize ?? DEFAULT_LOGO_SIZE
-  const rawList = [...(data.workExperience || []), ...(data.experience || [])]
-  return rawList
+function mapExperienceItems(
+  items: ResumeData['experience'] | undefined,
+  globalLogoSize: number,
+  idOffset = 0
+): Experience[] {
+  return (items || [])
     .filter((item) => item.visible !== false)
-    .map((item, index) => ({
-      id: index,
+    .map((item) => ({
+      item,
+      description: htmlToBullets(item.details),
+    }))
+    .filter(({ item, description }) =>
+      Boolean(item.company?.trim() || item.position?.trim() || description.length > 0)
+    )
+    .map(({ item, description }, index) => ({
+      id: idOffset + index,
       company: item.company || undefined,
       title: item.position || undefined,
       years: item.date || undefined,
-      description: htmlToBullets(item.details),
+      description,
       // Logo key → COS URL（未设 / 未加载则 undefined，模板条件渲染不出图，不报错）
       companyLogoUrl: item.companyLogo ? getLogoUrl(item.companyLogo) || undefined : undefined,
       companyLogoSize: item.companyLogoSize ?? globalLogoSize,
     }))
 }
 
+function toFullTimeExperience(data: ResumeData): Experience[] {
+  const globalLogoSize = data.globalSettings?.companyLogoSize ?? DEFAULT_LOGO_SIZE
+  return mapExperienceItems(data.workExperience, globalLogoSize, 0)
+}
+
+function toInternships(data: ResumeData): Experience[] {
+  const globalLogoSize = data.globalSettings?.companyLogoSize ?? DEFAULT_LOGO_SIZE
+  const fullTimeCount = (data.workExperience || []).length
+  return mapExperienceItems(data.experience, globalLogoSize, fullTimeCount)
+}
+
+function toWorkExperience(data: ResumeData): Experience[] {
+  return [...toFullTimeExperience(data), ...toInternships(data)]
+}
+
 function toEducation(data: ResumeData): Education[] {
   const globalLogoSize = data.globalSettings?.companyLogoSize ?? DEFAULT_LOGO_SIZE
   return data.education
     .filter((item) => item.visible !== false)
-    .map((item, index) => {
+    .map((item, index): Education | null => {
       const degreeLine = [item.degree, item.major].filter(Boolean).join(' · ')
       const withGpa = item.gpa ? `${degreeLine} · GPA ${item.gpa}` : degreeLine
       const years = [item.startDate, item.endDate].filter(Boolean).join(' - ')
+      const institution = item.school?.trim() || undefined
+      const degree = withGpa?.trim() || undefined
+      const description = htmlToBullets(item.description)
+      if (!institution && !degree && description.length === 0) {
+        return null
+      }
       return {
         id: index,
-        institution: item.school || undefined,
-        degree: withGpa || undefined,
+        institution,
+        degree,
         years: years || undefined,
-        description: htmlToBullets(item.description),
+        description,
         // Logo key → COS URL（未设 / 未加载则 undefined）
         schoolLogoUrl: item.schoolLogo ? getSchoolLogoUrl(item.schoolLogo) || undefined : undefined,
         schoolLogoSize: item.schoolLogoSize ?? globalLogoSize,
       }
     })
+    .filter((edu): edu is Education => edu !== null)
 }
 
 function toProjects(data: ResumeData): Project[] {
@@ -174,7 +206,7 @@ function toSectionMeta(data: ResumeData): SectionMeta[] | undefined {
     const mapped = SECTION_KEY_MAP[section.id]
     if (mapped) {
       return {
-        id: mapped.key,
+        id: section.id,
         key: mapped.key,
         displayName: section.title,
         sectionType: mapped.sectionType,
@@ -202,6 +234,8 @@ export function toBuilderResumeData(data: ResumeData): BuilderResumeData {
     personalInfo: toPersonalInfo(data),
     summary: htmlToBullets(data.selfEvaluation),
     workExperience: toWorkExperience(data),
+    fullTimeExperience: toFullTimeExperience(data),
+    internships: toInternships(data),
     education: toEducation(data),
     personalProjects: toProjects(data),
     openSource: toOpenSource(data),
@@ -235,6 +269,7 @@ export function normalizeResumeData(raw: unknown): ResumeData {
       ...(data.basic || {}),
     },
     education: Array.isArray(data.education) ? data.education : [],
+    workExperience: Array.isArray(data.workExperience) ? data.workExperience : [],
     experience: Array.isArray(data.experience) ? data.experience : [],
     projects: Array.isArray(data.projects) ? data.projects : [],
     openSource: Array.isArray(data.openSource) ? data.openSource : [],
