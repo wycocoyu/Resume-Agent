@@ -51,6 +51,7 @@ import TemplatesPage from './index'
 import { applyRequestedTemplate, parseImportedResumeJson, TEMPLATE_METADATA } from '@/data/templates'
 import { DEFAULT_RESUME_TEMPLATE } from '@/data/defaultTemplate'
 import { htmlToBullets } from '@/pages/Builder/adapter'
+import { TemplateLogo } from '@/pages/Builder/templates/TemplateLogo'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -232,5 +233,24 @@ describe('TemplatesPage & template helpers', () => {
 
     expect(() => parseImportedResumeJson('not-json')).toThrow('JSON 解析失败')
     expect(() => parseImportedResumeJson('{}')).toThrow('缺少 basic 或 education 字段')
+  })
+
+  it('keeps card preview buttons left-aligned and renders TemplateLogo with auto width ratio', async () => {
+    await act(async () => {
+      root.render(<TemplatesPage />)
+    })
+    await flushMicrotasks()
+
+    const asuCard = container.querySelector('[data-testid="template-card-asu-tech"]') as HTMLElement
+    const previewBtn = asuCard.querySelector('button[aria-label^="放大预览"]') as HTMLButtonElement
+    expect(previewBtn.className).toContain('text-left')
+
+    await act(async () => {
+      root.render(<TemplateLogo src="/api/logos/file/tencent" size={20} alt="腾讯" />)
+    })
+    const img = container.querySelector('img[alt="腾讯"]') as HTMLImageElement
+    expect(img.style.height).toBe('20px')
+    expect(img.style.width).toBe('auto')
+    expect(img.style.maxWidth).toBe('70px')
   })
 })

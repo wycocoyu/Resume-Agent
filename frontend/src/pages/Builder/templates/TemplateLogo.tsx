@@ -22,7 +22,7 @@ export const TemplateLogo: React.FC<TemplateLogoProps> = ({ url, src, size = 20,
     <img
       src={resolvedUrl}
       alt={alt}
-      style={{ width: size, height: size, objectFit: 'contain' }}
+      style={{ height: size, width: 'auto', maxWidth: size * 3.5, objectFit: 'contain' }}
       className={className ? `inline-block align-middle mr-1.5 shrink-0 ${className}` : 'inline-block align-middle mr-1.5 shrink-0'}
     />
   )

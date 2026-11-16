@@ -106,30 +106,56 @@ interface ScaledResumePreviewProps {
   builderData: ReturnType<typeof toBuilderResumeData>
   settings: TemplateSettings
   fallbackScale?: number
+  aspectClip?: boolean
 }
 
-function ScaledResumePreview({ builderData, settings, fallbackScale = 0.32 }: ScaledResumePreviewProps) {
+function ScaledResumePreview({
+  builderData,
+  settings,
+  fallbackScale = 0.32,
+  aspectClip = true,
+}: ScaledResumePreviewProps) {
   const boxRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(fallbackScale)
+  const [contentHeight, setContentHeight] = useState(A4_PREVIEW_HEIGHT)
 
   useEffect(() => {
     const el = boxRef.current
+    const inner = contentRef.current
     if (!el) return
     const update = () => {
       if (el.clientWidth > 0) {
-        setScale(el.clientWidth / A4_PREVIEW_WIDTH)
+        const nextScale = aspectClip
+          ? el.clientWidth / A4_PREVIEW_WIDTH
+          : Math.min(1, el.clientWidth / A4_PREVIEW_WIDTH)
+        setScale(nextScale)
+      }
+      if (inner && inner.scrollHeight > 0) {
+        setContentHeight(inner.scrollHeight)
       }
     }
     update()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(update)
     ro.observe(el)
+    if (inner) ro.observe(inner)
     return () => ro.disconnect()
-  }, [])
+  }, [aspectClip])
 
   return (
-    <div ref={boxRef} className="relative w-full aspect-[210/297] overflow-hidden bg-white select-none pointer-events-none">
+    <div
+      ref={boxRef}
+      className={cn(
+        'relative w-full bg-white text-left',
+        aspectClip
+          ? 'aspect-[210/297] overflow-hidden select-none pointer-events-none'
+          : 'overflow-hidden mx-auto max-w-[794px]',
+      )}
+      style={!aspectClip && scale < 1 ? { height: `${Math.ceil(contentHeight * scale)}px` } : undefined}
+    >
       <div
+        ref={contentRef}
         style={{
           width: `${A4_PREVIEW_WIDTH}px`,
           minHeight: `${A4_PREVIEW_HEIGHT}px`,
@@ -397,7 +423,7 @@ export default function TemplatesPage() {
                       <button
                         type="button"
                         onClick={() => setPreviewTemplate(tpl)}
-                        className="relative block w-full overflow-hidden border border-slate-300 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]"
+                        className="relative block w-full text-left overflow-hidden border border-slate-300 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]"
                         aria-label={`放大预览 ${tpl.name}`}
                       >
                         {isXeLatexStatic ? (
@@ -506,7 +532,7 @@ export default function TemplatesPage() {
           onClick={() => setPreviewTemplate(null)}
         >
           <div
-            className="flex max-h-[92vh] w-full max-w-5xl flex-col border-2 border-black bg-white dark:bg-[#1C1C1C] dark:border-white shadow-[8px_8px_0px_0px_#000000] fresh:rounded-2xl overflow-hidden"
+            className="flex max-h-[92vh] w-full max-w-[1180px] flex-col border-2 border-black bg-white dark:bg-[#1C1C1C] dark:border-white shadow-[8px_8px_0px_0px_#000000] fresh:rounded-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 px-5 py-3.5">
@@ -564,9 +590,11 @@ export default function TemplatesPage() {
                       className="w-full h-auto block bg-white"
                     />
                   ) : (
-                    <ResumeRenderer
-                      resumeData={builderPreviewData}
+                    <ScaledResumePreview
+                      builderData={builderPreviewData}
                       settings={settingsForTemplate(previewTemplate.id)}
+                      fallbackScale={1}
+                      aspectClip={false}
                     />
                   )}
                 </div>
