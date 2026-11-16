@@ -4,6 +4,8 @@
 
 ### 帮你把经历聊成一份好简历：AI 生成、可解释诊断与 LaTeX 高清排版
 
+**🌐 官方网站 / 在线体验：[https://cococv.cn](https://cococv.cn)**
+
 <p>
   <a href="https://cococv.cn"><img src="https://img.shields.io/badge/🌐_在线体验-cococv.cn-36BCF7?style=for-the-badge" alt="Live Demo" /></a>
   <a href="https://github.com/wycocoyu/cococv/stargazers"><img src="https://img.shields.io/github/stars/wycocoyu/cococv?style=for-the-badge&color=yellow" alt="Stars" /></a>
@@ -19,7 +21,7 @@
   <img src="https://img.shields.io/badge/LaTeX-008080?logo=latex&logoColor=white" alt="LaTeX" />
 </p>
 
-<img src="docs/readme/home.png" alt="Resume-Agent 首页" width="95%" />
+<img src="docs/readme/home.png" alt="CocoCV 首页" width="95%" />
 
 </div>
 
@@ -29,7 +31,7 @@
 
 **CocoCV（[cococv.cn](https://cococv.cn)，原 Resume-Agent）** 是一个面向中文求职场景的全栈 AI 简历平台，打通了从 **一句话对话生成 / PDF 与图片导入 → 可解释简历诊断与 ATS 检查 → 自然语言增量改写 → 双栏可视化排版与 LaTeX PDF 导出** 的全流程，让你把精力放回经历打磨本身，告别深夜反复调格式。
 
-## ✨ 核心特性（v3.7）
+## ✨ 核心特性
 
 | 模块 | 核心能力 |
 |:--|:---|

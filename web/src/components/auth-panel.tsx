@@ -161,12 +161,12 @@ export function AuthPanel({ returnTo = "" }: AuthPanelProps) {
   return (
     <section className="auth-card login-card">
       <div className="login-brand">
-        <span className="login-logo">RA</span>
-        <span className="login-wordmark">Resume.AI</span>
+        <span className="login-logo">CV</span>
+        <span className="login-wordmark">CocoCV</span>
       </div>
 
       <div className="login-head">
-        <h2>{mode === "signin" ? "登录 Resume.AI" : "创建你的账户"}</h2>
+        <h2>{mode === "signin" ? "登录 CocoCV" : "创建你的账户"}</h2>
         <p className="muted">
           {mode === "signin"
             ? "登录以继续创建你的简历"

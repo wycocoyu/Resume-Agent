@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume Agent",
-  description: "Resume Agent 登录与用户中心",
+  title: "CocoCV",
+  description: "CocoCV 登录与用户中心",
 };
 
 export default function RootLayout({

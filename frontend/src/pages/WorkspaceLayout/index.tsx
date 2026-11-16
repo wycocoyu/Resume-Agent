@@ -302,11 +302,11 @@ export default function WorkspaceLayout({
               >
                 <div className="w-8 h-8 bg-[#4285F4] rounded-none fresh:rounded-md flex items-center justify-center border border-black fresh:border-blue-500 dark:border-white shadow-[2px_2px_0px_0px_#000000] fresh:shadow-none dark:shadow-[2px_2px_0px_0px_#ffffff] transition-colors group-hover:bg-[#3367D6] shrink-0">
                   <span className="text-white font-mono fresh:font-sans font-black text-xs not-italic">
-                    RA
+                    CV
                   </span>
                 </div>
                 <span className="text-black dark:text-white font-mono fresh:font-hero font-bold text-sm uppercase fresh:normal-case tracking-wide fresh:tracking-tight truncate">
-                  Resume.AI
+                  CocoCV
                 </span>
               </button>
               <button
@@ -329,7 +329,7 @@ export default function WorkspaceLayout({
               <div className="flex items-center justify-center transition-opacity duration-200 group-hover:opacity-0 w-full">
                 <div className="w-8 h-8 bg-[#4285F4] rounded-none fresh:rounded-md flex items-center justify-center border border-black fresh:border-blue-500 dark:border-white shadow-[2px_2px_0px_0px_#000000] fresh:shadow-none dark:shadow-[2px_2px_0px_0px_#ffffff] shrink-0">
                   <span className="text-white font-mono fresh:font-sans font-black text-xs not-italic">
-                    RA
+                    CV
                   </span>
                 </div>
               </div>

@@ -29,9 +29,9 @@ export function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) 
           </Link>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-gradient-to-br from-blue-600 to-blue-500 rounded-lg flex items-center justify-center shrink-0">
-              <span className="text-white font-black text-[10px] italic">RA</span>
+              <span className="text-white font-black text-[10px] italic">CV</span>
             </div>
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Resume.AI</span>
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">CocoCV</span>
             <BetaBadge className="translate-y-[-5px]" />
           </div>
         </div>

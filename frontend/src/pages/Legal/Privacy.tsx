@@ -7,7 +7,7 @@ export default function Privacy() {
     <LegalLayout title="隐私政策" lastUpdated={LAST_UPDATED}>
       <LegalSection heading="1. 引言">
         <p>
-          本隐私政策说明 Resume.AI（以下简称“本服务”）在您使用过程中如何收集、使用、存储与保护您的个人信息。我们重视您的隐私，并按本政策处理您的数据。
+          本隐私政策说明 CocoCV（以下简称“本服务”）在您使用过程中如何收集、使用、存储与保护您的个人信息。我们重视您的隐私，并按本政策处理您的数据。
         </p>
       </LegalSection>
 

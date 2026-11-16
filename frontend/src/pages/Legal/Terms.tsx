@@ -7,7 +7,7 @@ export default function Terms() {
     <LegalLayout title="服务条款" lastUpdated={LAST_UPDATED}>
       <LegalSection heading="1. 服务说明">
         <p>
-          Resume.AI（以下简称“本服务”）是一款面向中文求职场景的 AI 简历工具，提供自然语言生成、简历解析、结构化编辑、AI 对话式修改、实时预览、简历质量分析与 PDF 导出等功能。您使用本服务即表示已阅读、理解并同意本条款的全部内容。
+          CocoCV（以下简称“本服务”）是一款面向中文求职场景的 AI 简历工具，提供自然语言生成、简历解析、结构化编辑、AI 对话式修改、实时预览、简历质量分析与 PDF 导出等功能。您使用本服务即表示已阅读、理解并同意本条款的全部内容。
         </p>
       </LegalSection>
 

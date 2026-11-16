@@ -76,7 +76,7 @@ export function BetaNoticeModal() {
 
             <div className="space-y-3 px-6 pb-2">
               <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                Resume.AI 目前仍在积极打磨中、部分功能（例如 PDF 上传解析）可能较慢、偶尔也会有小瑕疵。
+                CocoCV 目前仍在积极打磨中、部分功能（例如 PDF 上传解析）可能较慢、偶尔也会有小瑕疵。
               </p>
               <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
                 当前（Beta 测试版）期间、下载 PDF、渲染 PDF 和 AI 功能都是免费的、放心使用。

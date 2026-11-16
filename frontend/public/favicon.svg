@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="ra" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="cv" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#2563eb"/>
       <stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="8" fill="url(#ra)"/>
-  <text x="16" y="22" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="900" font-style="italic" fill="#ffffff" text-anchor="middle">RA</text>
+  <rect width="32" height="32" rx="8" fill="url(#cv)"/>
+  <text x="16" y="22" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="900" font-style="italic" fill="#ffffff" text-anchor="middle">CV</text>
 </svg>

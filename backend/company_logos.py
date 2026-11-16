@@ -475,7 +475,7 @@ def _download_url_to_path(
 ) -> None:
     """带超时与最大字节上限的 HTTP 下载，避免 PDF 编译阶段无限挂起或超大响应撑爆内存。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    req = urllib.request.Request(url, headers={"User-Agent": "CocoCV/3.12.3"})
+    req = urllib.request.Request(url, headers={"User-Agent": "CocoCV/3.12.4"})
     with opener.open(req, timeout=timeout) as resp:
         data = resp.read(max_bytes + 1)
         if len(data) > max_bytes:

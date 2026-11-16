@@ -7,8 +7,8 @@ import { auth } from "@/lib/auth";
 import { resolveReturnTo } from "@/lib/return-to";
 
 export const metadata: Metadata = {
-  title: "登录 · Resume Agent",
-  description: "登录以继续使用 Resume Agent",
+  title: "登录 · CocoCV",
+  description: "登录以继续使用 CocoCV",
 };
 
 type AccountPageProps = {

@@ -40,7 +40,7 @@ const trustedOrigins = Array.from(
 );
 
 export const auth = betterAuth({
-  appName: "Resume Agent",
+  appName: "CocoCV",
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret:
     process.env.BETTER_AUTH_SECRET ||

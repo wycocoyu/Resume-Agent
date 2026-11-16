@@ -387,9 +387,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
           <div className="flex items-center gap-2.5 cursor-pointer group shrink-0 min-w-0" onClick={() => navigate('/')}>
             <div className="w-9 h-9 bg-[#4285F4] flex items-center justify-center border border-black fresh:border-slate-200 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-none transition-all shrink-0">
-              <span className="text-white font-mono fresh:font-sans font-black text-sm italic">RA</span>
+              <span className="text-white font-mono fresh:font-sans font-black text-sm italic">CV</span>
             </div>
-            <span className="text-black font-mono fresh:font-sans font-bold text-base uppercase fresh:normal-case tracking-wide fresh:tracking-normal">Resume.AI</span>
+            <span className="text-black font-mono fresh:font-sans font-bold text-base uppercase fresh:normal-case tracking-wide fresh:tracking-normal">CocoCV</span>
             <BetaBadge className="-ml-1 translate-y-[-6px]" />
           </div>
 
@@ -887,9 +887,9 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-[#4285F4] flex items-center justify-center border border-black fresh:border-slate-200 shrink-0">
-              <span className="text-white font-mono fresh:font-sans font-black text-xs italic">RA</span>
+              <span className="text-white font-mono fresh:font-sans font-black text-xs italic">CV</span>
             </div>
-            <span className="text-sm font-mono fresh:font-sans font-bold text-black dark:text-white">Resume.AI</span>
+            <span className="text-sm font-mono fresh:font-sans font-bold text-black dark:text-white">CocoCV</span>
             <BetaBadge className="-ml-0.5 translate-y-[-5px]" />
             <span className="text-sm text-slate-500 dark:text-slate-400">公益 AI 简历制作</span>
           </div>
