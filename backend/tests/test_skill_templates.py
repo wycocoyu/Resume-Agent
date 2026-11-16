@@ -322,6 +322,9 @@ def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
     assert "Headless Chrome CDP" in body
     assert "capabilities.local_latex_pdf" in body
     assert "handoff" in body
+    assert "本地当前优先推荐" in body
+    assert "上云" in body
+    assert "cococv.cn" in body
 
 
 def test_install_and_uninstall_harness_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
