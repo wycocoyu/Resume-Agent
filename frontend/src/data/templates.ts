@@ -37,7 +37,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'latex',
     category: 'LaTeX',
     tags: ['推荐', 'XeLaTeX', '矢量 PDF', 'Logo 嵌入'],
-    thumbnail: '/templates/classic-latex-preview.png',
+    thumbnail: '/template-previews/classic-latex-preview.png',
     supportsCli: true,
     recommended: true,
   },

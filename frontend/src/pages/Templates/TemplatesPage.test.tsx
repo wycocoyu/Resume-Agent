@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import fs from 'node:fs'
+import path from 'node:path'
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -100,11 +102,12 @@ describe('TemplatesPage & template helpers', () => {
     expect(cards).toHaveLength(TEMPLATE_METADATA.length)
     expect(cards).toHaveLength(27)
 
-    // Classic LaTeX renders authentic XeLaTeX preview image
+    // Classic LaTeX renders authentic XeLaTeX preview image without shadowing SPA /templates route
     const defaultCard = container.querySelector('[data-testid="template-card-default"]') as HTMLElement
     const defaultImg = defaultCard.querySelector('img') as HTMLImageElement
     expect(defaultImg).not.toBeNull()
-    expect(defaultImg.getAttribute('src')).toBe('/templates/classic-latex-preview.png')
+    expect(defaultImg.getAttribute('src')).toBe('/template-previews/classic-latex-preview.png')
+    expect(fs.existsSync(path.resolve(__dirname, '../../../public/templates'))).toBe(false)
 
     // Web-only template (modern) should NOT expose a broken CLI copy button
     const modernCard = container.querySelector('[data-testid="template-card-modern"]') as HTMLElement
