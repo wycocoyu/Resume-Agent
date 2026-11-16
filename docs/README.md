@@ -15,4 +15,4 @@
 ### 模块级专项文档
 - **CLI 与 Agent Skill 规范**：[`../skills/resume-agent/SKILL.md`](../skills/resume-agent/SKILL.md) 与 [`../skills/resume-agent/references/schema.md`](../skills/resume-agent/references/schema.md)
 - **LaTeX 简历模板说明**：[`../latex-resume-template/README.md`](../latex-resume-template/README.md)
-- **HTML 简历模板说明**：[`../frontend/public/templates/README.md`](../frontend/public/templates/README.md)
+- **模板广场与 27 套工作台模板目录**：[`../frontend/src/data/templates.ts`](../frontend/src/data/templates.ts)（渲染总览见 [`readme/template-overview.png`](readme/template-overview.png)）

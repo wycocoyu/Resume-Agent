@@ -15,7 +15,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.13.0',
+    version: '3.13.1',
     date: '2026-11-16',
     added: [
       '新增免登录公开「模板广场」页面（/templates），完整对齐工作台 27 套真实简历模板并将 3 套常用默认模板置顶成行，支持一键复制 AI 助手口令、导入本地 resume.json 实时试套与免登录直接编辑',
@@ -23,6 +23,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       '新增按需网页承接命令与分享页一键导入工作台入口，支持免登录存本机浏览器编辑或登录后云端保存',
     ],
     fixed: [
+      '修复模板广场静态预览图目录与前端 /templates 路由同名导致线上 Nginx 403 拦截的问题',
       '修复模板广场缩略图居中错位、横向企业 Logo 压扁、嵌套列表要点重复、无头像空虚线框以及部分现代模板章节编号从 02 起算的问题',
       '修复 7 套经典网页模板将「工作经历」合并入「实习经历」以及无地点时企业 Logo 与公司名称左右分离的排版缺陷',
     ],
