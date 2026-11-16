@@ -1,14 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - 'feat/**'
-      - 'codex/**'
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:  # Switched to manual trigger only; auto CI/CD disabled
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -49,7 +49,7 @@
 - Rule: All testing must use deterministic native test runners (vitest, npm, pytest). Never invoke `claude` or `opencode` CLI as test execution engines.
 
 ## Engineering Governance & Release Process
-- Deploy = `git push origin main`; automated deployment pulls, builds, and restarts pm2.
+- Deploy = manual deployment only (GitHub Actions set to `workflow_dispatch`; server `auto-deploy.sh` cron paused).
 - **Before pushing to main, update `CHANGELOG` array in `frontend/src/data/changelog.ts`:**
   - Bump `version` (patch +0.0.1, e.g. `3.8.0` → `3.8.1`; minor feature +0.1.0, e.g. `3.8.0` → `3.9.0`)
   - **Date format must strictly be pure-date: `YYYY-MM-DD` only, NEVER include time** (e.g. `2026-11-15`, forbidden: `2026-11-15 10:00`)

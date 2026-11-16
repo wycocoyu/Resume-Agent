@@ -1,11 +1,7 @@
 name: Code Statistics
 
 on:
-  push:
-    branches: [main, staging]
-  schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 0:00 运行
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # 仅保留手动触发；已关闭 push 与定时自动触发
 
 # 连续 push 触发多个 run 同时推 gh-pages 会撞锁（cannot lock ref），只保留最新一个
 concurrency:

@@ -1,8 +1,7 @@
 name: PR Template Check
 
 on:
-  pull_request_target:
-    types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:  # 仅保留手动触发；已关闭 PR 自动触发
 
 permissions:
   contents: read
@@ -10,6 +9,7 @@ permissions:
 
 jobs:
   validate-pr-body:
+    if: github.event_name == 'pull_request_target'
     name: Validate PR Description & UI Evidence
     runs-on: ubuntu-latest
     timeout-minutes: 5
