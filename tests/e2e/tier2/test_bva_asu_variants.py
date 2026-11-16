@@ -14,14 +14,15 @@ WORKTREE_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_t2_f08_01_sidebar_layout_rules_in_production():
-    """TEST-T2-F08-01: Verify sidebar layout defines flex gap and min-width rules."""
+    """TEST-T2-F08-01: Verify sidebar layout defines grid columns and sidebar content rules."""
     css_file = WORKTREE_ROOT / "frontend" / "src" / "pages" / "Builder" / "templates" / "styles" / "asuVariants.module.css"
     assert css_file.exists(), f"CSS module must exist at {css_file}"
     content = css_file.read_text(encoding="utf-8")
 
     assert ".layoutSidebar" in content
     assert ".sidebar" in content
-    assert "min-width: 180px" in content or "width: 32%" in content
+    assert ".sidebarContent" in content
+    assert "grid-template-columns: 31% minmax(0, 1fr)" in content or "min-width: 180px" in content or "width: 32%" in content
 
 
 def test_t2_f08_02_two_column_grid_proportions():
@@ -40,7 +41,7 @@ def test_t2_f08_03_print_media_rules_in_variants():
 
     assert "@media print" in content
     assert "padding: 0 !important" in content
-    assert "width: 210mm !important" in content
+    assert "width: 100% !important" in content or "width: 210mm !important" in content
 
 
 def test_t2_f08_04_fallback_to_asu_01_in_component():

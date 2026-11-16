@@ -264,12 +264,12 @@ def test_t5_06_mcp_sse_transport_malformed_protocol_requests():
     resp_404 = client.get("/nonexistent/adversarial/endpoint")
     assert resp_404.status_code == 404
 
-    # 2. GET to /messages (which requires POST) returns 405 Method Not Allowed
-    resp_405 = client.get("/messages")
-    assert resp_405.status_code in (405, 307)
-    if resp_405.status_code == 307:
-        redirect_resp = client.get(resp_405.headers["location"])
-        assert redirect_resp.status_code == 405
+    # 2. Unsessioned GET to /messages is rejected immediately by SSE transport (400 missing session_id / 405 / 307)
+    resp_get = client.get("/messages", follow_redirects=False)
+    assert resp_get.status_code in (400, 405, 307)
+    if resp_get.status_code == 307:
+        redirect_resp = client.get(resp_get.headers["location"])
+        assert redirect_resp.status_code in (400, 405)
 
     # 3. POST to /messages with malformed, non-JSON body and missing session
     resp_bad_post = client.post("/messages", content=b"MALFORMED_NON_JSON_BYTES", follow_redirects=True)

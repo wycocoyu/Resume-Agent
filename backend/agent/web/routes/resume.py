@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/resume", tags=["resume"])
+router = APIRouter(prefix="/resume", tags=["Agent"])
 
 # Default resume path
 DEFAULT_RESUME_DIR = Path("app/docs")

@@ -25,7 +25,7 @@ from backend.middleware.auth import AppUser
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/history", tags=["history"])
+router = APIRouter(prefix="/history", tags=["Agent"])
 storage = get_conversation_storage()
 conversation_manager = ConversationManager(storage=storage)
 _save_fingerprint_cache: dict[str, tuple[int, str]] = {}

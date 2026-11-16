@@ -17,7 +17,7 @@ from backend.middleware.auth import AppUser
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Agent"])
 
 
 class ApprovalActionRequest(BaseModel):

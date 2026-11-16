@@ -3,7 +3,7 @@
 计算简历与JD的多维度匹配分数
 """
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from sqlalchemy.orm import Session
 
 from models import ScoreResult, Resume
@@ -18,14 +18,15 @@ class ScoringService:
     def __init__(self, db: Session):
         self.db = db
 
-    def score_resume(self, resume_id: str, user_id: int, jd_text: str) -> Dict[str, Any]:
+    def score_resume(self, resume_id: str, user_id: Union[str, int], jd_text: str) -> Dict[str, Any]:
         """
         对简历进行多维度评分
         """
+        normalized_user_id = str(user_id)
         # 获取简历数据
         resume = self.db.query(Resume).filter(
             Resume.id == resume_id,
-            Resume.user_id == user_id
+            Resume.user_id == normalized_user_id
         ).first()
 
         if not resume:
@@ -59,7 +60,7 @@ class ScoringService:
         # 保存到数据库
         score_record = ScoreResult(
             resume_id=resume_id,
-            user_id=user_id,
+            user_id=normalized_user_id,
             jd_text=jd_text,
             overall_score=round(overall_score, 1),
             skill_experience_score=skill_experience_result["score"],

@@ -6,7 +6,7 @@ Provides health check endpoints for monitoring.
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(prefix="/health", tags=["Agent"])
 
 
 class HealthResponse(BaseModel):

@@ -16,7 +16,7 @@ from backend.latex_generator import (
     _ensure_cjk_tounicode_cmaps_stdlib,
 )
 
-WORKTREE_ROOT = Path("/Users/mac/开源工具/ResumeAgent-worktree")
+WORKTREE_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE_DIR = WORKTREE_ROOT / "latex-resume-template"
 CJK_DIR = TEMPLATE_DIR / "fonts" / "zh_CN-Adobe"
 

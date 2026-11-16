@@ -22,7 +22,9 @@ def test_t2_f07_01_sanitize_html_production_contract():
 
     assert "export function sanitizeInlineHtml" in content
     assert "export function escapeText" in content
-    assert "INLINE_TAGS = new Set(['STRONG', 'B', 'EM', 'I', 'U', 'A'])" in content
+    assert "INLINE_TAGS = new Set(" in content
+    for expected_tag in ("'STRONG'", "'B'", "'EM'", "'I'", "'U'", "'A'", "'CODE'"):
+        assert expected_tag in content
 
 
 def test_t2_f07_02_script_and_dangerous_protocols_blocked():

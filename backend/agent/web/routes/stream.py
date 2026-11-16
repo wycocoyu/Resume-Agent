@@ -39,7 +39,7 @@ from backend.agent.cltp.storage.factory import get_conversation_storage
 from backend.agent.memory.conversation_manager import ConversationManager
 from backend.agent.web import session_manager
 
-router = APIRouter()
+router = APIRouter(tags=["Agent"])
 
 # Create stream processor for agent execution
 stream_processor = StreamProcessor()

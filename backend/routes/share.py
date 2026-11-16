@@ -12,7 +12,7 @@ from typing import Dict, Any
 from loguru import logger
 
 # 与其他接口保持一致，使用 /api 前缀
-router = APIRouter(prefix="/api/resume", tags=["resume-share"])
+router = APIRouter(prefix="/api/resume", tags=["Resume Share"])
 
 # 使用内存存储（生产环境请替换为数据库/Redis）
 share_store: Dict[str, Dict[str, Any]] = {}

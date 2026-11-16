@@ -57,6 +57,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 import httpx
 from backend.middleware.observability import register_observability_handlers
+from backend.api_docs import (
+    API_DESCRIPTION_MARKDOWN,
+    OPENAPI_TAGS_METADATA,
+    register_api_docs,
+)
 
 def import_module_candidates(candidates):
     """按候选列表依次尝试导入模块，避免多层嵌套 try/except。"""
@@ -90,8 +95,17 @@ leetcode_router = routes_module.leetcode_router
 billing_router = routes_module.billing_router
 jd_router = getattr(routes_module, "jd_router", None)
 
-# 初始化 FastAPI 应用
-app = FastAPI(title="Resume API")
+# 初始化 FastAPI 应用（关闭默认 CDN 文档路由，统一交由离线自托管 Scalar + Swagger UI 挂载）
+app = FastAPI(
+    title="CocoCV API",
+    version="3.12.0",
+    description=API_DESCRIPTION_MARKDOWN,
+    openapi_tags=OPENAPI_TAGS_METADATA,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+register_api_docs(app)
 
 # 配置 CORS
 app.add_middleware(
