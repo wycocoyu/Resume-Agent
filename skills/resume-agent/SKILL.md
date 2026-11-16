@@ -9,7 +9,7 @@ metadata:
 
 在 Codex 中使用 `$resume-agent` 唤醒本技能。默认基于 **`asu-tech`（ASu 单栏高密度技术简历模板）** 生成自包含可编辑 `.html`（支持打印或导出 `.pdf`），同时支持 `asu-01`～`asu-18`、`html-classic` 共 20 套零依赖 HTML 模板与 CocoCV 原生 **LaTeX (`default`)** 模板。
 
-全程本机离线处理、无需登录、无需本机安装 LaTeX（仅需 Python 3.10+）；所有结构化数据遵循 Workspace v2 `ResumeData` 规范。
+HTML 模板全程本机离线处理、无需登录、无需本机安装 LaTeX（仅需 Python 3.10+）；原生 **LaTeX (`default`)** 模板需本机同时具备 `cococv` CLI 与 `xelatex` 才可离线编译，无双依赖时默认引导通过 `handoff` 前往远程网页端出稿。所有结构化数据遵循 Workspace v2 `ResumeData` 规范。
 
 ## 核心铁律
 
@@ -28,8 +28,8 @@ SKILL_PY="$(find ~/.codex ~/.agents ~/.codebuddy skills -name cococv_local.py 2>
 python3 "$SKILL_PY" env --json
 ```
 
-- **已安装完整 CLI（`cococv` / `resume-agent`）**：支持 `.html`、多页 `.png`、Headless Chrome CDP `.pdf` 及本机 `xelatex` `.pdf`。
-- **零依赖兜底（仅 Python 3.10+）**：`python3 "$SKILL_PY"` 内置完整 `env`、`read-source`、`templates`、`init`、`validate`、`render` 与 `handoff` 能力，无需 `pip install`、无需启动后端服务。
+- **已安装完整 CLI（`cococv` / `resume-agent`）且具备 `xelatex`（即 `capabilities.local_latex_pdf == true`）**：支持全部 `.html`、多页 `.png`、Headless Chrome CDP `.pdf` 及本机 `xelatex` `.pdf`（`default`）。
+- **仅零依赖脚本或缺少双依赖（`capabilities.local_latex_pdf == false`，即使本机单独装有 `xelatex` 但 `cococv_cli` 为 `null` 也算不具备）**：`python3 "$SKILL_PY"` 内置完整 `env`、`read-source`、`templates`、`init`、`validate`、HTML/Chrome `render` 与 `handoff` 能力，无需 `pip install` 或启动后端即可本地生成 `asu-tech` 等 20 套 HTML / PDF；但 **`default`（XeLaTeX）无法单靠脚本本地编译**——**严禁在磁盘上执行全盘 `find` 搜索二进制**，首轮回复即应告知用户「本机未配齐 `cococv CLI` + `xelatex` 双依赖，建议完成 `resume.json` 整理与校验后直接通过 `handoff` 前往远程网页端编译（或改用本地零依赖 `asu-tech`）」。
 - **安装到当前宿主**：
   ```bash
   resume-agent skill install --harness codex --dry-run
@@ -88,7 +88,7 @@ python3 "$SKILL_PY" env --json
 | 多段实习或清晰成长轨迹 | `asu-03` / `asu-04` / `asu-10` | 左侧时间轴 / 深蓝顶幅 / 丝带标签 | 零依赖直出 |
 | 经历较少想双列平衡留白 | `asu-05` / `asu-13` | 灰调侧栏 / 纯黑紧凑侧栏（左技能右经历） | 零依赖直出 |
 | 资深研发 / 多项目 / 学术科研双页 | `asu-06` / `asu-08` / `asu-16` / `asu-17` / `asu-18` | 双页时间轴 / 双栏双页 / 纯黑学术双页 | 零依赖直出 |
-| 偏好传统 LaTeX 排版 | `default` | CocoCV 原生经典单栏 XeLaTeX 模板 | 需本机 `xelatex` 或 Web `handoff` |
+| 偏好传统 LaTeX 排版 | `default` | CocoCV 原生经典单栏 XeLaTeX 模板 | 默认引导 `handoff` 远程编译（仅 `capabilities.local_latex_pdf == true` 时建议本地） |
 
 用户想看全部模板或犹豫版式时，先指引用户打开官网免登录模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)（支持查看全部 21 套预览、复制口令发回给你、免登录在线微调或导入 `resume.json` 试套），也可以直接用下面命令查看清单或生成本地单文件可视化对比画廊：
 
@@ -140,7 +140,7 @@ cococv render resume.json -o resume.png --template asu-tech --json
 # 3. 本机 Headless Chrome CDP 直接导出 A4 PDF 并同步出 PNG 预览图
 resume-agent render resume.json -o resume.pdf --template asu-tech --png --json
 
-# 4. 本机装有 xelatex 时，直接用 CocoCV 原生 LaTeX 模板导出 PDF
+# 4. 仅当 env --json 返回 capabilities.local_latex_pdf == true（本机同时装有 cococv CLI 与 xelatex）时，才建议本地 LaTeX 编译：
 cococv render resume.json -o resume.pdf --template default --engine latex --png --json
 ```
 
@@ -148,13 +148,13 @@ cococv render resume.json -o resume.pdf --template default --engine latex --png 
 
 - **纸张与分页**：A4 尺寸稳定，单页不过空（也不因多出 2～3 行尾巴被迫换第二页），多页先填实第一页再顺延。
 - **版面与文字**：单/双栏结构正确，长姓名/邮箱/链接不溢出重叠，文本可选中可复制（不用整页截图替代 PDF）。
-- **LaTeX 兜底边界**：若用户指定 `default` LaTeX 模板但本机未安装 `xelatex`，明确告知原因并提供两项选择：改用与单栏观感一致的 `asu-tech` 本地秒出 HTML/PDF，或执行 `handoff` 到网页工作台云端编译。
+- **LaTeX 远程优先与禁扫盘边界**：若用户指定 `default`（LaTeX）模板且 `env --json` 返回 `capabilities.local_latex_pdf == false`（缺少 `cococv_cli` 或缺少 `xelatex` 任一项），**严禁**宣称支持本机离线编译，**严禁**对用户目录全盘执行 `find` 查找二进制，也不要硬跑必败的 `render --template default --engine latex`。应先在本地整理并校验通过 `resume.json`（`validate` 退出码 `0`），随后**默认引导远程**：征得用户同意联网后执行 `python3 "$SKILL_PY" handoff resume.json --ttl-minutes 60 --json`，返回链接引导至网页端云端编译（也可直接把 `resume.json` 导入官网 `cococv.cn/templates` 在线体验，或按用户意愿改用单栏观感相近的本地 `asu-tech`）。
 
 ## 第六步 · 交付说明与可选网页工作台续修
 
 交付时明确告知用户：生成文件路径、所选模板与页数、Print-preview QA 结果、仍需用户补充的 `【待补】` 清单，以及浏览器 `Cmd/Ctrl + P`（开启背景图形、关闭页眉页脚）导出 PDF 的方法。
 
-全部产物默认保留在用户本机，无需登录。仅当用户明确要求**上网页工作台可视化拖拽微调或使用云端 XeLaTeX** 时，才执行：
+HTML 产物默认保留在用户本机，无需登录。若用户希望上网页工作台可视化拖拽微调，或选用 `default`（XeLaTeX）模板且 `capabilities.local_latex_pdf == false` 需使用远程云端 XeLaTeX 时，向用户确认联网后执行：
 
 ```bash
 cococv handoff resume.json --ttl-minutes 60 --json

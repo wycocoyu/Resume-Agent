@@ -248,7 +248,7 @@ TEMPLATE_CATALOG: tuple[dict[str, Any], ...] = (
         "engine": "latex",
         "pages": "1-2页",
         "recommended": False,
-        "description": "CocoCV 原生 XeLaTeX 经典单栏版式（需本机 xelatex 或用 handoff 到网页工作台云端编译）。",
+        "description": "CocoCV 原生 XeLaTeX 经典单栏版式（默认建议通过 handoff 走网页端远程编译，仅本机同时具备 cococv CLI 与 xelatex 时可本地直出）。",
         "best_for": "偏好传统 LaTeX 学术/程序员排版的用户",
     },
 )
@@ -429,6 +429,7 @@ def probe_environment() -> dict[str, Any]:
         "chrome": str(chrome_bin) if chrome_bin else None,
         "xelatex": str(xelatex_bin) if xelatex_bin else None,
         "recommended_engine": "html",
+        "recommended_latex_route": "local" if (cli_cmd and xelatex_bin) else "remote_handoff",
         "capabilities": {
             "local_html": True,
             "local_html_pdf": bool(chrome_bin),
@@ -728,6 +729,10 @@ def cmd_env(args: argparse.Namespace) -> int:
         print(f"XeLaTeX: {report['xelatex'] or 'not found'}")
         print(f"PyMuPDF: {'yes' if report['pymupdf'] else 'no'}")
         print(f"Recommended engine: {report['recommended_engine']}")
+        print(
+            f"LaTeX (default) route: {report['recommended_latex_route']} "
+            "(local requires both cococv CLI and xelatex)"
+        )
     return 0
 
 
@@ -840,7 +845,10 @@ def cmd_render(args: argparse.Namespace) -> int:
                 "command": "render",
                 "input": str(file_path),
                 "output": str(output),
-                "fallback_hint": "Switch to '--template asu-tech' for local HTML output or run 'handoff' for Web cloud LaTeX.",
+                "fallback_hint": (
+                    "Run 'handoff' first for remote Web cloud XeLaTeX compilation (https://cococv.cn), "
+                    "or switch to '--template asu-tech' for local HTML output."
+                ),
             },
         )
 

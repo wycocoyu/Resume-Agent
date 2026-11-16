@@ -320,6 +320,8 @@ def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
     assert "asu-01" in body
     assert "cococv render" in body
     assert "Headless Chrome CDP" in body
+    assert "capabilities.local_latex_pdf" in body
+    assert "handoff" in body
 
 
 def test_install_and_uninstall_harness_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -443,7 +445,9 @@ def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -
     env_payload = json.loads(res_env.stdout)
     assert env_payload["ok"] is True
     assert env_payload["capabilities"]["local_html"] is True
+    assert env_payload["capabilities"]["local_latex_pdf"] is False
     assert env_payload["recommended_engine"] == "html"
+    assert env_payload["recommended_latex_route"] == "remote_handoff"
 
     # 2. init skeleton
     resume_path = work_dir / "resume.json"
@@ -485,6 +489,7 @@ def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -
     assert res_tex.returncode == 1
     tex_payload = json.loads(res_tex.stdout)
     assert tex_payload["error"]["code"] == "xelatex_not_found"
+    assert "handoff" in tex_payload.get("fallback_hint", "")
     assert "--template asu-tech" in tex_payload.get("fallback_hint", "")
 
 

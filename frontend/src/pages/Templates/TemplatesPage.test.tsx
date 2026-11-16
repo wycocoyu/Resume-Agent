@@ -327,4 +327,47 @@ describe('TemplatesPage & template helpers', () => {
     expect(img.style.width).toBe('auto')
     expect(img.style.maxWidth).toBe('70px')
   })
+
+  it('labels Classic LaTeX (default) as remote-first unless dual local dependencies exist', async () => {
+    await act(async () => {
+      root.render(<TemplatesPage />)
+    })
+    await flushMicrotasks()
+
+    const defaultCard = container.querySelector('[data-testid="template-card-default"]') as HTMLElement
+    expect(defaultCard.textContent).toContain('XeLaTeX · 建议远程')
+
+    const defaultCopyBtn = Array.from(defaultCard.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('复制口令'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      defaultCopyBtn.click()
+    })
+    await flushMicrotasks()
+    expect(mockWriteText).toHaveBeenCalledWith(
+      '用 $resume-agent 按模板 default 做一份简历（无本地 cococv CLI + xelatex 环境请直接引导远程 handoff，仅双依赖齐全时再本地编译）',
+    )
+
+    const defaultPreviewBtn = defaultCard.querySelector('button[aria-label="放大预览 Classic LaTeX"]') as HTMLButtonElement
+    await act(async () => {
+      defaultPreviewBtn.click()
+    })
+    const banner = container.querySelector('[data-testid="latex-remote-first-banner"]') as HTMLElement
+    expect(banner).not.toBeNull()
+    expect(banner.textContent).toContain('默认建议直接走远程')
+    expect(banner.textContent).toContain('cococv CLI')
+    expect(banner.textContent).toContain('xelatex')
+
+    const closeBtn = container.querySelector('button[aria-label="关闭预览"]') as HTMLButtonElement
+    await act(async () => {
+      closeBtn.click()
+    })
+
+    const asuCard = container.querySelector('[data-testid="template-card-asu-tech"]') as HTMLElement
+    const asuPreviewBtn = asuCard.querySelector('button[aria-label="放大预览 ASu 极客单栏"]') as HTMLButtonElement
+    await act(async () => {
+      asuPreviewBtn.click()
+    })
+    expect(container.querySelector('[data-testid="latex-remote-first-banner"]')).toBeNull()
+  })
 })

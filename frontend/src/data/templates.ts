@@ -35,11 +35,11 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
   {
     id: 'default',
     name: 'Classic LaTeX',
-    description: '默认推荐：服务端 XeLaTeX 精确排版，支持公司/学校 Logo 与高清矢量文字 PDF',
+    description: '默认推荐：服务端 XeLaTeX 精确排版，支持公司/学校 Logo 与高清矢量文字 PDF（建议直接走远程，仅本机配齐 cococv CLI + xelatex 时建议本地）',
     type: 'latex',
     layout: 'single',
     category: 'LaTeX',
-    tags: ['推荐', 'XeLaTeX', '矢量 PDF', 'Logo 嵌入'],
+    tags: ['推荐', '建议远程', 'XeLaTeX', 'Logo 嵌入'],
     thumbnail: '/template-previews/classic-latex-preview.png',
     supportsCli: true,
     recommended: true,
