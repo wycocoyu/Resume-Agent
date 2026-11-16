@@ -54,6 +54,8 @@ import { applyRequestedTemplate, parseImportedResumeJson, TEMPLATE_METADATA } fr
 import { DEFAULT_RESUME_TEMPLATE } from '@/data/defaultTemplate'
 import { htmlToBullets } from '@/pages/Builder/adapter'
 import { TemplateLogo } from '@/pages/Builder/templates/TemplateLogo'
+import { ASU_VARIANTS_CONFIG } from '@/pages/Builder/templates/ResumeAsuVariant'
+import type { AsuVariantId } from '@/pages/Builder/settings'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -248,18 +250,62 @@ describe('TemplatesPage & template helpers', () => {
     const previewBtn = asuCard.querySelector('button[aria-label^="放大预览"]') as HTMLButtonElement
     expect(previewBtn.className).toContain('text-left')
 
-    // Under "全部模板", recommended 3 templates sit in a dedicated top row above a separator
+    // Under "全部模板", recommended 3 templates sit in a dedicated top row,
+    // followed by 16 single-column templates prioritized above a divider, and 8 two-column/sidebar templates below
     const recSection = container.querySelector('[data-testid="recommended-templates-section"]') as HTMLElement
     const otherSection = container.querySelector('[data-testid="other-templates-section"]') as HTMLElement
-    const separator = container.querySelector('[role="separator"]')
+    const singleSection = container.querySelector('[data-testid="single-column-templates-section"]') as HTMLElement
+    const twoColSection = container.querySelector('[data-testid="two-column-templates-section"]') as HTMLElement
+    const separators = container.querySelectorAll('[role="separator"]')
     expect(recSection).not.toBeNull()
     expect(otherSection).not.toBeNull()
-    expect(separator).not.toBeNull()
-    const recIds = Array.from(recSection.querySelectorAll('[data-testid^="template-card-"]')).map((el) =>
-      el.getAttribute('data-testid')?.replace('template-card-', ''),
-    )
-    expect(recIds).toEqual(['default', 'latex', 'asu-tech'])
+    expect(singleSection).not.toBeNull()
+    expect(twoColSection).not.toBeNull()
+    expect(separators).toHaveLength(2)
+
+    const extractIds = (el: Element) =>
+      Array.from(el.querySelectorAll('[data-testid^="template-card-"]')).map((node) =>
+        node.getAttribute('data-testid')?.replace('template-card-', ''),
+      )
+
+    expect(extractIds(recSection)).toEqual(['default', 'latex', 'asu-tech'])
+    expect(extractIds(singleSection)).toEqual([
+      'swiss-single',
+      'modern',
+      'clean',
+      'asu-01',
+      'asu-02',
+      'asu-03',
+      'asu-04',
+      'asu-06',
+      'asu-07',
+      'asu-09',
+      'asu-10',
+      'asu-11',
+      'asu-12',
+      'asu-15',
+      'asu-17',
+      'asu-18',
+    ])
+    expect(extractIds(twoColSection)).toEqual([
+      'swiss-two-column',
+      'modern-two-column',
+      'vivid',
+      'asu-05',
+      'asu-08',
+      'asu-13',
+      'asu-14',
+      'asu-16',
+    ])
     expect(otherSection.querySelectorAll('[data-testid^="template-card-"]')).toHaveLength(24)
+
+    // Contract: ASu variant metadata layout matches ASU_VARIANTS_CONFIG column geometry
+    for (const tpl of TEMPLATE_METADATA) {
+      if (tpl.id.startsWith('asu-') && tpl.id !== 'asu-tech') {
+        const cfg = ASU_VARIANTS_CONFIG[tpl.id as AsuVariantId]
+        expect(tpl.layout).toBe(cfg.layout === 'single-column' ? 'single' : 'two-column')
+      }
+    }
 
     // Recommended tab remains functional and shows the exact same 3 templates
     const recTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>

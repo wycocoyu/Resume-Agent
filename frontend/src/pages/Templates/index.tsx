@@ -276,6 +276,14 @@ export default function TemplatesPage() {
     () => filteredTemplates.filter((tpl) => !tpl.recommended),
     [filteredTemplates],
   )
+  const singleColumnOtherInView = useMemo(
+    () => otherInView.filter((tpl) => tpl.layout !== 'two-column'),
+    [otherInView],
+  )
+  const twoColumnOtherInView = useMemo(
+    () => otherInView.filter((tpl) => tpl.layout === 'two-column'),
+    [otherInView],
+  )
 
   const renderTemplateGrid = (items: TemplateMetadata[], sectionTestId?: string) => (
     <div
@@ -544,14 +552,34 @@ export default function TemplatesPage() {
                 {renderTemplateGrid(recommendedInView, 'recommended-templates-section')}
               </section>
 
-              <div className="flex items-center gap-3 py-1" role="separator" aria-label="其余模板分割线">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  全部其他模板（{otherInView.length}）
-                </span>
-                <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
-              </div>
+              <div data-testid="other-templates-section" className="space-y-6">
+                {singleColumnOtherInView.length > 0 && (
+                  <section className="space-y-3" aria-label="单栏模板优先推荐">
+                    <div className="flex items-center gap-2.5 py-1" role="separator" aria-label="单栏模板分割线">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                        全部其他模板 · 单栏（{singleColumnOtherInView.length}）
+                      </span>
+                      <span className="rounded bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-[#1a73e8] border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800">
+                        优先推荐单栏
+                      </span>
+                      <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
+                    </div>
+                    {renderTemplateGrid(singleColumnOtherInView, 'single-column-templates-section')}
+                  </section>
+                )}
 
-              {renderTemplateGrid(otherInView, 'other-templates-section')}
+                {twoColumnOtherInView.length > 0 && (
+                  <section className="space-y-3" aria-label="双栏与侧栏模板">
+                    <div className="flex items-center gap-2.5 py-1" role="separator" aria-label="双栏模板分割线">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        双栏 / 侧栏模板（{twoColumnOtherInView.length}）
+                      </span>
+                      <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
+                    </div>
+                    {renderTemplateGrid(twoColumnOtherInView, 'two-column-templates-section')}
+                  </section>
+                )}
+              </div>
             </div>
           ) : (
             renderTemplateGrid(filteredTemplates)
