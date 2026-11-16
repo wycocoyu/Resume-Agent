@@ -54,9 +54,6 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
 ]
 
 function buildSkillPrompt(templateId: string): string {
-  if (templateId === 'default') {
-    return '用 $resume-agent 按模板 default 做一份简历（无本地 cococv CLI + xelatex 环境请直接引导远程 handoff，仅双依赖齐全时再本地编译）'
-  }
   return `用 $resume-agent 按模板 ${templateId} 做一份简历`
 }
 
@@ -316,7 +313,7 @@ export default function TemplatesPage() {
                       : 'border-slate-300 bg-white text-slate-700',
                 )}
               >
-                {tpl.type === 'latex' ? 'XeLaTeX · 建议远程' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
+                {tpl.type === 'latex' ? 'XeLaTeX · 建议在线' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
               </span>
               {tpl.recommended && (
                 <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
@@ -449,7 +446,7 @@ export default function TemplatesPage() {
                   所见即工作台真实排版，选好直接写或交给 AI Agent
                 </h1>
                 <p className="text-sm text-slate-600 dark:text-slate-300 max-w-3xl">
-                  与工作台抽屉 1:1 对齐：全部模板均支持免登录在线编辑；ASu 系列带「复制口令」可零依赖本地出 HTML / PDF，Classic LaTeX（default）建议直接在线体验或让 Agent 引导远程编译（仅本机同时具备 cococv CLI 与 xelatex 时建议本地）。
+                  与工作台抽屉 1:1 对齐：全部模板都可免登录在线编辑；ASu 系列复制口令后可在本地 AI 助手直接出稿，Classic LaTeX（default）一般建议直接在线体验或让 AI 助手发你网页链接导出 PDF（本机已配齐本地编译环境时也可离线直出）。
                 </p>
               </div>
 
@@ -700,9 +697,9 @@ export default function TemplatesPage() {
                         data-testid="latex-remote-first-banner"
                         className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/70 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1"
                       >
-                        <div className="font-bold">默认建议直接走远程（云端 XeLaTeX）</div>
+                        <div className="font-bold">一般建议直接在网页端在线生成</div>
                         <p className="leading-relaxed">
-                          无本地环境推荐直接点击上方「{importedResume ? '套用并进入编辑' : '免登录用此模板编辑'}」或发口令让 Agent 走 <code className="font-mono">handoff</code> 引导到网页端编译；仅当本机同时安装 <code className="font-mono">cococv CLI</code> 与 <code className="font-mono">xelatex</code> 时，再建议执行下方本地命令。
+                          这套经典精排模板无需折腾本地环境，直接点上方「{importedResume ? '套用并进入编辑' : '免登录用此模板编辑'}」即可制作，或复制口令让 AI 助手整理好后发你网页链接去下载 PDF；只有本机已配齐本地编译环境时，才需用到下方命令行。
                         </p>
                       </div>
                     )}
@@ -737,7 +734,7 @@ export default function TemplatesPage() {
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
                           <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                           {previewTemplate.type === 'latex'
-                            ? '本地 CLI（需双依赖）'
+                            ? '本地命令行（仅已配齐环境用）'
                             : '本地 CLI 命令'}
                         </span>
                         <button
@@ -763,7 +760,7 @@ export default function TemplatesPage() {
                   <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-3 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
                     <div className="font-bold text-slate-800 dark:text-slate-100">网页工作台专属模板</div>
                     <p>
-                      此版式仅在网页工作台提供，无需登录即可直接在线编辑并导出；如需在 Codex / Claude 本地零依赖直接生成，建议选用「ASu」系列模板（Classic LaTeX 默认建议走在线或远程 handoff 编译）。
+                      此版式仅在网页工作台提供，无需登录即可直接在线编辑并导出；如需让本地 AI 助手直接离线出稿，建议选用「ASu」系列模板（Classic LaTeX 一般建议在线体验或经网页链接导出）。
                     </p>
                   </div>
                 )}

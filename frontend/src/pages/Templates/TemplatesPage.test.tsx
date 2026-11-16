@@ -335,7 +335,7 @@ describe('TemplatesPage & template helpers', () => {
     await flushMicrotasks()
 
     const defaultCard = container.querySelector('[data-testid="template-card-default"]') as HTMLElement
-    expect(defaultCard.textContent).toContain('XeLaTeX · 建议远程')
+    expect(defaultCard.textContent).toContain('XeLaTeX · 建议在线')
 
     const defaultCopyBtn = Array.from(defaultCard.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('复制口令'),
@@ -344,9 +344,7 @@ describe('TemplatesPage & template helpers', () => {
       defaultCopyBtn.click()
     })
     await flushMicrotasks()
-    expect(mockWriteText).toHaveBeenCalledWith(
-      '用 $resume-agent 按模板 default 做一份简历（无本地 cococv CLI + xelatex 环境请直接引导远程 handoff，仅双依赖齐全时再本地编译）',
-    )
+    expect(mockWriteText).toHaveBeenCalledWith('用 $resume-agent 按模板 default 做一份简历')
 
     const defaultPreviewBtn = defaultCard.querySelector('button[aria-label="放大预览 Classic LaTeX"]') as HTMLButtonElement
     await act(async () => {
@@ -354,9 +352,8 @@ describe('TemplatesPage & template helpers', () => {
     })
     const banner = container.querySelector('[data-testid="latex-remote-first-banner"]') as HTMLElement
     expect(banner).not.toBeNull()
-    expect(banner.textContent).toContain('默认建议直接走远程')
-    expect(banner.textContent).toContain('cococv CLI')
-    expect(banner.textContent).toContain('xelatex')
+    expect(banner.textContent).toContain('一般建议直接在网页端在线生成')
+    expect(banner.textContent).toContain('网页链接')
 
     const closeBtn = container.querySelector('button[aria-label="关闭预览"]') as HTMLButtonElement
     await act(async () => {

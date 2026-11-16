@@ -2,14 +2,14 @@
 
 在 {{harness_display}} 中使用 `{{invoke_syntax}}` 唤醒本技能。默认基于 **`asu-tech`（ASu 单栏高密度技术简历模板）** 生成自包含可编辑 `.html`（支持打印或导出 `.pdf`），同时支持 `asu-01`～`asu-18`、`html-classic` 共 20 套零依赖 HTML 模板与 CocoCV 原生 **LaTeX (`default`)** 模板。
 
-HTML 模板全程本机离线处理、无需登录、无需本机安装 LaTeX（仅需 Python 3.10+）；原生 **LaTeX (`default`)** 模板需本机同时具备 `cococv` CLI 与 `xelatex` 才可离线编译，无双依赖时默认引导通过 `handoff` 前往远程网页端出稿。所有结构化数据遵循 Workspace v2 `ResumeData` 规范。
+HTML 模板全程本机离线处理、无需登录、无需本机安装 LaTeX（仅需 Python 3.10+）；原生 **LaTeX (`default`)** 模板需本机同时具备 `cococv` CLI 与 `xelatex` 才可离线编译，未配齐时默认先在本地整理完经历，再引导用户通过 CocoCV 网页端生成并下载 PDF（内部调用 `handoff`）。所有结构化数据遵循 Workspace v2 `ResumeData` 规范。
 
 ## 核心铁律
 
 1. **绝不杜撰任何候选人事实**：学校、公司、职位、起止时间、GPA、项目指标、开源链接与奖项必须来自用户口述或用户提供的本地文件。缺失或无法确认的指标统一标为 `【待补】`（如 `峰值 QPS 由 2000 提升至【待补】`），不可靠占位或不想展示的模块通过 `menuSections[*].enabled = false` 关闭。
-2. **本地优先、零强迫登录**：`resume.json`、`.html`、`.png`、`.pdf` 全部留在用户本机目录，绝不要求预先登录或上传服务器；仅在用户明确要求 `handoff` 或 `sync` 时才联网。
-3. **先引导再动手，不甩裸参数**：新对话未给完整材料或文件路径时，先发友好引导卡；所有输出默认离线（不加 `--online`）。
-4. **渲染前强制校验**：每次修改 `resume.json` 后必须执行 `validate` 且返回退出码 `0` 再渲染。
+2. **本地优先、零强迫登录**：`resume.json`、`.html`、`.png`、`.pdf` 全部留在用户本机目录，绝不要求预先登录或上传服务器；仅在用户同意生成网页临时链接时才调用 `handoff` 或 `sync` 联网。
+3. **对用户说话一律大白话、零开发术语**：普通求职者看不懂程序术语。回复正文**严禁出现** `cococv CLI`、`xelatex`、`XeLaTeX`、`capabilities`、`local_latex_pdf`、`双依赖`、`resume.json`、`JSON`、`validate`、`handoff`、`EXIT:0` 等工程词汇（除非用户本人是开发者并主动追问命令）。所有技术判断与命令只在后台静默跑完，向用户汇报时统一换成「网页端生成」「60 分钟专属链接」「本地直接出文件」等自然中文。
+4. **渲染前强制校验**：每次修改 `resume.json` 后必须在后台执行 `validate` 且返回退出码 `0` 再进入导出或生成链接。
 5. **Page balance and density self-check（页面平衡与视觉密度自检）**：生成 `.png` 预览图后必须看图自检，防止出现多出 2～3 行溢出到第二页或大面积留白。
 
 ## 零步 · 静默探测本机环境与定位脚本
@@ -21,8 +21,16 @@ SKILL_PY="$(find ~/.{{harness_id}} ~/.agents ~/.codebuddy skills -name cococv_lo
 python3 "$SKILL_PY" env --json
 ```
 
-- **已安装完整 CLI（`cococv` / `resume-agent`）且具备 `xelatex`（即 `capabilities.local_latex_pdf == true`）**：支持全部 `.html`、多页 `.png`、Headless Chrome CDP `.pdf` 及本机 `xelatex` `.pdf`（`default`）。
-- **仅零依赖脚本或缺少双依赖（`capabilities.local_latex_pdf == false`，即使本机单独装有 `xelatex` 但 `cococv_cli` 为 `null` 也算不具备）**：`python3 "$SKILL_PY"` 内置完整 `env`、`read-source`、`templates`、`init`、`validate`、HTML/Chrome `render` 与 `handoff` 能力，无需 `pip install` 或启动后端即可本地生成 `asu-tech` 等 20 套 HTML / PDF；但 **`default`（XeLaTeX）无法单靠脚本本地编译**——**严禁在磁盘上执行全盘 `find` 搜索二进制**，首轮回复即应告知用户「本机未配齐 `cococv CLI` + `xelatex` 双依赖，建议完成 `resume.json` 整理与校验后直接通过 `handoff` 前往远程网页端编译（或改用本地零依赖 `asu-tech`）」。
+- **当 `capabilities.local_latex_pdf == true`（本机已装完整 CLI 且有 `xelatex`）**：全部 HTML 模板与 `default` 经典排版均可纯本地直出，正常静默处理即可。
+- **当 `capabilities.local_latex_pdf == false`（绝大多数普通用户机器，哪怕本机有部分组件但没全齐）**：`python3 "$SKILL_PY"` 仍可纯本地秒出 `asu-tech` 等 20 套 HTML / PDF；但 **`default` 无法直接在本机出 PDF**——**严禁执行全盘 `find` 搜索二进制**，也不要向用户倒一堆环境报错术语，首轮直接用下面的大白话引导：
+
+> 当用户点名要 `default` 且 `capabilities.local_latex_pdf == false`、又还没给简历内容时，首轮照这个口吻回复（温暖、简洁、零术语）：
+>
+> 可以，我按 **经典排版** 模板帮你做这份简历。这套版式最终需要通过 **CocoCV 网页端** 在线生成高清 PDF：你先把材料发我，我帮你把经历梳理成初稿，最后给你一个 **60 分钟有效的专属链接**，点开就能预览和下载；如果你希望全程留在电脑本地、直接秒出文件，也可以随时改用观感接近的 **极客单栏** 版式。
+>
+> 你可以直接把现有简历发我（PDF、Word 或截图都行），或者把下面几项粗略贴给我（缺的地方我先记着，不会替你瞎编）：
+> - 姓名、电话 / 邮箱、想投什么岗位、希望单页还是双页
+> - 教育经历、工作 / 实习、项目经历、技能和 GitHub / 作品集链接
 - **安装到当前宿主**：
   ```bash
   resume-agent skill install --harness {{harness_id}} --dry-run
@@ -141,13 +149,15 @@ cococv render resume.json -o resume.pdf --template default --engine latex --png 
 
 - **纸张与分页**：A4 尺寸稳定，单页不过空（也不因多出 2～3 行尾巴被迫换第二页），多页先填实第一页再顺延。
 - **版面与文字**：单/双栏结构正确，长姓名/邮箱/链接不溢出重叠，文本可选中可复制（不用整页截图替代 PDF）。
-- **LaTeX 远程优先与禁扫盘边界**：若用户指定 `default`（LaTeX）模板且 `env --json` 返回 `capabilities.local_latex_pdf == false`（缺少 `cococv_cli` 或缺少 `xelatex` 任一项），**严禁**宣称支持本机离线编译，**严禁**对用户目录全盘执行 `find` 查找二进制，也不要硬跑必败的 `render --template default --engine latex`。应先在本地整理并校验通过 `resume.json`（`validate` 退出码 `0`），随后**默认引导远程**：征得用户同意联网后执行 `python3 "$SKILL_PY" handoff resume.json --ttl-minutes 60 --json`，返回链接引导至网页端云端编译（也可直接把 `resume.json` 导入官网 `cococv.cn/templates` 在线体验，或按用户意愿改用单栏观感相近的本地 `asu-tech`）。
+- **LaTeX 远程优先与大白话沟通边界**：若用户指定 `default` 模板且 `env --json` 返回 `capabilities.local_latex_pdf == false`，**严禁**宣称能本地直接出 PDF，**严禁**对目录执行 `find` 扫盘，也不要硬跑会失败的 `render --template default --engine latex`。应先在后台静默整理并校验通过 `resume.json`（`validate` 退出码 `0`），随后用大白话直接引导用户确认打开网页导出（绝不甩 `JSON`、`handoff`、`CLI`、`XeLaTeX` 等词给普通用户）：
+  - > 「简历初稿已经整理好了（缺数据的指标先标成 `【待补】`，不会帮你编造）。接下来要不要我帮你生成一个 **60 分钟有效的专属网页链接**，你点开就能在线下载这套经典版式 PDF（需要把整理好的初稿临时传到 CocoCV 网页端）；如果不想联网上传，我也可以立刻按观感相近的 **极客单栏** 直接在本地生成文件？」
+  - 用户同意后，在后台执行 `python3 "$SKILL_PY" handoff resume.json --ttl-minutes 60 --json`，只把生成的链接与简单打开步骤发给用户（也可附带提醒官网 `cococv.cn/templates` 支持随时微调）。
 
 ## 第六步 · 交付说明与可选网页工作台续修
 
-交付时明确告知用户：生成文件路径、所选模板与页数、Print-preview QA 结果、仍需用户补充的 `【待补】` 清单，以及浏览器 `Cmd/Ctrl + P`（开启背景图形、关闭页眉页脚）导出 PDF 的方法。
+交付时用人话告知用户：生成了什么文件（或专属网页链接及 60 分钟有效期）、几页版面、仍待补充的 `【待补】` 清单，以及本地 HTML 如何在浏览器 `Cmd/Ctrl + P`（开启背景图形、关闭页眉页脚）存成 PDF。
 
-HTML 产物默认保留在用户本机，无需登录。若用户希望上网页工作台可视化拖拽微调，或选用 `default`（XeLaTeX）模板且 `capabilities.local_latex_pdf == false` 需使用远程云端 XeLaTeX 时，向用户确认联网后执行：
+HTML 产物默认保留在用户本机，无需登录。若用户同意将已整理好的简历生成网页端链接继续编辑或导出经典 PDF（内部对应 `handoff`），在后台执行：
 
 ```bash
 cococv handoff resume.json --ttl-minutes 60 --json
