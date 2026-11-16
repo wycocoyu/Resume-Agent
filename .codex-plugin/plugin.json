@@ -1,0 +1,41 @@
+{
+  "name": "cococv",
+  "version": "3.13.0",
+  "author": {
+    "name": "wycocoyu",
+    "url": "https://github.com/wycocoyu"
+  },
+  "homepage": "https://cococv.cn",
+  "repository": "https://github.com/wycocoyu/cococv",
+  "license": "MIT",
+  "keywords": [
+    "resume",
+    "cv",
+    "cococv",
+    "resume-agent",
+    "chinese-resume",
+    "career",
+    "html-resume",
+    "pdf-resume"
+  ],
+  "description": "CocoCV（Resume-Agent）免登录本地优先 AI 简历助手：支持导入本地 PDF/Word/Markdown/JSON 或从零对话引导采集经历、21 套内置模板挑选与对比预览、以及本地直出 HTML / PNG / PDF 与按需网页工作台续编。",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CocoCV · Resume Agent",
+    "shortDescription": "导入本地简历或对话引导制作，挑模板并本地导出 HTML / PNG / PDF",
+    "longDescription": "CocoCV（cococv.cn）AI 简历技能：无需强制登录、无需本地装 LaTeX，支持直接读取本地简历文件或分轮对话引导采集经历，推荐并可视化预览 21 套内置简历模板，本地导出 HTML / PNG / PDF，并可按需生成临时链接到网页工作台继续拖拽精修。",
+    "developerName": "wycocoyu",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://cococv.cn",
+    "defaultPrompt": [
+      "用 $resume-agent 帮我做一份简历：先问我手上有无现成简历或从零开始，再推荐模板并导出。",
+      "用 $resume-agent 读取我本地的简历文件（PDF / Word / Markdown / JSON），整理结构并重新排版导出。",
+      "用 $resume-agent 对照目标岗位 JD 诊断改写我的简历，生成模板预览对比后导出 HTML / PNG / PDF。"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

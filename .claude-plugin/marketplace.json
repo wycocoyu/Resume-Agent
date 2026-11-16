@@ -1,0 +1,32 @@
+{
+  "name": "cococv",
+  "description": "CocoCV AI 简历工作流插件市场（本地优先 / 无需强迫登录）。",
+  "owner": {
+    "name": "wycocoyu",
+    "url": "https://github.com/wycocoyu"
+  },
+  "plugins": [
+    {
+      "name": "cococv",
+      "version": "3.13.0",
+      "author": {
+        "name": "wycocoyu",
+        "url": "https://github.com/wycocoyu"
+      },
+      "homepage": "https://cococv.cn",
+      "repository": "https://github.com/wycocoyu/cococv",
+      "license": "MIT",
+      "keywords": [
+        "resume",
+        "cv",
+        "cococv",
+        "resume-agent",
+        "chinese-resume"
+      ],
+      "source": "./",
+      "displayName": "CocoCV · Resume Agent",
+      "description": "免登录本地优先 AI 简历助手：本地读取旧简历或对话引导从零生成，21 套模板对比选型，本地直出 HTML / PNG / PDF。",
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,3 +1,3 @@
 name = "resume-agent"
-long = "Create, edit, validate, and render CocoCV (Resume-Agent) JSON resumes locally as HTML previews, PNG page images, or PDFs via the cococv or resume-agent CLI or the bundled zero-dependency Python helper, with optional Web handoff and workspace sync. Use when drafting, tailoring, validating, previewing, or exporting resumes."
-short = "Create, validate, render, and hand off CocoCV resumes"
+long = "Guided local-first AI resume builder for CocoCV (Resume-Agent): interview users without an existing resume, read local PDF/Word/Markdown/HTML/JSON resumes directly by path, recommend and preview 21 built-in templates, validate Workspace v2 ResumeData JSON, and export HTML, PNG previews, or PDFs with zero mandatory login (plus optional Web handoff and workspace sync)."
+short = "Guided local resume importer, builder, HTML, PNG, and PDF"

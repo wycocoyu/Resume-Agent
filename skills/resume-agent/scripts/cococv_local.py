@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import html
+from html.parser import HTMLParser
 import importlib.util
 import json
 import os
@@ -25,6 +27,8 @@ import time
 from typing import Any
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
+import zipfile
 
 sys.dont_write_bytecode = True
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -35,6 +39,219 @@ import html_generator  # noqa: E402
 
 HTML_TEMPLATES = {"asu-tech", "html-classic"} | {f"asu-{i:02d}" for i in range(1, 19)}
 DEFAULT_WEB_API_URL = "https://cococv.cn"
+
+TEMPLATE_CATALOG: tuple[dict[str, Any], ...] = (
+    {
+        "id": "asu-tech",
+        "name": "ASu 极客单栏",
+        "category": "单栏技术",
+        "engine": "html",
+        "pages": "1页（可顺延）",
+        "recommended": True,
+        "description": "默认推荐。高密度单栏技术简历，蓝色标题线、浅灰经历条与多级 STAR 列表，零依赖本地即出。",
+        "best_for": "后端 / 前端 / AI / 算法 / 全栈技术岗（应届与社招通用）",
+    },
+    {
+        "id": "html-classic",
+        "name": "经典模板（HTML）",
+        "category": "通用单栏",
+        "engine": "html",
+        "pages": "1-2页",
+        "recommended": False,
+        "description": "简洁明快的基础 HTML 标准单栏模板，适合日常快速预览与打印。",
+        "best_for": "通用研发 / 职能 / 测试与基础投递",
+    },
+    {
+        "id": "asu-01",
+        "name": "经典蓝线",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "深蓝横线标题与单栏紧凑排版，干净克制。",
+        "best_for": "后端 / 工程 / 常规校招单页简历",
+    },
+    {
+        "id": "asu-02",
+        "name": "蓝底色块条",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "蓝底反白标题色块条，分区界限分明，重点一眼可见。",
+        "best_for": "产品 / 运营 / 全栈工程师单页投递",
+    },
+    {
+        "id": "asu-03",
+        "name": "时间轴",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "左侧经历时间轴连接线，突出连续成长与阶段跃迁。",
+        "best_for": "有多段实习或清晰晋升轨迹的候选人",
+    },
+    {
+        "id": "asu-04",
+        "name": "深蓝顶幅",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "深蓝通栏顶部信息横幅，视觉辨识度高。",
+        "best_for": "偏产品、解决方案、商务或前端设计方向",
+    },
+    {
+        "id": "asu-05",
+        "name": "灰调侧栏",
+        "category": "侧栏双列",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "左侧浅灰栏放基础信息、技能与奖项，右侧主栏聚焦教育与经历。",
+        "best_for": "经历中等偏少、需要双列平衡留白的校招或转行候选人",
+    },
+    {
+        "id": "asu-06",
+        "name": "纯黑时间轴双页",
+        "category": "双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "沉稳黑灰时间轴双页版式，克制不花哨。",
+        "best_for": "资深工程师 / Tech Lead / 多段完整工作履历",
+    },
+    {
+        "id": "asu-07",
+        "name": "右侧蓝轨",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "右侧纵向蓝色装饰轨，单栏结构别致清新。",
+        "best_for": "前端 / 交互 / 创意开发单页简历",
+    },
+    {
+        "id": "asu-08",
+        "name": "色块双栏双页",
+        "category": "双栏双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "双栏结构搭配双页充实布局，模块划分明晰。",
+        "best_for": "项目与技术栈跨度大的全栈 / 架构岗位",
+    },
+    {
+        "id": "asu-09",
+        "name": "卡片分区双页",
+        "category": "双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "模块采用轻微卡片边框包围，层次分明耐读。",
+        "best_for": "项目较多、需要清晰区块隔离的中高级研发",
+    },
+    {
+        "id": "asu-10",
+        "name": "丝带标签",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "丝带切角标题微标，版面活泼有节奏。",
+        "best_for": "校招产品 / 运营 / 新媒体 / 校园骨干",
+    },
+    {
+        "id": "asu-11",
+        "name": "衬线分割头",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "衬线字体搭配双线分割页眉，书卷气与专业感兼备。",
+        "best_for": "算法研究 / 咨询分析 / 外企及学术导向岗位",
+    },
+    {
+        "id": "asu-12",
+        "name": "居中作品集双页",
+        "category": "双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "头部居中对齐，强化代表作与项目链接展示。",
+        "best_for": "开源作者 / 独立开发者 / 作品集丰富候选人",
+    },
+    {
+        "id": "asu-13",
+        "name": "纯黑紧凑侧栏",
+        "category": "侧栏双列",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "高对比深黑左侧栏配合紧凑主栏，硬核利落。",
+        "best_for": "安全 / 系统 / 客户端 / 工具链工程师",
+    },
+    {
+        "id": "asu-14",
+        "name": "蓝线紧凑双栏双页",
+        "category": "双栏双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "蓝色主题紧凑双栏双页，兼顾信息量与阅读引导。",
+        "best_for": "5年以上研发 / 数据分析 / 平台工程",
+    },
+    {
+        "id": "asu-15",
+        "name": "色块现代序号",
+        "category": "单栏",
+        "engine": "html",
+        "pages": "1页",
+        "recommended": False,
+        "description": "章节标题带圆圈数字序号微标，结构节奏清晰。",
+        "best_for": "数据分析 / AI 应用 / 产品工程单页简历",
+    },
+    {
+        "id": "asu-16",
+        "name": "超高密度双栏双页",
+        "category": "双栏双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "极高密度双栏双页技术排版，承载海量项目细节。",
+        "best_for": "资深全栈 / 架构师 / 多段大厂核心项目经历",
+    },
+    {
+        "id": "asu-17",
+        "name": "纯黑学术风双页",
+        "category": "双页学术",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "纯黑严谨学术排版，黑白打印清晰友好。",
+        "best_for": "科研 / 读研 / 实验室算法与论文成果展示",
+    },
+    {
+        "id": "asu-18",
+        "name": "蓝线现代紧凑双页",
+        "category": "双页",
+        "engine": "html",
+        "pages": "2页",
+        "recommended": False,
+        "description": "极简蓝线现代双页，适合条理清晰的长履历。",
+        "best_for": "3-5年以上研发 / 技术管理 / 跨团队项目经历",
+    },
+    {
+        "id": "default",
+        "name": "经典模板（LaTeX）",
+        "category": "经典 LaTeX",
+        "engine": "latex",
+        "pages": "1-2页",
+        "recommended": False,
+        "description": "CocoCV 原生 XeLaTeX 经典单栏版式（需本机 xelatex 或用 handoff 到网页工作台云端编译）。",
+        "best_for": "偏好传统 LaTeX 学术/程序员排版的用户",
+    },
+)
 
 DEFAULT_MENU_SECTIONS: list[dict[str, Any]] = [
     {"id": "basic", "title": "基本信息", "icon": "👤", "enabled": True, "order": 0},
@@ -775,6 +992,597 @@ def cmd_handoff(args: argparse.Namespace) -> int:
     return 0
 
 
+class _HtmlTextExtractor(HTMLParser):
+    """Lightweight stdlib HTML-to-readable-text extractor for local resume import."""
+
+    _BLOCK_TAGS = {
+        "p", "div", "section", "article", "header", "footer",
+        "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "br", "blockquote", "pre",
+    }
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._skip_depth = 0
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        low = tag.lower()
+        if low in {"script", "style", "noscript"}:
+            self._skip_depth += 1
+            return
+        if self._skip_depth > 0:
+            return
+        if low in self._BLOCK_TAGS:
+            self._parts.append("\n")
+        if low == "li":
+            self._parts.append("- ")
+
+    def handle_endtag(self, tag: str) -> None:
+        low = tag.lower()
+        if low in {"script", "style", "noscript"} and self._skip_depth > 0:
+            self._skip_depth -= 1
+            return
+        if self._skip_depth > 0:
+            return
+        if low in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth > 0:
+            return
+        self._parts.append(data)
+
+    def text(self) -> str:
+        raw = "".join(self._parts)
+        lines = [re.sub(r"[ \t]+", " ", line).strip() for line in raw.splitlines()]
+        cleaned: list[str] = []
+        for line in lines:
+            if line:
+                cleaned.append(line)
+            elif cleaned and cleaned[-1] != "":
+                cleaned.append("")
+        return "\n".join(cleaned).strip()
+
+
+def _extract_docx_text(path: Path) -> str:
+    """Extract readable paragraphs and tables from a .docx archive using stdlib only."""
+    try:
+        zf = zipfile.ZipFile(path)
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise LocalToolError(
+            f"Invalid .docx file: {path}",
+            code="invalid_docx",
+            extra={"command": "read-source", "file": str(path)},
+        ) from exc
+
+    def _p_text(elem: ET.Element) -> str:
+        chunks: list[str] = []
+        for node in elem.iter():
+            tag = node.tag.rsplit("}", 1)[-1]
+            if tag == "t" and node.text:
+                chunks.append(node.text)
+            elif tag == "tab":
+                chunks.append(" ")
+            elif tag in {"br", "cr"}:
+                chunks.append("\n")
+        return "".join(chunks).strip()
+
+    def _walk(elem: ET.Element, out: list[str]) -> None:
+        for child in elem:
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "p":
+                txt = _p_text(child)
+                if txt:
+                    out.append(txt)
+            elif tag == "tbl":
+                for row in child:
+                    if row.tag.rsplit("}", 1)[-1] != "tr":
+                        continue
+                    cells: list[str] = []
+                    for cell in row:
+                        if cell.tag.rsplit("}", 1)[-1] != "tc":
+                            continue
+                        cell_parts = [_p_text(p) for p in cell.iter() if p.tag.rsplit("}", 1)[-1] == "p"]
+                        joined = " / ".join(p for p in cell_parts if p)
+                        if joined:
+                            cells.append(joined)
+                    if cells:
+                        out.append(" | ".join(cells))
+            else:
+                _walk(child, out)
+
+    sections: list[str] = []
+    with zf:
+        names = set(zf.namelist())
+        ordered = sorted(n for n in names if re.fullmatch(r"word/header\d*\.xml", n))
+        if "word/document.xml" in names:
+            ordered.append("word/document.xml")
+        ordered.extend(sorted(n for n in names if re.fullmatch(r"word/footer\d*\.xml", n)))
+        if "word/document.xml" not in names:
+            raise LocalToolError(
+                f"Corrupted .docx archive (missing word/document.xml): {path}",
+                code="invalid_docx",
+                extra={"command": "read-source", "file": str(path)},
+            )
+        for member in ordered:
+            try:
+                root = ET.fromstring(zf.read(member))
+            except ET.ParseError as exc:
+                raise LocalToolError(
+                    f"Malformed XML in {member} of {path}: {exc}",
+                    code="invalid_docx",
+                    extra={"command": "read-source", "file": str(path)},
+                ) from exc
+            lines: list[str] = []
+            _walk(root, lines)
+            if lines:
+                sections.append("\n".join(lines))
+    return "\n\n".join(sections).strip()
+
+
+def _read_text_with_fallback(path: Path) -> str:
+    raw = path.read_bytes()
+    for enc in ("utf-8-sig", "utf-8", "utf-16", "gb18030"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _extract_pdf_local(path: Path, pages_dir: Path | None, max_pages: int = 6) -> dict[str, Any]:
+    """Extract PDF text cleanly with optional fallback page PNG export for visual reading."""
+    text_parts: list[str] = []
+    page_images: list[str] = []
+    method: str | None = None
+    page_count: int | None = None
+
+    fitz_mod = None
+    for mod_name in ("pymupdf", "fitz"):
+        if _has_module(mod_name):
+            try:
+                fitz_mod = __import__(mod_name)
+                break
+            except Exception:
+                fitz_mod = None
+
+    if fitz_mod is not None:
+        doc = fitz_mod.open(str(path))
+        try:
+            page_count = doc.page_count
+            for idx, page in enumerate(doc):
+                txt = (page.get_text("text") or "").strip()
+                if txt:
+                    text_parts.append(f"--- Page {idx + 1} ---\n{txt}")
+            method = "pymupdf"
+            total_text = "\n\n".join(text_parts).strip()
+            if pages_dir is not None or len(total_text) < 40:
+                out_dir = pages_dir or Path(tempfile.mkdtemp(prefix="cococv_pdf_pages_"))
+                out_dir.mkdir(parents=True, exist_ok=True)
+                for idx in range(min(doc.page_count, max_pages)):
+                    pix = doc[idx].get_pixmap(dpi=150)
+                    img_path = out_dir / f"{path.stem}-page-{idx + 1}.png"
+                    pix.save(str(img_path))
+                    page_images.append(str(img_path))
+        finally:
+            doc.close()
+        return {
+            "method": method,
+            "page_count": page_count,
+            "text": "\n\n".join(text_parts).strip(),
+            "page_images": page_images,
+        }
+
+    if _has_module("pypdf"):
+        try:
+            import pypdf  # type: ignore
+
+            reader = pypdf.PdfReader(str(path))
+            page_count = len(reader.pages)
+            for idx, page in enumerate(reader.pages):
+                txt = (page.extract_text() or "").strip()
+                if txt:
+                    text_parts.append(f"--- Page {idx + 1} ---\n{txt}")
+            method = "pypdf"
+        except Exception:
+            text_parts = []
+
+    if not text_parts:
+        pdftotext_bin = shutil.which("pdftotext")
+        if pdftotext_bin:
+            proc = subprocess.run([pdftotext_bin, str(path), "-"], capture_output=True, text=True, check=False)
+            if proc.returncode == 0 and proc.stdout.strip():
+                method = "pdftotext"
+                text_parts = [proc.stdout.strip()]
+
+    total_text = "\n\n".join(text_parts).strip()
+    if (pages_dir is not None or len(total_text) < 40) and not page_images:
+        pdftoppm_bin = shutil.which("pdftoppm")
+        if pdftoppm_bin:
+            out_dir = pages_dir or Path(tempfile.mkdtemp(prefix="cococv_pdf_pages_"))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            prefix = out_dir / f"{path.stem}-page"
+            subprocess.run(
+                [pdftoppm_bin, "-png", "-r", "150", "-l", str(max_pages), str(path), str(prefix)],
+                capture_output=True,
+                check=False,
+            )
+            page_images = [str(p) for p in sorted(out_dir.glob(f"{path.stem}-page*.png"))]
+
+    return {
+        "method": method,
+        "page_count": page_count,
+        "text": total_text,
+        "page_images": page_images,
+    }
+
+
+def cmd_read_source(args: argparse.Namespace) -> int:
+    source = Path(args.file).expanduser()
+    if not source.is_file():
+        raise LocalToolError(
+            f"Resume source file not found: {source}",
+            code="file_not_found",
+            extra={"command": "read-source", "file": str(source)},
+        )
+
+    ext = source.suffix.lower()
+    size_bytes = source.stat().st_size
+    max_chars = max(1000, int(args.max_chars))
+    result: dict[str, Any] = {
+        "ok": True,
+        "command": "read-source",
+        "file": str(source.resolve()),
+        "ext": ext,
+        "bytes": size_bytes,
+    }
+
+    if ext == ".json":
+        text = _read_text_with_fallback(source)
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise LocalToolError(
+                f"Invalid JSON in {source}: {exc.msg}",
+                code="invalid_json",
+                extra={"command": "read-source", "file": str(source)},
+            ) from exc
+        is_resume_data = isinstance(parsed, dict) and bool({"basic", "education", "projects"} & set(parsed))
+        result.update(
+            {
+                "format": "json",
+                "readable_text": True,
+                "is_resume_data": is_resume_data,
+                "validation_errors": validate_resume_dict_stdlib(parsed) if is_resume_data else [],
+                "data": parsed,
+            }
+        )
+    elif ext in {".md", ".markdown", ".txt", ".tex", ".yaml", ".yml", ".csv"}:
+        text = _read_text_with_fallback(source).strip()
+        truncated = len(text) > max_chars
+        result.update(
+            {
+                "format": ext.lstrip("."),
+                "readable_text": bool(text),
+                "total_chars": len(text),
+                "truncated": truncated,
+                "text": text[:max_chars],
+            }
+        )
+    elif ext in {".html", ".htm"}:
+        raw_html = _read_text_with_fallback(source)
+        parser = _HtmlTextExtractor()
+        parser.feed(raw_html)
+        parser.close()
+        text = parser.text()
+        truncated = len(text) > max_chars
+        result.update(
+            {
+                "format": "html",
+                "readable_text": bool(text),
+                "total_chars": len(text),
+                "truncated": truncated,
+                "text": text[:max_chars],
+            }
+        )
+    elif ext == ".docx":
+        text = _extract_docx_text(source)
+        truncated = len(text) > max_chars
+        result.update(
+            {
+                "format": "docx",
+                "method": "stdlib-zipfile",
+                "readable_text": bool(text),
+                "total_chars": len(text),
+                "truncated": truncated,
+                "text": text[:max_chars],
+            }
+        )
+    elif ext == ".pdf":
+        pages_dir = Path(args.pages_dir).expanduser() if args.pages_dir else None
+        pdf_info = _extract_pdf_local(source, pages_dir=pages_dir)
+        text = str(pdf_info["text"] or "")
+        truncated = len(text) > max_chars
+        hint = None
+        if not text and not pdf_info["page_images"]:
+            hint = (
+                "No local PDF text extractor (pymupdf/pypdf/pdftotext) found on this machine. "
+                "Ask the user for a screenshot image, .docx, .md/.txt export, or paste the resume text."
+            )
+        elif len(text) < 40 and pdf_info["page_images"]:
+            hint = "PDF appears scanned/image-only; inspect the generated page_images visually."
+        result.update(
+            {
+                "format": "pdf",
+                "method": pdf_info["method"],
+                "page_count": pdf_info["page_count"],
+                "readable_text": bool(text),
+                "total_chars": len(text),
+                "truncated": truncated,
+                "text": text[:max_chars],
+                "page_images": pdf_info["page_images"],
+                "hint": hint,
+            }
+        )
+    elif ext in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        result.update(
+            {
+                "format": "image",
+                "readable_text": False,
+                "is_image": True,
+                "hint": "Inspect this image file directly using your multimodal vision / image read tool.",
+            }
+        )
+    else:
+        text = _read_text_with_fallback(source).strip()
+        truncated = len(text) > max_chars
+        result.update(
+            {
+                "format": ext.lstrip(".") or "unknown",
+                "readable_text": bool(text),
+                "total_chars": len(text),
+                "truncated": truncated,
+                "text": text[:max_chars],
+            }
+        )
+
+    if args.json:
+        _emit_json(result)
+    else:
+        print(f"Source: {result['file']} (format={result['format']}, bytes={size_bytes})")
+        if result.get("text"):
+            print(result["text"])
+        elif result.get("page_images"):
+            print("Page images:", ", ".join(result["page_images"]))
+        if result.get("hint"):
+            print(f"Hint: {result['hint']}")
+    return 0
+
+
+def build_sample_resume() -> dict[str, Any]:
+    """Neutral fictional ResumeData used only for template gallery previews."""
+    data = build_initial_resume(title="示例简历（林小北）")
+    data["templateType"] = "html"
+    data["templateId"] = "asu-tech"
+    data["basic"] = {
+        "name": "林小北",
+        "title": "后端开发工程师",
+        "email": "linxiaobei@example.com",
+        "phone": "138-0000-0000",
+        "location": "北京",
+    }
+    data["education"] = [
+        {
+            "id": "edu_sample_1",
+            "school": "示例大学",
+            "major": "计算机科学与技术",
+            "degree": "本科",
+            "startDate": "2021.09",
+            "endDate": "2025.06",
+            "description": "<p>专业排名前 10%，主修操作系统、计算机网络、分布式系统与数据库原理</p>",
+            "visible": True,
+        }
+    ]
+    data["experience"] = [
+        {
+            "id": "exp_sample_1",
+            "company": "示例科技",
+            "position": "后端开发实习生",
+            "date": "2024.06 - 2024.10",
+            "details": (
+                '<ul class="custom-list">'
+                "<li><p><strong>接口治理与缓存重构</strong>：主导订单查询链路热点缓存改造，P99 延迟由 180ms 降至 42ms</p></li>"
+                "<li><p><strong>异步削峰</strong>：引入消息队列与幂等消费者，保障大促峰值期间零重复写入</p></li>"
+                "</ul>"
+            ),
+            "visible": True,
+            "companyLogo": "",
+        }
+    ]
+    data["projects"] = [
+        {
+            "id": "proj_sample_1",
+            "name": "分布式配置与灰度发布平台",
+            "role": "核心开发者",
+            "date": "2024.02 - 2024.05",
+            "description": (
+                '<ul class="custom-list">'
+                "<li><p><strong>长轮询推送</strong>：基于 Go 与 Etcd Watch 实现配置秒级下发，支持版本回滚与命名空间隔离</p></li>"
+                "<li><p><strong>可观测性</strong>：补充全链路指标与压测基准，单节点支撑 8k+ 并发连接</p></li>"
+                "</ul>"
+            ),
+            "visible": True,
+        }
+    ]
+    data["skillContent"] = (
+        '<ul class="custom-list">'
+        "<li><p><strong>语言与框架</strong>：Python（FastAPI）、Go、TypeScript，熟悉 REST 与流式接口设计</p></li>"
+        "<li><p><strong>存储与中间件</strong>：MySQL 索引调优、Redis 缓存防护、Kafka 异步削峰、Docker 部署</p></li>"
+        "</ul>"
+    )
+    for sec in data["menuSections"]:
+        if sec["id"] in {"workExperience", "openSource", "awards", "selfEvaluation", "custom_research"}:
+            sec["enabled"] = False
+    return data
+
+
+def build_template_gallery_html(resume_data: dict[str, Any]) -> str:
+    """Build a standalone self-contained HTML page previewing all CocoCV templates."""
+    cards: list[str] = []
+    for item in TEMPLATE_CATALOG:
+        tpl_id = item["id"]
+        badge_rec = '<span class="pill pill-rec">默认推荐</span>' if item["recommended"] else ""
+        if item["engine"] == "html":
+            rendered = html_generator.generate_html_resume(resume_data, template=tpl_id, print_background=True)
+            escaped = html.escape(rendered, quote=True)
+            preview_block = (
+                f'<div class="thumb-wrap">'
+                f'<iframe class="thumb-frame" sandbox="" loading="lazy" title="{html.escape(tpl_id)}" '
+                f'srcdoc="{escaped}"></iframe>'
+                f"</div>"
+            )
+            action_btn = (
+                f'<button type="button" class="btn-zoom" onclick="openPreview(\'{html.escape(tpl_id)}\')">放大预览</button>'
+            )
+        else:
+            preview_block = (
+                '<div class="thumb-wrap thumb-latex">'
+                '<div><strong>XeLaTeX 原生模板</strong>'
+                '<p>需本机安装 xelatex，或通过 <code>cococv handoff</code> 在网页端云端编译。</p>'
+                '<p class="hint">经典学术/程序员单栏排版</p></div>'
+                "</div>"
+            )
+            action_btn = '<span class="btn-muted">XeLaTeX 引擎</span>'
+
+        cat_tag = item["category"]
+        cards.append(
+            f'<article class="card" data-category="{html.escape(cat_tag)}" data-id="{html.escape(tpl_id)}">'
+            f"{preview_block}"
+            f'<div class="card-body">'
+            f'<div class="card-head"><code>{html.escape(tpl_id)}</code>{badge_rec}'
+            f'<span class="pill">{html.escape(cat_tag)}</span><span class="pill">{html.escape(item["pages"])}</span></div>'
+            f'<h3>{html.escape(item["name"])}</h3>'
+            f'<p class="desc">{html.escape(item["description"])}</p>'
+            f'<p class="best">适合：{html.escape(item["best_for"])}</p>'
+            f'<div class="card-actions">{action_btn}'
+            f'<button type="button" class="btn-copy" onclick="copyId(\'{html.escape(tpl_id)}\', this)">复制 ID</button>'
+            f"</div></div></article>"
+        )
+
+    categories = ["全部", "单栏技术", "单栏", "侧栏双列", "双页", "双栏双页", "双页学术", "通用单栏", "经典 LaTeX"]
+    filter_btns = "".join(
+        f'<button type="button" class="filter-btn{" active" if c == "全部" else ""}" '
+        f'onclick="filterCards(\'{html.escape(c)}\', this)">{html.escape(c)}</button>'
+        for c in categories
+    )
+    return (
+        "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'/>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0'/>"
+        "<title>CocoCV 内置 21 套简历模板可视化画廊</title>"
+        "<style>"
+        "*{box-sizing:border-box}"
+        "body{margin:0;padding:24px;font-family:'PingFang SC','Microsoft YaHei',system-ui,sans-serif;background:#f4f6fb;color:#0f172a}"
+        ".top{max-width:1380px;margin:0 auto 20px}"
+        "h1{margin:0 0 8px;font-size:24px}"
+        ".sub{margin:0 0 14px;color:#475569;font-size:14px}"
+        ".filters{display:flex;flex-wrap:wrap;gap:8px}"
+        ".filter-btn{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 14px;font-size:13px;cursor:pointer}"
+        ".filter-btn.active{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}"
+        ".grid{max-width:1380px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:18px}"
+        ".card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(15,23,42,.05)}"
+        ".thumb-wrap{position:relative;width:100%;height:390px;overflow:hidden;background:#eef2f7;border-bottom:1px solid #e2e8f0}"
+        ".thumb-frame{width:794px;height:1123px;border:0;transform:scale(0.385);transform-origin:top left;background:#fff;pointer-events:none}"
+        ".thumb-latex{display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;color:#334155}"
+        ".card-body{padding:14px 16px;display:flex;flex-direction:column;gap:6px;flex:1}"
+        ".card-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px}"
+        "code{background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:6px;font-weight:700;font-size:13px}"
+        ".pill{font-size:11px;background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:999px}"
+        ".pill-rec{background:#dcfce7;color:#15803d;font-weight:600}"
+        "h3{margin:4px 0 0;font-size:16px}"
+        ".desc{margin:0;font-size:13px;color:#475569;line-height:1.45}"
+        ".best{margin:0;font-size:12px;color:#0f766e}"
+        ".card-actions{margin-top:auto;padding-top:10px;display:flex;gap:8px;align-items:center}"
+        "button{font-family:inherit}"
+        ".btn-zoom,.btn-copy{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}"
+        ".btn-zoom{background:#2563eb;border-color:#2563eb;color:#fff}"
+        ".btn-muted{font-size:12px;color:#64748b}"
+        ".modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:50;padding:24px;align-items:center;justify-content:center}"
+        ".modal.open{display:flex}"
+        ".modal-box{background:#fff;width:min(860px,96vw);height:92vh;border-radius:12px;display:flex;flex-direction:column;overflow:hidden}"
+        ".modal-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0}"
+        ".modal-frame{flex:1;width:100%;border:0;background:#fff}"
+        "</style></head><body>"
+        "<div class='top'><h1>CocoCV 21 套内置模板对比画廊</h1>"
+        "<p class='sub'>选定模板 ID 后，直接告诉 AI「我选 asu-tech」或使用 <code>cococv render resume.json -o resume.pdf --template &lt;ID&gt;</code>。</p>"
+        f"<div class='filters'>{filter_btns}</div></div>"
+        f"<main class='grid'>{''.join(cards)}</main>"
+        "<div id='modal' class='modal' onclick='if(event.target===this)closePreview()'>"
+        "<div class='modal-box'><div class='modal-bar'><strong id='modal-title'></strong>"
+        "<button type='button' class='btn-copy' onclick='closePreview()'>关闭</button></div>"
+        "<iframe id='modal-frame' class='modal-frame' sandbox=''></iframe></div></div>"
+        "<script>"
+        "function filterCards(cat,btn){document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));"
+        "btn.classList.add('active');document.querySelectorAll('.card').forEach(c=>{"
+        "c.style.display=(cat==='全部'||c.dataset.category===cat)?'flex':'none';});}"
+        "function openPreview(id){var card=document.querySelector('.card[data-id=\"'+id+'\"]');"
+        "var src=card.querySelector('iframe').getAttribute('srcdoc');"
+        "document.getElementById('modal-title').textContent=id+' · '+card.querySelector('h3').textContent;"
+        "document.getElementById('modal-frame').setAttribute('srcdoc',src);"
+        "document.getElementById('modal').classList.add('open');}"
+        "function closePreview(){document.getElementById('modal').classList.remove('open');}"
+        "function copyId(id,btn){navigator.clipboard?.writeText(id);btn.textContent='已复制 '+id;setTimeout(()=>btn.textContent='复制 ID',1500);}"
+        "</script></body></html>"
+    )
+
+
+def cmd_templates(args: argparse.Namespace) -> int:
+    gallery_out = Path(args.gallery).expanduser() if args.gallery else None
+    if gallery_out is not None:
+        if gallery_out.exists() and not args.force:
+            raise LocalToolError(
+                f"Target file already exists: {gallery_out} (use --force to overwrite)",
+                code="file_exists",
+                extra={"command": "templates", "gallery": str(gallery_out)},
+            )
+        if args.resume:
+            resume_path = Path(args.resume).expanduser()
+            raw_data, issues, err = load_and_validate_file(resume_path)
+            if err and not issues:
+                raise LocalToolError(err, code="file_error", extra={"command": "templates", "file": str(resume_path)})
+            if issues:
+                raise LocalToolError(
+                    err or f"Validation failed with {len(issues)} error(s) in {resume_path}",
+                    code="invalid_json" if err else "validation_failed",
+                    extra={"command": "templates", "file": str(resume_path), "errors": issues},
+                )
+            assert raw_data is not None
+        else:
+            raw_data = build_sample_resume()
+        gallery_html = build_template_gallery_html(raw_data)
+        _atomic_write_bytes(gallery_out, gallery_html.encode("utf-8"))
+
+    items = list(TEMPLATE_CATALOG)
+    if args.json:
+        payload: dict[str, Any] = {
+            "ok": True,
+            "command": "templates",
+            "count": len(items),
+            "recommended_default": "asu-tech",
+            "templates": items,
+        }
+        if gallery_out is not None:
+            payload["gallery"] = str(gallery_out.resolve())
+        _emit_json(payload)
+    else:
+        print(f"CocoCV built-in templates ({len(items)}, recommended default: asu-tech):")
+        for item in items:
+            mark = " *推荐*" if item["recommended"] else ""
+            print(f"  - {item['id']:<12} [{item['category']} · {item['pages']}] {item['name']}{mark} — {item['best_for']}")
+        if gallery_out is not None:
+            print(f"Generated visual template gallery: {gallery_out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--json", action="store_true", help="Emit JSON output on stdout.")
@@ -784,6 +1592,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_env = sub.add_parser("env", parents=[common], help="Inspect local environment capabilities.")
     p_env.set_defaults(func=cmd_env)
+
+    p_tpl = sub.add_parser("templates", parents=[common], help="List built-in templates and optionally build a visual gallery HTML.")
+    p_tpl.add_argument("--gallery", default=None, help="Output path for self-contained visual template gallery HTML.")
+    p_tpl.add_argument("--resume", default=None, help="Optional ResumeData JSON to preview inside the gallery.")
+    p_tpl.add_argument("--force", action="store_true")
+    p_tpl.set_defaults(func=cmd_templates)
+
+    p_read = sub.add_parser("read-source", parents=[common], help="Read a local resume file (JSON/MD/TXT/HTML/DOCX/PDF/Image) offline.")
+    p_read.add_argument("file")
+    p_read.add_argument("--pages-dir", default=None, help="Optional directory to save PDF page PNG renders for visual inspection.")
+    p_read.add_argument("--max-chars", type=int, default=30000)
+    p_read.set_defaults(func=cmd_read_source)
 
     p_init = sub.add_parser("init", parents=[common], help="Create a ResumeData JSON skeleton.")
     p_init.add_argument("-o", "--output", default="resume.json")
