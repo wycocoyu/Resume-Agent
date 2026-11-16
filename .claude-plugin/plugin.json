@@ -1,0 +1,23 @@
+{
+  "name": "cococv",
+  "displayName": "CocoCV · Resume Agent",
+  "description": "CocoCV（Resume-Agent）免登录本地优先 AI 简历助手：支持导入本地 PDF/Word/Markdown/JSON 或从零对话引导采集经历、21 套内置模板挑选与对比预览、以及本地直出 HTML / PNG / PDF 与按需网页续编。",
+  "version": "3.13.0",
+  "author": {
+    "name": "wycocoyu",
+    "url": "https://github.com/wycocoyu"
+  },
+  "homepage": "https://cococv.cn",
+  "repository": "https://github.com/wycocoyu/cococv",
+  "license": "MIT",
+  "keywords": [
+    "resume",
+    "cv",
+    "cococv",
+    "resume-agent",
+    "chinese-resume",
+    "career",
+    "html-resume",
+    "pdf-resume"
+  ]
+}

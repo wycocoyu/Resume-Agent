@@ -403,3 +403,136 @@ def test_state_dir_priority_and_fallback(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("COCOCV_STATE_DIR", str(custom_override))
     assert state_dir() == custom_override
 
+
+def test_bundled_html_generator_matches_backend_source() -> None:
+    expected = (REPO_ROOT / "backend" / "html_generator.py").read_text(encoding="utf-8").replace("\r\n", "\n")
+    committed_copy = COMMITTED_SKILL / "scripts" / "html_generator.py"
+    assert committed_copy.is_file()
+    assert committed_copy.read_text(encoding="utf-8") == expected
+    for harness in ("claude", "codex", "pi", "workbuddy"):
+        bundled = REPO_ROOT / "dist" / "skills" / harness / "resume-agent" / "scripts" / "html_generator.py"
+        assert bundled.is_file()
+        assert bundled.read_text(encoding="utf-8") == expected
+
+
+def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -> None:
+    """Copy scripts/ out of the repo and run under `python -S` with empty PYTHONPATH."""
+    import shutil
+
+    scripts_dst = tmp_path / "standalone_skill" / "scripts"
+    shutil.copytree(COMMITTED_SKILL / "scripts", scripts_dst)
+    local_script = scripts_dst / "cococv_local.py"
+    work_dir = tmp_path / "user_work"
+    work_dir.mkdir()
+
+    clean_env = {"PATH": "", "HOME": str(tmp_path)}
+
+    def _run_isolated(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-S", str(local_script), *args],
+            cwd=str(work_dir),
+            env=clean_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    # 1. env probe
+    res_env = _run_isolated(["env", "--json"])
+    assert res_env.returncode == 0, res_env.stderr
+    env_payload = json.loads(res_env.stdout)
+    assert env_payload["ok"] is True
+    assert env_payload["capabilities"]["local_html"] is True
+    assert env_payload["recommended_engine"] == "html"
+
+    # 2. init skeleton
+    resume_path = work_dir / "resume.json"
+    res_init = _run_isolated(["init", "-o", str(resume_path), "--title", "裸机测试", "--json"])
+    assert res_init.returncode == 0, res_init.stderr
+    assert resume_path.is_file()
+
+    # Populate candidate name
+    data = json.loads(resume_path.read_text(encoding="utf-8"))
+    data["basic"]["name"] = "无环境测试者"
+    resume_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 3. validate passes
+    res_val = _run_isolated(["validate", str(resume_path), "--json"])
+    assert res_val.returncode == 0, res_val.stderr
+    assert json.loads(res_val.stdout)["valid"] is True
+
+    # 4. render self-contained HTML succeeds with PATH="" and -S
+    out_html = work_dir / "resume.html"
+    res_html = _run_isolated(["render", str(resume_path), "-o", str(out_html), "--template", "asu-tech", "--json"])
+    assert res_html.returncode == 0, res_html.stderr
+    html_payload = json.loads(res_html.stdout)
+    assert html_payload["ok"] is True
+    assert html_payload["engine"] == "html"
+    assert "无环境测试者" in out_html.read_text(encoding="utf-8")
+
+    # 5. validate rejects HTML inside awards[*].description
+    bad_path = work_dir / "bad_awards.json"
+    data["awards"] = [{"title": "奖", "date": "2025", "description": "<p>一等奖</p>"}]
+    bad_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    res_bad = _run_isolated(["validate", str(bad_path), "--json"])
+    assert res_bad.returncode == 1
+    bad_payload = json.loads(res_bad.stdout)
+    assert bad_payload["valid"] is False
+    assert any(err["path"] == "awards[0].description" for err in bad_payload["errors"])
+
+    # 6. LaTeX without xelatex fails loudly with structured fallback_hint
+    res_tex = _run_isolated(["render", str(resume_path), "-o", str(work_dir / "out.pdf"), "--engine", "latex", "--json"])
+    assert res_tex.returncode == 1
+    tex_payload = json.loads(res_tex.stdout)
+    assert tex_payload["error"]["code"] == "xelatex_not_found"
+    assert "--template asu-tech" in tex_payload.get("fallback_hint", "")
+
+
+def test_cococv_local_falls_back_when_global_cli_lacks_png_flags(tmp_path: Path) -> None:
+    """If an outdated `cococv` on PATH returns usage_error/invalid_argument for --png, fall back cleanly."""
+    import shutil
+
+    scripts_dst = tmp_path / "skill" / "scripts"
+    shutil.copytree(COMMITTED_SKILL / "scripts", scripts_dst)
+    local_script = scripts_dst / "cococv_local.py"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_cli = fake_bin / "cococv"
+    fake_cli.write_text(
+        "#!/bin/sh\n"
+        'echo \'{"ok": false, "error": {"code": "usage_error", "message": "No such option: --png"}}\'\n'
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    fake_cli.chmod(0o755)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    resume_path = work_dir / "resume.json"
+    subprocess.run(
+        [sys.executable, str(local_script), "init", "-o", str(resume_path), "--title", "降级测试"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Run render -o out.html (no --png) and render -o out.html --png via mocked outdated PATH CLI
+    # Wait: test render -o out.html --png with a fake Chrome path? Instead verify _delegate_render_if_available directly
+    probe_code = (
+        f"import argparse, sys; sys.path.insert(0, {str(scripts_dst)!r}); "
+        "import cococv_local; "
+        "ns = argparse.Namespace(file='r.json', output='out.pdf', template='asu-tech', engine=None, "
+        "png=True, dpi=150, no_print_background=False, force=False); "
+        "print('DELEGATED:', cococv_local._delegate_render_if_available(ns))"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", probe_code],
+        cwd=str(work_dir),
+        env={"PATH": str(fake_bin), "HOME": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode == 0, res.stderr
+    assert "DELEGATED: None" in res.stdout
+

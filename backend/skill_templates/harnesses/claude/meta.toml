@@ -15,7 +15,7 @@ name = "resume-agent"
 description = "long"
 
 [frontmatter.extra]
-allowed-tools = ["Bash(cococv:*)", "Bash(resume-agent:*)", "Read", "Write", "Edit"]
+allowed-tools = ["Bash(cococv:*)", "Bash(resume-agent:*)", "Bash(python3:*)", "Read", "Write", "Edit"]
 
 [constraints]
 description_min = 20
@@ -30,6 +30,16 @@ mode = "skill"
 from = "core/references/schema.md"
 to = "references/schema.md"
 mode = "schema"
+
+[[assets]]
+from = "html_generator.py"
+to = "scripts/html_generator.py"
+mode = "backend_copy"
+
+[[assets]]
+from = "core/scripts/cococv_local.py"
+to = "scripts/cococv_local.py"
+mode = "copy"
 
 [install]
 scope_default = "user"

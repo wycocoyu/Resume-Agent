@@ -55,7 +55,7 @@ _INSTALL_KEYS = {
     "user_paths",
     "project_paths",
 }
-_ASSET_MODES = {"skill", "copy", "schema"}
+_ASSET_MODES = {"skill", "copy", "schema", "backend_copy"}
 _STATUSES = {"verified", "experimental"}
 _STRATEGIES = {"copy", "link"}
 _SCOPES = {"user", "project"}
@@ -182,6 +182,11 @@ def load_adapter(path: Path) -> HarnessAdapter:
             ".." not in Path(target).parts,
             f"{where}: assets[{index}].to must not escape the skill directory",
         )
+        if mode == "backend_copy":
+            _require(
+                not Path(source).is_absolute() and ".." not in Path(source).parts,
+                f"{where}: assets[{index}].from must be a safe relative path under backend/",
+            )
         assets.append(Asset(source=source, target=target, mode=mode))
 
     install = payload.get("install", {})

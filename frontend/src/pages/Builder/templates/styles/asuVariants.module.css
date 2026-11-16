@@ -5,6 +5,7 @@
   width: 100%;
   margin: 0;
   padding: 0;
+  text-align: left;
   --blue: #2c5b95;
   --ink: #20252b;
   --muted: #5e6773;
@@ -251,6 +252,15 @@
   column-gap: 8px;
   align-items: baseline;
   margin-bottom: 2px;
+}
+
+.entryHeadNoDate {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sidebar .entryHeadNoDate,
+.layoutTwoColumn .entryHeadNoDate {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .entryDate {

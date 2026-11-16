@@ -21,7 +21,7 @@
  */
 import React from 'react'
 import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react'
-import type { BuilderResumeData, Project, SectionMeta } from '../types'
+import type { BuilderResumeData, Experience, Project, SectionMeta } from '../types'
 import { getSortedSections, formatDateRange } from '../types'
 import { SafeHtml, InlineBold } from './SafeHtml'
 import { TemplateLogo } from './TemplateLogo'
@@ -34,7 +34,7 @@ interface ResumeVividProps {
 }
 
 /** 主列固定收纳的 section;其余默认 section 与自定义模块进侧栏,列内顺序仍按 sectionMeta */
-const MAIN_COLUMN_KEYS = ['summary', 'workExperience', 'personalProjects', 'openSource']
+const MAIN_COLUMN_KEYS = ['summary', 'fullTimeExperience', 'workExperience', 'personalProjects', 'openSource']
 
 // 常见复姓(用于中文姓名的姓/名两色调切分)
 const COMPOUND_SURNAMES = [
@@ -70,7 +70,17 @@ function splitNameTwoTone(fullName: string): {
 }
 
 export const ResumeVivid: React.FC<ResumeVividProps> = ({ data, showContactIcons = false }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
 
   const sortedSections = getSortedSections(data)
 
@@ -219,6 +229,38 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({ data, showContactIcons
     )
   }
 
+  const renderExperienceSection = (keyId: string, title: string, items?: Experience[]) => {
+    if (!items || items.length === 0) return null
+    return (
+      <div key={keyId} className={baseStyles['resume-section']}>
+        <h3 className={styles.sectionTitle}>{title}</h3>
+        <div className={baseStyles['resume-items']}>
+          {items.map((exp) => (
+            <div key={exp.id} className={baseStyles['resume-item']}>
+              <div
+                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
+              >
+                <span>
+                  <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} /><InlineBold as="span" className={styles.entryCompany} text={exp.company} weightControlled />
+                  {exp.title && (
+                    <>
+                      <span className={styles.entrySep}>|</span>
+                      <InlineBold as="span" className={styles.entryRole} text={exp.title} />
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className={`${baseStyles['resume-row-tight']} ${styles.entryMeta}`}>
+                {[formatDateRange(exp.years), exp.location].filter(Boolean).join(' | ')}
+              </div>
+              {renderArrowBullets(exp.description)}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const renderSection = (section: SectionMeta) => {
     switch (section.key) {
       case 'personalInfo':
@@ -239,36 +281,11 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({ data, showContactIcons
           </div>
         )
 
+      case 'fullTimeExperience':
+        return renderExperienceSection(section.id, section.displayName, fullTimeExperience)
+
       case 'workExperience':
-        if (!workExperience || workExperience.length === 0) return null
-        return (
-          <div key={section.id} className={baseStyles['resume-section']}>
-            <h3 className={styles.sectionTitle}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <span>
-                      <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} /><InlineBold as="span" className={styles.entryCompany} text={exp.company} weightControlled />
-                      {exp.title && (
-                        <>
-                          <span className={styles.entrySep}>|</span>
-                          <InlineBold as="span" className={styles.entryRole} text={exp.title} />
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <div className={`${baseStyles['resume-row-tight']} ${styles.entryMeta}`}>
-                    {[formatDateRange(exp.years), exp.location].filter(Boolean).join(' | ')}
-                  </div>
-                  {renderArrowBullets(exp.description)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
+        return renderExperienceSection(section.id, section.displayName, internshipItems)
 
       case 'personalProjects':
         if (!personalProjects || personalProjects.length === 0) return null

@@ -33,6 +33,16 @@ from = "harnesses/codex/agents/openai.yaml"
 to = "agents/openai.yaml"
 mode = "copy"
 
+[[assets]]
+from = "html_generator.py"
+to = "scripts/html_generator.py"
+mode = "backend_copy"
+
+[[assets]]
+from = "core/scripts/cococv_local.py"
+to = "scripts/cococv_local.py"
+mode = "copy"
+
 [install]
 scope_default = "user"
 strategy = "copy"

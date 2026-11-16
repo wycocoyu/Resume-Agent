@@ -19,6 +19,7 @@
   --margin-right: 10mm;
 
   /* Apply base styles */
+  text-align: left;
   font-family: var(--body-font);
   font-size: var(--font-size-base);
   line-height: var(--line-height);

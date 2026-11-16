@@ -8,6 +8,7 @@ import { stripPhotoFromResumeData } from '@/services/storage/sanitizeResume'
 import { stripHtmlTags } from '../utils/textUtils'
 import { useLocation, useParams } from 'react-router-dom'
 import { useResumeContext } from '@/contexts/ResumeContext'
+import { applyRequestedTemplate } from '@/data/templates'
 import type {
   ResumeData,
   MenuSection,
@@ -116,19 +117,21 @@ export function useResumeData() {
   // （resume_v2_data 是编辑页私有的自动存草稿，活在存储适配器体系之外，
   // 删除简历不会清它；不重置就会显示一份数据库里已不存在的「幽灵简历」，
   // 见 knowledge-base/reviews/2026-07-15-删简历后编辑页显示旧简历-根因与方案.md）
-  const resetEditorToBlank = useCallback(() => {
+  const resetEditorToBlank = useCallback((requestedTemplate?: string | null) => {
     setCurrentResumeId(null)
     setCurrentId(null)
     localStorage.removeItem(STORAGE_KEY)
-    setResumeData(loadFromStorage())
+    const fresh = loadFromStorage()
+    setResumeData(requestedTemplate ? applyRequestedTemplate(fresh, requestedTemplate) : fresh)
   }, [setResumeData])
 
   // 从 Dashboard 进入时加载对应简历
   useEffect(() => {
     const loadResume = async () => {
-      // /workspace/new 始终按“新建默认模板”处理，避免旧缓存覆盖模板更新（原 /workspace/latex 语义）
+      // /workspace/new 始终按“新建默认模板”处理，支持通过 ?template= 指定模板
       if (location.pathname === '/workspace/new' && !routeResumeId) {
-        resetEditorToBlank()
+        const requestedTemplate = new URLSearchParams(location.search).get('template')
+        resetEditorToBlank(requestedTemplate)
         setIsDataLoaded(true)
         return
       }
@@ -186,7 +189,7 @@ export function useResumeData() {
     }
 
     loadResume()
-  }, [location.pathname, routeResumeId, resetEditorToBlank])
+  }, [location.pathname, location.search, routeResumeId, resetEditorToBlank])
 
   // 自动保存到 localStorage
   useEffect(() => {

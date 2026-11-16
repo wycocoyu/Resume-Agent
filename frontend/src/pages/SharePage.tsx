@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import { Download, Copy, Check, ZoomIn, ZoomOut, Maximize2, FileText, Eye, Calendar, RefreshCw } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Download, Copy, Check, ZoomIn, ZoomOut, Maximize2, FileText, Eye, Calendar, RefreshCw, Edit3 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { PDFViewerSelector } from '../components/PDFEditor'
 import { recordPdfDownload, renderPDFStream } from '../services/api'
@@ -9,6 +9,8 @@ import { saveAs } from 'file-saver'
 import type { ResumeData } from './Workspace/v2/types'
 import { getApiBaseUrl } from '@/lib/runtimeEnv'
 import { useAuth } from '@/contexts/AuthContext'
+import { saveResume, setCurrentResumeId } from '@/services/resumeStorage'
+import { toast } from '@/lib/toast'
 
 interface SharedResume {
   success: boolean
@@ -20,11 +22,13 @@ interface SharedResume {
 
 export default function SharePage() {
   const { shareId } = useParams<{ shareId: string }>()
+  const navigate = useNavigate()
   const { isAuthenticated, loading: authLoading, openModal } = useAuth()
   const [resume, setResume] = useState<SharedResume | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfProgress, setPdfProgress] = useState('')
@@ -132,6 +136,23 @@ export default function SharePage() {
     }
   }, [pdfBlob, resume])
 
+  const handleImportToWorkspace = useCallback(async () => {
+    if (!resume?.data || importing) return
+    setImporting(true)
+    try {
+      const saved = await saveResume(resume.data)
+      setCurrentResumeId(saved.id)
+      toast.success(
+        isAuthenticated ? '已导入工作台并保存到云端' : '已保存到本机浏览器，正在打开工作台'
+      )
+      navigate(`/workspace/${saved.id}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导入工作台失败，请重试')
+    } finally {
+      setImporting(false)
+    }
+  }, [importing, isAuthenticated, navigate, resume?.data])
+
   const handleCopyLink = async () => {
     const currentUrl = window.location.href
     try {
@@ -238,6 +259,20 @@ export default function SharePage() {
                 复制链接
               </>
             )}
+          </button>
+
+          <button
+            onClick={handleImportToWorkspace}
+            disabled={importing}
+            className={cn(
+              'px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium',
+              'bg-emerald-600 text-white hover:bg-emerald-700',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'transition-all duration-200'
+            )}
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            {importing ? '导入中...' : isAuthenticated ? '导入工作台编辑' : '免登录存本机编辑'}
           </button>
 
           {!isAuthenticated ? (

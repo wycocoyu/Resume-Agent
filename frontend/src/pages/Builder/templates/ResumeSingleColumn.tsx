@@ -16,7 +16,7 @@
  */
 import React from 'react'
 import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react'
-import type { BuilderResumeData, Project, SectionMeta } from '../types'
+import type { BuilderResumeData, Experience, Project, SectionMeta } from '../types'
 import { getSortedSections, formatDateRange } from '../types'
 import { SafeHtml, InlineBold } from './SafeHtml'
 import { TemplateLogo } from './TemplateLogo'
@@ -32,7 +32,17 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
   data,
   showContactIcons = false,
 }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
 
   // Get sorted visible sections
   const sortedSections = getSortedSections(data)
@@ -178,6 +188,39 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
     )
   }
 
+  const renderExperienceSection = (keyId: string, title: string, items?: Experience[]) => {
+    if (!items || items.length === 0) return null
+    return (
+      <div key={keyId} className={baseStyles['resume-section']}>
+        <h3 className={baseStyles['resume-section-title']}>{title}</h3>
+        <div className={baseStyles['resume-items']}>
+          {items.map((exp) => (
+            <div key={exp.id} className={baseStyles['resume-item']}>
+              <div
+                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
+              >
+                <h4 className={baseStyles['resume-item-title']}><InlineBold text={exp.title} /></h4>
+                <span className={`${baseStyles['resume-date']} ml-4`}>
+                  {formatDateRange(exp.years)}
+                </span>
+              </div>
+              <div
+                className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-item-subtitle']}`}
+              >
+                <span className="inline-flex items-center">
+                  <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} />
+                  <InlineBold as="span" text={exp.company} weightControlled />
+                </span>
+                {exp.location && <span>{exp.location}</span>}
+              </div>
+              {renderBullets(exp.description)}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   // Render a section based on its key
   const renderSection = (section: SectionMeta) => {
     switch (section.key) {
@@ -200,34 +243,11 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
           </div>
         )
 
+      case 'fullTimeExperience':
+        return renderExperienceSection(section.id, section.displayName, fullTimeExperience)
+
       case 'workExperience':
-        if (!workExperience || workExperience.length === 0) return null
-        return (
-          <div key={section.id} className={baseStyles['resume-section']}>
-            <h3 className={baseStyles['resume-section-title']}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <h4 className={baseStyles['resume-item-title']}><InlineBold text={exp.title} /></h4>
-                    <span className={`${baseStyles['resume-date']} ml-4`}>
-                      {formatDateRange(exp.years)}
-                    </span>
-                  </div>
-                  <div
-                    className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-item-subtitle']}`}
-                  >
-                    <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} /><InlineBold as="span" text={exp.company} weightControlled />
-                    {exp.location && <span>{exp.location}</span>}
-                  </div>
-                  {renderBullets(exp.description)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
+        return renderExperienceSection(section.id, section.displayName, internshipItems)
 
       case 'personalProjects':
         if (!personalProjects || personalProjects.length === 0) return null

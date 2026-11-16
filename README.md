@@ -72,6 +72,48 @@
 </tr>
 </table>
 
+## 🤖 AI Agent / Skills 本地使用（免登录 · 零 LaTeX 依赖）
+
+不想打开网页填表，也可以直接把 **CocoCV Skill** 装进你的 **Codex、Claude Code** 或其他 AI 编程助手里。全程在本地运行，**无需预先登录账号、无需本地安装 XeLaTeX**（仅需 Python 3.10+），就能对话生成简历并导出 `.html`、`.png` 预览图或 `.pdf`。
+
+### 1. 给你的 Agent 安装（任选一种）
+
+| 客户端 | 安装方式 | 触发方式 |
+|:--|:--|:--|
+| **Codex（CLI / Desktop）** | 克隆本仓库后运行 `resume-agent skill install --harness codex`（或直接安装根目录 `.codex-plugin/` 插件清单，或将 `skills/resume-agent/` 软链到 `~/.codex/skills/resume-agent`） | 对话中输入 `$resume-agent` |
+| **Claude Code** | 在 Claude Code 中添加本地/GitHub 插件市场（根目录已内置 `.claude-plugin/marketplace.json` 与 `plugin.json`），或运行 `resume-agent skill install --harness claude` | 对话中输入 `/resume-agent` |
+| **其他 Agent（Cursor / OpenCode / Pi / WorkBuddy）** | 运行 `resume-agent skill install --harness pi`（或 `workbuddy`），或直接把仓库内 `skills/resume-agent/` 目录复制到对应工具的 `skills/` 目录 | 自然语言提及「用 resume-agent 做简历」 |
+
+> 💡 **查看本机支持的全部宿主与安装路径**：运行 `resume-agent skill list` 或 `resume-agent skill status`（只安装 `skills/resume-agent/` 单个目录也可独立工作，内置 `scripts/cococv_local.py` 零依赖脚本）。
+
+### 2. 安装完后，直接这样跟 Agent 对话
+
+Agent 会先静默探测本机环境，再引导你走以下三条路线之一（不会上来就甩参数或要求登录）：
+
+- **手上有现成简历（本地路径直接读，免抄写）**
+  > 「用 `$resume-agent` 帮我重新排版简历，文件在 `~/Desktop/我的简历.pdf`（支持 `.pdf` / `.docx` / `.md` / `.txt` / `.html` / `.json` / 简历截图）」
+  Agent 会直接调用本地脚本读取文件，提取真实经历、标出缺失项为 `【待补】` 并生成新版。
+
+- **手上没有简历（对话一步步引导生成）**
+  > 「用 `$resume-agent` 帮我从零写一份后端开发简历」
+  Agent 会分轮只问 2～3 个关键问题（目标岗位与页数 → 教育与核心经历 → 技术栈与量化成果），绝不杜撰事实。
+
+- **已有简历想对照 JD 改写、诊断或换模板**
+  > 「用 `$resume-agent` 对照这份岗位 JD 优化我的 `resume.json`，并给我看看哪几个模板合适」
+  Agent 会先推荐 3～5 套匹配模板，也可一键生成单文件对比画廊 `template-gallery.html` 用你的真实内容同屏对比，再按需导出：
+  - **本地 HTML 预览（`-o resume.html`）**：零依赖 100% 可出，浏览器打开可看可打印导出 PDF
+  - **逐页预览图（`-o resume.png`）**：适合手机核对或让 Agent 自检是否多出 2～3 行溢出
+  - **本地导出 PDF（`-o resume.pdf --png`）**：调用本机 Chrome 或 XeLaTeX 离线直出
+  - **网页工作台精修（`handoff`）**：仅在你主动要求时生成 60 分钟临时链接导入 `cococv.cn` 拖拽微调
+
+### 3. 27 套工作台真实简历模板总览
+
+工作台共内置 **27 套真实模板**：`Classic LaTeX`（服务端 XeLaTeX 精排）、7 套网页实时 HTML 经典模板（`LaTeX Style` / `Single Column` / `Two Column` / `Modern` / `Modern 2-Col` / `Clean` / `Vivid`）以及 19 套高密度 ASu 系列（`asu-tech` + `asu-01`～`asu-18`，均支持本地 CLI 离线直出）。你也可以随时打开免登录在线模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)，预览真实排版、导入自己的 `resume.json` 试套、直接留在本地浏览器编辑，或一键复制口令发给你的 AI Agent：
+
+<div align="center">
+  <img src="docs/readme/template-overview.png" alt="CocoCV 27 套工作台真实简历模板总览" width="95%" />
+</div>
+
 ## 🏗️ 技术架构与目录结构
 
 > 📚 **深入开发与二次定制**：完整前端架构、Agent 流式协议、数据库表结构、领域术语表与 ADR 请查阅 [**开发者文档索引 (`docs/README.md`)**](docs/README.md)。

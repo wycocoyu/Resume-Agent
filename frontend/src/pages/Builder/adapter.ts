@@ -22,21 +22,75 @@ import { getSchoolLogoUrl } from '../Workspace/v2/constants/schoolLogos'
 
 const DEFAULT_LOGO_SIZE = 20  // 与 globalSettings.companyLogoSize 默认一致
 
+function collectListItem(liEl: Element, depth: number, out: string[]): void {
+  const indent = '  '.repeat(depth)
+  const inlineParts: string[] = []
+  for (const node of Array.from(liEl.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const tag = (node as Element).tagName
+      if (tag === 'UL' || tag === 'OL') continue
+    }
+    inlineParts.push(inlineNodeHtml(node))
+  }
+  const text = inlineParts.join('').trim()
+  if (text) {
+    out.push(`${indent}${text}`)
+  }
+  for (const child of Array.from(liEl.children)) {
+    if (child.tagName === 'UL' || child.tagName === 'OL') {
+      collectNestedListBullets(child, depth + 1, out)
+    }
+  }
+}
+
+function collectNestedListBullets(listEl: Element, depth: number, out: string[]): void {
+  for (const child of Array.from(listEl.children)) {
+    if (child.tagName === 'LI') {
+      collectListItem(child, depth, out)
+    }
+  }
+}
+
 /**
  * TipTap HTML → bullet 数组。
- * 优先取 <li>(每条一个 bullet);无列表时按 <p> 分段;再退化为整体一条。
+ * 递归提取嵌套 <ul>/<ol>/<li>（按缩进深度保留 `'  '` 前缀），避免外层 <li> 吞并内层列表导致重复；
+ * 无列表时按块级 <p> 分段，再退化为整体一条。
  */
 export function htmlToBullets(html: string | undefined | null): string[] {
   if (!html || !html.trim()) return []
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  const listItems = Array.from(doc.body.querySelectorAll('li'))
-  const sources: Element[] = listItems.length
-    ? listItems
-    : Array.from(doc.body.querySelectorAll('p'))
-  const fragments = (sources.length ? sources : [doc.body])
-    .map((el) => Array.from(el.childNodes).map(inlineNodeHtml).join('').trim())
-    .filter(Boolean)
-  return fragments
+  const bullets: string[] = []
+  const topChildren = Array.from(doc.body.children)
+  if (topChildren.length === 0) {
+    const raw = Array.from(doc.body.childNodes).map(inlineNodeHtml).join('').trim()
+    return raw ? [raw] : []
+  }
+  for (const child of topChildren) {
+    if (child.tagName === 'UL' || child.tagName === 'OL') {
+      collectNestedListBullets(child, 0, bullets)
+    } else if (child.tagName === 'LI') {
+      collectListItem(child, 0, bullets)
+    } else {
+      const nestedLists = Array.from(child.children).filter(
+        (el) => el.tagName === 'UL' || el.tagName === 'OL',
+      )
+      if (nestedLists.length > 0) {
+        const inlineText = Array.from(child.childNodes)
+          .filter((n) => !(n.nodeType === Node.ELEMENT_NODE && ['UL', 'OL'].includes((n as Element).tagName)))
+          .map(inlineNodeHtml)
+          .join('')
+          .trim()
+        if (inlineText) bullets.push(inlineText)
+        for (const nl of nestedLists) {
+          collectNestedListBullets(nl, 1, bullets)
+        }
+      } else {
+        const text = inlineNodeHtml(child).trim()
+        if (text) bullets.push(text)
+      }
+    }
+  }
+  return bullets
 }
 
 /** 我方 menuSections id → Builder section 定义 */

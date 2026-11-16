@@ -18,6 +18,7 @@ import {
   Moon,
   Zap,
   Palette,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
@@ -409,6 +410,22 @@ export default function WorkspaceLayout({
               <FileText className={cn("w-5 h-5 shrink-0", currentWorkspace === "myResumes" && "text-white fresh:text-[#3367D6]")} />
               {!sidebarCollapsed && (
                 <span>我的简历</span>
+              )}
+            </button>
+
+            {/* 模板广场 */}
+            <button
+              onClick={(e) => handleWorkspaceChange("templates", e)}
+              className={navItemClass(currentWorkspace === "templates")}
+              title="模板广场"
+              aria-current={currentWorkspace === "templates" ? "page" : undefined}
+            >
+              {currentWorkspace === "templates" && (
+                <span className="absolute inset-y-2.5 left-0 hidden w-0.5 bg-[#4285F4] fresh:block fresh:rounded-r-full" />
+              )}
+              <LayoutGrid className={cn("w-5 h-5 shrink-0", currentWorkspace === "templates" && "text-white fresh:text-[#3367D6]")} />
+              {!sidebarCollapsed && (
+                <span>模板广场</span>
               )}
             </button>
 

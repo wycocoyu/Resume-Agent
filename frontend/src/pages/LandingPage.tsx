@@ -21,6 +21,7 @@ import {
   Frown,
   Upload,
   Palette,
+  LayoutGrid,
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import type { ReactNode } from 'react'
@@ -487,6 +488,16 @@ export default function LandingPage() {
                 onPicked={() => setShowSkinPicker(false)}
                 onClose={() => setShowSkinPicker(false)}
               />
+              <button
+                type="button"
+                onClick={() => navigate('/templates')}
+                className="hidden h-8 items-center justify-center gap-1.5 px-2 text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4] fresh:rounded-md md:flex"
+                title="浏览 21 套免费简历模板"
+                aria-label="浏览模板广场"
+              >
+                <LayoutGrid className="w-4 h-4 shrink-0" />
+                <span className="hidden text-xs font-medium lg:inline">模板</span>
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/changelog')}

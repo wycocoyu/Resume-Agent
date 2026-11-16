@@ -145,6 +145,11 @@ def render_harness(adapter: HarnessAdapter, root: Path | None = None) -> dict[st
         elif asset.mode == "skill":
             files[asset.target] = f"{frontmatter}\n\n{body}"
             has_skill = True
+        elif asset.mode == "backend_copy":
+            source = Path(backend.__file__).resolve().parent / asset.source
+            if not source.is_file():
+                raise SkillRenderError(f"{adapter.id}: missing backend asset source {source}")
+            files[asset.target] = normalize_text(source.read_text(encoding="utf-8"))
         else:
             source = root / asset.source
             if not source.is_file():

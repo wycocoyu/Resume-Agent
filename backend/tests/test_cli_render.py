@@ -780,5 +780,112 @@ def test_html_generator_print_background_toggle() -> None:
     assert "-webkit-print-color-adjust: economy !important;" in html_economy
 
 
+def test_render_pdf_bytes_to_pngs_single_and_multipage(tmp_path: Path) -> None:
+    from backend.cli.errors import CLIError
+    from backend.cli.render_cmd import render_pdf_bytes_to_pngs
+
+    # Build a synthetic 2-page PDF with PyMuPDF
+    doc = fitz.open()
+    for page_idx in (1, 2):
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((72, 72), f"CocoCV Page {page_idx}")
+    two_page_pdf = doc.tobytes()
+    doc.close()
+
+    # single_primary=True writes both resume.png (page 1) and per-page files
+    out_png = tmp_path / "resume.png"
+    pages = render_pdf_bytes_to_pngs(two_page_pdf, out_png, dpi=96, single_primary=True)
+    assert out_png.is_file()
+    assert out_png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert pages == [tmp_path / "resume-page-1.png", tmp_path / "resume-page-2.png"]
+    for p in pages:
+        assert p.is_file()
+        assert p.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    # Without force=True, colliding sidecar fails cleanly
+    with pytest.raises(CLIError) as exc_info:
+        render_pdf_bytes_to_pngs(two_page_pdf, out_png, dpi=96, single_primary=True, force=False)
+    assert exc_info.value.code == "file_exists"
+
+    # single_primary=False (sidecar mode) writes only -page-N.png
+    sidecar_base = tmp_path / "resume.pdf"
+    sidecars = render_pdf_bytes_to_pngs(two_page_pdf, sidecar_base, dpi=96, single_primary=False, force=True)
+    assert sidecars == [tmp_path / "resume-page-1.png", tmp_path / "resume-page-2.png"]
+
+
+def test_cli_render_html_png_and_pdf_with_sidecar_png(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resume_data = build_initial_resume(title="出图测试")
+    resume_data["basic"]["name"] = "测试候选人"
+    resume_data["basic"]["email"] = "preview@example.com"
+    resume_json = _write_resume(tmp_path / "resume.json", resume_data)
+
+    # 1. Direct PNG output via HTML/Chrome
+    out_png = tmp_path / "preview.png"
+    code_png = run_cli(["render", str(resume_json), "-o", str(out_png), "--template", "asu-tech", "--json"])
+    assert code_png == 0
+    payload_png = json.loads(capsys.readouterr().out)
+    assert payload_png["ok"] is True
+    assert payload_png["engine"] == "html"
+    assert payload_png["page_count"] >= 1
+    assert out_png.is_file()
+    assert out_png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    # 2. PDF + --png sidecar images
+    out_pdf = tmp_path / "bundle.pdf"
+    code_pdf = run_cli(["render", str(resume_json), "-o", str(out_pdf), "--template", "asu-tech", "--png", "--json"])
+    assert code_pdf == 0
+    payload_pdf = json.loads(capsys.readouterr().out)
+    assert payload_pdf["ok"] is True
+    assert out_pdf.is_file() and out_pdf.read_bytes().startswith(b"%PDF-")
+    assert payload_pdf["page_count"] >= 1
+    first_sidecar = Path(payload_pdf["pages"][0])
+    assert first_sidecar.is_file()
+    assert first_sidecar.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_cli_render_latex_png_and_missing_xelatex_hint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import io
+
+    resume_data = build_initial_resume(title="LaTeX出图")
+    resume_data["basic"]["name"] = "张小明"
+    resume_json = _write_resume(tmp_path / "latex_resume.json", resume_data)
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 72), "LaTeX Preview")
+    fake_pdf = doc.tobytes()
+    doc.close()
+
+    monkeypatch.setattr("backend.cli.render_cmd.json_to_latex", lambda *a, **kw: "\\documentclass{resume}")
+    monkeypatch.setattr("backend.cli.render_cmd.compile_latex_to_pdf", lambda *a, **kw: io.BytesIO(fake_pdf))
+
+    out_pdf = tmp_path / "latex_out.pdf"
+    code = run_cli(["render", str(resume_json), "-o", str(out_pdf), "--template", "default", "--png", "--json"])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["engine"] == "latex"
+    assert payload["page_count"] == 1
+    assert (tmp_path / "latex_out-page-1.png").is_file()
+
+    # Missing xelatex surfaces fallback_hint
+    def _raise_missing_xelatex(*args, **kwargs):
+        raise RuntimeError("xelatex 命令未找到")
+
+    monkeypatch.setattr("backend.cli.render_cmd.compile_latex_to_pdf", _raise_missing_xelatex)
+    code_err = run_cli(["render", str(resume_json), "-o", str(tmp_path / "fail.pdf"), "--template", "default", "--json"])
+    assert code_err != 0
+    err_payload = json.loads(capsys.readouterr().out)
+    assert err_payload["error"]["code"] == "render_failed"
+    assert "--template asu-tech" in err_payload.get("fallback_hint", "")
+    assert "handoff" in err_payload.get("fallback_hint", "")
+
+
 
 

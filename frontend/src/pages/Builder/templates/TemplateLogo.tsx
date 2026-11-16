@@ -9,18 +9,21 @@ import React from 'react'
 
 interface TemplateLogoProps {
   url?: string
+  src?: string
   size?: number
   alt?: string
+  className?: string
 }
 
-export const TemplateLogo: React.FC<TemplateLogoProps> = ({ url, size = 20, alt = 'logo' }) => {
-  if (!url) return null
+export const TemplateLogo: React.FC<TemplateLogoProps> = ({ url, src, size = 20, alt = 'logo', className }) => {
+  const resolvedUrl = url || src
+  if (!resolvedUrl) return null
   return (
     <img
-      src={url}
+      src={resolvedUrl}
       alt={alt}
-      style={{ width: size, height: size, objectFit: 'contain' }}
-      className="inline-block align-middle mr-1.5 shrink-0"
+      style={{ height: size, width: 'auto', maxWidth: size * 3.5, objectFit: 'contain' }}
+      className={className ? `inline-block align-middle mr-1.5 shrink-0 ${className}` : 'inline-block align-middle mr-1.5 shrink-0'}
     />
   )
 }

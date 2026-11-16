@@ -365,7 +365,7 @@ export const ResumeAsuTech: React.FC<ResumeAsuTechProps> = ({
   return (
     <div className={`${styles.container} ${compactMode ? styles.compact : ''}`}>
       {/* 顶部 Header */}
-      <div className={styles.headerGrid}>
+      <div className={`${styles.headerGrid} ${!personalInfo?.photo ? styles.headerGridNoPhoto : ''}`}>
         <div className={styles.headerLeft}>
           <h1 className={styles.candidateName}>{personalInfo?.name || 'Your Name'}</h1>
 
