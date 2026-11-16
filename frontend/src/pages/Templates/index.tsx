@@ -268,6 +268,154 @@ export default function TemplatesPage() {
     [importedResume],
   )
 
+  const recommendedInView = useMemo(
+    () => filteredTemplates.filter((tpl) => tpl.recommended),
+    [filteredTemplates],
+  )
+  const otherInView = useMemo(
+    () => filteredTemplates.filter((tpl) => !tpl.recommended),
+    [filteredTemplates],
+  )
+
+  const renderTemplateGrid = (items: TemplateMetadata[], sectionTestId?: string) => (
+    <div
+      data-testid={sectionTestId}
+      className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+    >
+      {items.map((tpl) => {
+        const promptKey = `prompt:${tpl.id}`
+        const isCopied = copiedKey === promptKey
+        const supportsCli = tpl.supportsCli !== false
+        const isXeLatexStatic = useStaticXeLatexPreview(tpl)
+        return (
+          <article
+            key={tpl.id}
+            data-testid={`template-card-${tpl.id}`}
+            className="group flex flex-col border-2 fresh:border border-black fresh:border-slate-200 bg-white dark:bg-[#1C1C1C] dark:border-white shadow-[4px_4px_0px_0px_#000000] fresh:rounded-xl fresh:shadow-sm dark:shadow-[4px_4px_0px_0px_#ffffff] overflow-hidden transition-transform hover:-translate-y-0.5"
+          >
+            {/* 顶部标签条（不遮挡简历正文抬头） */}
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-2">
+              <span
+                className={cn(
+                  'border px-2 py-0.5 text-[10px] font-bold fresh:rounded-md',
+                  tpl.type === 'latex'
+                    ? 'border-amber-700/40 bg-amber-100 text-amber-900'
+                    : supportsCli
+                      ? 'border-emerald-700/30 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-300 bg-white text-slate-700',
+                )}
+              >
+                {tpl.type === 'latex' ? 'XeLaTeX 精排' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
+              </span>
+              {tpl.recommended && (
+                <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
+                  推荐
+                </span>
+              )}
+            </div>
+
+            {/* 真实渲染缩略图区 */}
+            <div className="relative border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-3">
+              <button
+                type="button"
+                onClick={() => setPreviewTemplate(tpl)}
+                className="relative block w-full text-left overflow-hidden border border-slate-300 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]"
+                aria-label={`放大预览 ${tpl.name}`}
+              >
+                {isXeLatexStatic ? (
+                  <img
+                    src={tpl.thumbnail}
+                    alt={`${tpl.name} XeLaTeX 真实渲染预览`}
+                    className="w-full aspect-[210/297] object-cover object-top bg-white"
+                  />
+                ) : (
+                  <ScaledResumePreview
+                    builderData={builderPreviewData}
+                    settings={settingsForTemplate(tpl.id)}
+                  />
+                )}
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition-all group-hover:bg-slate-900/20 group-hover:opacity-100">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-900 shadow">
+                    <Eye className="h-3.5 w-3.5" />
+                    放大预览
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* 信息与操作 */}
+            <div className="flex flex-1 flex-col justify-between gap-3 p-4">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                    {tpl.name}
+                  </h2>
+                  <code className="shrink-0 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-700 dark:text-slate-300 rounded">
+                    {tpl.id}
+                  </code>
+                </div>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                  {tpl.description}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => void handleTryTemplate(tpl.id)}
+                  disabled={tryingId === tpl.id}
+                  className="inline-flex items-center justify-center gap-1 whitespace-nowrap border border-black fresh:border-[#356fd6] bg-[#4285F4] px-2.5 py-2 text-xs font-bold text-white fresh:rounded-lg hover:bg-[#3367D6] disabled:opacity-60 transition-colors"
+                >
+                  <Play className="h-3.5 w-3.5 shrink-0" />
+                  <span>{importedResume ? '套用模板' : '在线体验'}</span>
+                </button>
+                {supportsCli ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleCopy(
+                        promptKey,
+                        buildSkillPrompt(tpl.id),
+                        `已复制口令：${buildSkillPrompt(tpl.id)}`,
+                      )
+                    }
+                    className={cn(
+                      'inline-flex items-center justify-center gap-1 whitespace-nowrap border px-2.5 py-2 text-xs font-bold fresh:rounded-lg transition-colors',
+                      isCopied
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                        : 'border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] text-slate-800 dark:text-slate-100 hover:bg-slate-50',
+                    )}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        <span>已复制</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5 shrink-0" />
+                        <span>复制口令</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTemplate(tpl)}
+                    className="inline-flex items-center justify-center gap-1 whitespace-nowrap border border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 fresh:rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    <Eye className="h-3.5 w-3.5 shrink-0" />
+                    <span>放大预览</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+
   return (
     <WorkspaceLayout>
       <div className="h-full overflow-y-auto bg-[#F6F3EC] fresh:bg-slate-50 dark:bg-[#141414]">
@@ -384,140 +532,29 @@ export default function TemplatesPage() {
             <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-[#1C1C1C] py-16 text-center fresh:rounded-xl">
               <p className="text-sm text-slate-500 dark:text-slate-400">没有找到匹配的模板，试试清空搜索条件</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredTemplates.map((tpl) => {
-                const promptKey = `prompt:${tpl.id}`
-                const isCopied = copiedKey === promptKey
-                const supportsCli = tpl.supportsCli !== false
-                const isXeLatexStatic = useStaticXeLatexPreview(tpl)
-                return (
-                  <article
-                    key={tpl.id}
-                    data-testid={`template-card-${tpl.id}`}
-                    className="group flex flex-col border-2 fresh:border border-black fresh:border-slate-200 bg-white dark:bg-[#1C1C1C] dark:border-white shadow-[4px_4px_0px_0px_#000000] fresh:rounded-xl fresh:shadow-sm dark:shadow-[4px_4px_0px_0px_#ffffff] overflow-hidden transition-transform hover:-translate-y-0.5"
-                  >
-                    {/* 顶部标签条（不遮挡简历正文抬头） */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-2">
-                      <span
-                        className={cn(
-                          'border px-2 py-0.5 text-[10px] font-bold fresh:rounded-md',
-                          tpl.type === 'latex'
-                            ? 'border-amber-700/40 bg-amber-100 text-amber-900'
-                            : supportsCli
-                              ? 'border-emerald-700/30 bg-emerald-50 text-emerald-800'
-                              : 'border-slate-300 bg-white text-slate-700',
-                        )}
-                      >
-                        {tpl.type === 'latex' ? 'XeLaTeX 精排' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
-                      </span>
-                      {tpl.recommended && (
-                        <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
-                          推荐
-                        </span>
-                      )}
-                    </div>
+          ) : activeTab === 'all' && recommendedInView.length > 0 && otherInView.length > 0 ? (
+            <div className="space-y-6">
+              <section className="space-y-3" aria-label="推荐默认模板">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                    推荐默认（{recommendedInView.length}）
+                  </span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                </div>
+                {renderTemplateGrid(recommendedInView, 'recommended-templates-section')}
+              </section>
 
-                    {/* 真实渲染缩略图区 */}
-                    <div className="relative border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-3">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewTemplate(tpl)}
-                        className="relative block w-full text-left overflow-hidden border border-slate-300 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]"
-                        aria-label={`放大预览 ${tpl.name}`}
-                      >
-                        {isXeLatexStatic ? (
-                          <img
-                            src={tpl.thumbnail}
-                            alt={`${tpl.name} XeLaTeX 真实渲染预览`}
-                            className="w-full aspect-[210/297] object-cover object-top bg-white"
-                          />
-                        ) : (
-                          <ScaledResumePreview
-                            builderData={builderPreviewData}
-                            settings={settingsForTemplate(tpl.id)}
-                          />
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition-all group-hover:bg-slate-900/20 group-hover:opacity-100">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-900 shadow">
-                            <Eye className="h-3.5 w-3.5" />
-                            放大预览
-                          </span>
-                        </div>
-                      </button>
-                    </div>
+              <div className="flex items-center gap-3 py-1" role="separator" aria-label="其余模板分割线">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  全部其他模板（{otherInView.length}）
+                </span>
+                <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
+              </div>
 
-                    {/* 信息与操作 */}
-                    <div className="flex flex-1 flex-col justify-between gap-3 p-4">
-                      <div>
-                        <div className="flex items-center justify-between gap-2">
-                          <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">
-                            {tpl.name}
-                          </h2>
-                          <code className="shrink-0 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-700 dark:text-slate-300 rounded">
-                            {tpl.id}
-                          </code>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                          {tpl.description}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => void handleTryTemplate(tpl.id)}
-                          disabled={tryingId === tpl.id}
-                          className="inline-flex items-center justify-center gap-1 whitespace-nowrap border border-black fresh:border-[#356fd6] bg-[#4285F4] px-2.5 py-2 text-xs font-bold text-white fresh:rounded-lg hover:bg-[#3367D6] disabled:opacity-60 transition-colors"
-                        >
-                          <Play className="h-3.5 w-3.5 shrink-0" />
-                          <span>{importedResume ? '套用模板' : '在线体验'}</span>
-                        </button>
-                        {supportsCli ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleCopy(
-                                promptKey,
-                                buildSkillPrompt(tpl.id),
-                                `已复制口令：${buildSkillPrompt(tpl.id)}`,
-                              )
-                            }
-                            className={cn(
-                              'inline-flex items-center justify-center gap-1 whitespace-nowrap border px-2.5 py-2 text-xs font-bold fresh:rounded-lg transition-colors',
-                              isCopied
-                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                                : 'border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] text-slate-800 dark:text-slate-100 hover:bg-slate-50',
-                            )}
-                          >
-                            {isCopied ? (
-                              <>
-                                <Check className="h-3.5 w-3.5 shrink-0" />
-                                <span>已复制</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-3.5 w-3.5 shrink-0" />
-                                <span>复制口令</span>
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewTemplate(tpl)}
-                            className="inline-flex items-center justify-center gap-1 whitespace-nowrap border border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 fresh:rounded-lg hover:bg-slate-50 transition-colors"
-                          >
-                            <Eye className="h-3.5 w-3.5 shrink-0" />
-                            <span>放大预览</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
+              {renderTemplateGrid(otherInView, 'other-templates-section')}
             </div>
+          ) : (
+            renderTemplateGrid(filteredTemplates)
           )}
         </div>
       </div>

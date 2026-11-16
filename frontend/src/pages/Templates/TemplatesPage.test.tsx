@@ -245,6 +245,31 @@ describe('TemplatesPage & template helpers', () => {
     const previewBtn = asuCard.querySelector('button[aria-label^="放大预览"]') as HTMLButtonElement
     expect(previewBtn.className).toContain('text-left')
 
+    // Under "全部模板", recommended 3 templates sit in a dedicated top row above a separator
+    const recSection = container.querySelector('[data-testid="recommended-templates-section"]') as HTMLElement
+    const otherSection = container.querySelector('[data-testid="other-templates-section"]') as HTMLElement
+    const separator = container.querySelector('[role="separator"]')
+    expect(recSection).not.toBeNull()
+    expect(otherSection).not.toBeNull()
+    expect(separator).not.toBeNull()
+    const recIds = Array.from(recSection.querySelectorAll('[data-testid^="template-card-"]')).map((el) =>
+      el.getAttribute('data-testid')?.replace('template-card-', ''),
+    )
+    expect(recIds).toEqual(['default', 'latex', 'asu-tech'])
+    expect(otherSection.querySelectorAll('[data-testid^="template-card-"]')).toHaveLength(24)
+
+    // Recommended tab remains functional and shows the exact same 3 templates
+    const recTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+      el.textContent?.includes('推荐默认'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      recTab.click()
+    })
+    const recTabIds = Array.from(container.querySelectorAll('[data-testid^="template-card-"]')).map((el) =>
+      el.getAttribute('data-testid')?.replace('template-card-', ''),
+    )
+    expect(recTabIds).toEqual(['default', 'latex', 'asu-tech'])
+
     await act(async () => {
       root.render(<TemplateLogo src="/api/logos/file/tencent" size={20} alt="腾讯" />)
     })
