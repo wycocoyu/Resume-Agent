@@ -12,8 +12,10 @@ import time
 import hashlib
 import json
 import zlib
+import threading
 import urllib.request
 import urllib.parse
+from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Any, List
 from io import BytesIO
@@ -253,6 +255,19 @@ def _append_warning(warnings_out: List[str] | None, message: str) -> None:
         warnings_out.append(message)
 
 
+_USER_PHOTO_CACHE: OrderedDict[str, tuple[float, str, bytes]] = OrderedDict()
+_USER_PHOTO_CACHE_LOCK = threading.Lock()
+_USER_PHOTO_CACHE_MAX = 32
+_USER_PHOTO_CACHE_TTL = 600.0
+_USER_PHOTO_CACHE_MAX_BYTES = 2 * 1024 * 1024
+
+
+def clear_user_photo_cache() -> None:
+    """清除证件照内存缓存（供测试或显式刷新使用）。"""
+    with _USER_PHOTO_CACHE_LOCK:
+        _USER_PHOTO_CACHE.clear()
+
+
 def _download_user_photo_to_dir(
     photo_url: str,
     temp_dir: str,
@@ -273,6 +288,19 @@ def _download_user_photo_to_dir(
     try:
         logos_dir = Path(temp_dir) / "logos"
         logos_dir.mkdir(parents=True, exist_ok=True)
+
+        now = time.time()
+        with _USER_PHOTO_CACHE_LOCK:
+            cached = _USER_PHOTO_CACHE.get(photo_url)
+            if cached is not None:
+                fetched_at, cached_ext, cached_bytes = cached
+                if (now - fetched_at) < _USER_PHOTO_CACHE_TTL:
+                    _USER_PHOTO_CACHE.move_to_end(photo_url)
+                    local_name = f"photo{cached_ext}"
+                    (logos_dir / local_name).write_bytes(cached_bytes)
+                    return local_name
+                _USER_PHOTO_CACHE.pop(photo_url, None)
+
         staging_path = logos_dir / "photo.download"
         from .company_logos import _download_url_to_path
 
@@ -286,6 +314,14 @@ def _download_user_photo_to_dir(
 
         local_name = f"photo{detected_ext}"
         (logos_dir / local_name).write_bytes(raw_bytes)
+
+        if 0 < len(raw_bytes) <= _USER_PHOTO_CACHE_MAX_BYTES:
+            with _USER_PHOTO_CACHE_LOCK:
+                _USER_PHOTO_CACHE[photo_url] = (time.time(), detected_ext, raw_bytes)
+                _USER_PHOTO_CACHE.move_to_end(photo_url)
+                while len(_USER_PHOTO_CACHE) > _USER_PHOTO_CACHE_MAX:
+                    _USER_PHOTO_CACHE.popitem(last=False)
+
         return local_name
     except Exception:
         return None

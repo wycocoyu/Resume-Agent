@@ -127,6 +127,10 @@ DISPLAY_NAME_TO_KEY.setdefault('哔哩哔哩', 'bilibili')
 _cos_cache: list[dict] | None = None
 _cos_cache_time: float = 0
 _COS_CACHE_TTL = 300
+_local_cache: list[dict] | None = None
+_local_cache_time: float = 0
+_local_cache_dir = None
+_LOCAL_CACHE_TTL = 60
 _using_local = False  # True 表示当前列表来源为本地 images/logo
 
 # key -> 文件名 / object key 查找表（在扫描后更新）
@@ -137,9 +141,12 @@ _local_key_to_file: dict[str, str] = {}
 
 def clear_cache():
     """清除扫描缓存，下次调用会重新扫描（本地或 COS）"""
-    global _cos_cache, _cos_cache_time, _using_local, _key_to_file, _cos_key_to_file, _local_key_to_file
+    global _cos_cache, _cos_cache_time, _local_cache, _local_cache_time, _local_cache_dir, _using_local, _key_to_file, _cos_key_to_file, _local_key_to_file
     _cos_cache = None
     _cos_cache_time = 0
+    _local_cache = None
+    _local_cache_time = 0
+    _local_cache_dir = None
     _using_local = False
     _key_to_file = {}
     _cos_key_to_file = {}
@@ -227,7 +234,14 @@ def sync_local_logos_from_cos(force: bool = False) -> int:
 
 def _scan_local_logos() -> list[dict] | None:
     """若存在 images/logo/ 且含图片文件，则返回本地 Logo 列表，否则返回 None。异常时返回 None 以便降级 COS。"""
-    global _local_key_to_file
+    global _local_key_to_file, _local_cache, _local_cache_time, _local_cache_dir
+    now = time.time()
+    if (
+        _local_cache is not None
+        and _local_cache_dir == LOCAL_LOGO_DIR
+        and (now - _local_cache_time) < _LOCAL_CACHE_TTL
+    ):
+        return _local_cache
     try:
         if not LOCAL_LOGO_DIR.is_dir():
             return None
@@ -254,6 +268,9 @@ def _scan_local_logos() -> list[dict] | None:
                 "keywords": keywords,
             })
         _local_key_to_file = key_map
+        _local_cache = logos
+        _local_cache_time = time.time()
+        _local_cache_dir = LOCAL_LOGO_DIR
         print(f"[Logo] 本地 images/logo 扫描完成，发现 {len(logos)} 个 Logo")
         return logos
     except Exception as e:
@@ -315,33 +332,71 @@ def _scan_cos_logos() -> list[dict]:
 def _fallback_logos() -> list[dict]:
     """COS 不可用时的降级方案：使用已知 Logo 列表"""
     global _key_to_file, _cos_key_to_file
+    prefix = f"{COMPANY_LOGO_PREFIX.rstrip('/')}/" if COMPANY_LOGO_PREFIX else ""
     logos = []
     key_map = {}
     for filename, meta in KNOWN_LOGO_META.items():
         logo_key = meta['key']
         name = filename.rsplit('.', 1)[0]
+        obj_key = f"{prefix}{filename}"
         logos.append({
             'key': logo_key,
             'name': name,
-            'url': f"{COS_BASE_URL}/{urllib.request.quote(filename)}",
+            'url': f"{COS_BASE_URL}/{urllib.request.quote(obj_key)}",
             'keywords': meta['keywords'],
         })
-        key_map[logo_key] = filename
+        key_map[logo_key] = obj_key
     _key_to_file = key_map
     _cos_key_to_file = key_map
     return logos
 
 
+def _persist_logo_to_local(logo_key: str, cos_url: str, downloaded_path: Path) -> None:
+    """将 COS 下载的 Logo 最佳努力持久化到 LOCAL_LOGO_DIR，供后续编译零网络命中。"""
+    global _local_cache, _local_cache_time, _local_cache_dir
+    try:
+        if not downloaded_path.is_file() or downloaded_path.stat().st_size <= 0:
+            return
+        target_name = None
+        for filename, meta in KNOWN_LOGO_META.items():
+            if meta.get('key') == logo_key:
+                target_name = filename
+                break
+        if not target_name and logo_key in _cos_key_to_file:
+            candidate = Path(_cos_key_to_file[logo_key]).name
+            if candidate and candidate not in ('.', '..') and '/' not in candidate and '\\' not in candidate:
+                target_name = candidate
+        if not target_name:
+            url_path = cos_url.split('?', 1)[0].rsplit('/', 1)[-1]
+            ext = Path(url_path).suffix.lower()
+            if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
+                ext = downloaded_path.suffix.lower() or '.png'
+            safe_stem = Path(logo_key).name.replace('..', '_').strip()
+            if not safe_stem:
+                return
+            target_name = f"{safe_stem}{ext}"
+
+        LOCAL_LOGO_DIR.mkdir(parents=True, exist_ok=True)
+        dest_path = LOCAL_LOGO_DIR / target_name
+        tmp_path = LOCAL_LOGO_DIR / f".{target_name}.tmp"
+        shutil.copy2(downloaded_path, tmp_path)
+        tmp_path.replace(dest_path)
+        _local_cache = None
+        _local_cache_time = 0
+        _local_cache_dir = None
+    except Exception:
+        pass
+
+
 def get_all_logos_with_urls() -> list[dict]:
     """获取所有 Logo 列表：生产优先 COS；本地开发可优先 images/logo。异常时返回 fallback 列表。"""
-    global _cos_cache, _using_local
+    global _using_local
     try:
         from backend.core.cos_client import prefer_local_assets
 
         if prefer_local_assets():
             local = _scan_local_logos()
             if local:
-                _cos_cache = local
                 _using_local = True
                 return local
 
@@ -351,7 +406,6 @@ def get_all_logos_with_urls() -> list[dict]:
             return cos
         local = _scan_local_logos()
         if local:
-            _cos_cache = local
             _using_local = True
             return local
         _using_local = False
@@ -421,7 +475,7 @@ def _download_url_to_path(
 ) -> None:
     """带超时与最大字节上限的 HTTP 下载，避免 PDF 编译阶段无限挂起或超大响应撑爆内存。"""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    req = urllib.request.Request(url, headers={"User-Agent": "Resume-Agent/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "CocoCV/3.12.3"})
     with opener.open(req, timeout=timeout) as resp:
         data = resp.read(max_bytes + 1)
         if len(data) > max_bytes:
@@ -446,13 +500,10 @@ def download_logos_to_dir(
 
     返回: { index: local_filename } 映射，如 { 0: 'logo_0.png', 2: 'logo_2.png' }
     """
-    if offline:
-        _scan_local_logos()
-    else:
-        get_all_logos_with_urls()
-
     logos_dir = Path(target_dir) / 'logos'
     logo_map = {}
+    scanned_local = False
+    scanned_cos = False
 
     for idx, it in enumerate(internships):
         logo_key = it.get('logo')
@@ -463,27 +514,37 @@ def download_logos_to_dir(
         local_filename = f'{prefix}_{idx}.png'
         local_path = logos_dir / local_filename
 
-        if not offline:
-            cos_url = get_logo_cos_url(logo_key)
-            if cos_url:
-                try:
-                    print(f"[Logo] 下载: {cos_url} -> {local_path}")
-                    _download_url_to_path(cos_url, local_path)
-                    logo_map[idx] = local_filename
-                    print(f"[Logo] 下载成功: {local_filename} ({local_path.stat().st_size} bytes)")
-                    continue
-                except Exception as e:
-                    print(f"[Logo] 下载失败 ({logo_key})，回退本地: {e}")
+        if not scanned_local:
+            _scan_local_logos()
+            scanned_local = True
 
         src = get_logo_local_path(logo_key)
-        if src:
+        if src and src.is_file():
             try:
                 shutil.copy2(src, local_path)
                 logo_map[idx] = local_filename
-                print(f"[Logo] 本地兜底复制: {src.name} -> {local_filename}")
+                print(f"[Logo] 本地命中复制: {src.name} -> {local_filename}")
+                continue
             except Exception as e:
                 print(f"[Logo] 本地复制失败 ({logo_key}): {e}")
-        else:
-            print(f"[Logo] {'本地' if offline else 'COS 与本地'}均未找到 Logo key: {logo_key}")
+
+        if not offline:
+            cos_url = get_logo_cos_url(logo_key)
+            if not cos_url and not scanned_cos:
+                _scan_cos_logos()
+                scanned_cos = True
+                cos_url = get_logo_cos_url(logo_key)
+            if cos_url:
+                try:
+                    print(f"[Logo] 本地缺失，下载 COS: {cos_url} -> {local_path}")
+                    _download_url_to_path(cos_url, local_path)
+                    logo_map[idx] = local_filename
+                    print(f"[Logo] 下载成功: {local_filename} ({local_path.stat().st_size} bytes)")
+                    _persist_logo_to_local(logo_key, cos_url, local_path)
+                    continue
+                except Exception as e:
+                    print(f"[Logo] 下载失败 ({logo_key}): {e}")
+
+        print(f"[Logo] {'本地' if offline else '本地与 COS '}均未找到 Logo key: {logo_key}")
 
     return logo_map

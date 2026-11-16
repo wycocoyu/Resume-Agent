@@ -15,7 +15,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.12.2',
+    version: '3.12.3',
     date: '2026-11-15',
     added: [
       '新增离线自托管 API 接口参考与在线调试看板（Scalar 主看板 + Swagger UI 备用面板），支持全局搜索与生产管理员鉴权保护',
@@ -38,6 +38,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       '修复上传图片简历耗时较长时连接意外断开的问题，改为实时流式识别与进度提示',
       '修复部分用户触发云端简历同步时偶发保存报错的问题',
       '提升高并发下图标加载与 AI 流式对话的稳定性，减少网关 502 异常',
+      '大幅加快简历修改后的 PDF 实时预览与编译响应速度',
     ],
   },
   {

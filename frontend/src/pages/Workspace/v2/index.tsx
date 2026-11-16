@@ -28,7 +28,7 @@ import { scoreResume, type JdOptimizeField } from '@/services/api'
 import { stripHtmlTags } from './utils/textUtils'
 import { withSettingsDefaults } from '../../Builder/settings'
 
-const PDF_RENDER_DEBOUNCE_MS = 2000
+const PDF_RENDER_DEBOUNCE_MS = 700
 // 首次加载的自动渲染延迟：短一点，打开工作台即出预览
 const PDF_RENDER_INITIAL_DELAY_MS = 300
 

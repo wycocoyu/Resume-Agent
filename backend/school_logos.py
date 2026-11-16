@@ -25,6 +25,11 @@ _cos_cache: list[dict] | None = None
 _cos_group_cache: list[dict] | None = None
 _cos_cache_time: float = 0
 _CACHE_TTL = 300
+_local_cache: list[dict] | None = None
+_local_group_cache: list[dict] | None = None
+_local_cache_time: float = 0
+_local_cache_dir = None
+_LOCAL_CACHE_TTL = 60
 _cos_key_to_file: dict[str, str] = {}
 _local_key_to_file: dict[str, str] = {}
 _using_local = False
@@ -74,16 +79,29 @@ def _build_group_payload(grouped: dict[str, list[dict]]) -> list[dict]:
 
 
 def clear_cache():
-    global _cos_cache, _cos_group_cache, _cos_cache_time, _cos_key_to_file, _local_key_to_file, _using_local
+    global _cos_cache, _cos_group_cache, _cos_cache_time, _local_cache, _local_group_cache, _local_cache_time, _local_cache_dir, _cos_key_to_file, _local_key_to_file, _using_local
     _cos_cache = None
     _cos_group_cache = None
     _cos_cache_time = 0
+    _local_cache = None
+    _local_group_cache = None
+    _local_cache_time = 0
+    _local_cache_dir = None
     _cos_key_to_file = {}
     _local_key_to_file = {}
     _using_local = False
 
 
 def _scan_local_school_logos() -> tuple[list[dict], list[dict]] | tuple[None, None]:
+    global _local_key_to_file, _local_cache, _local_group_cache, _local_cache_time, _local_cache_dir
+    now = time.time()
+    if (
+        _local_cache is not None
+        and _local_group_cache is not None
+        and _local_cache_dir == LOCAL_SCHOOL_LOGO_DIR
+        and (now - _local_cache_time) < _LOCAL_CACHE_TTL
+    ):
+        return _local_cache, _local_group_cache
     if not LOCAL_SCHOOL_LOGO_DIR.is_dir():
         return None, None
 
@@ -118,9 +136,14 @@ def _scan_local_school_logos() -> tuple[list[dict], list[dict]] | tuple[None, No
         grouped.setdefault(group_name, []).append(logo)
         key_map[name] = str(f.relative_to(LOCAL_SCHOOL_LOGO_DIR))
 
-    global _local_key_to_file
     _local_key_to_file = key_map
-    return sorted(logos, key=lambda item: item["name"]), _build_group_payload(grouped)
+    result_logos = sorted(logos, key=lambda item: item["name"])
+    result_groups = _build_group_payload(grouped)
+    _local_cache = result_logos
+    _local_group_cache = result_groups
+    _local_cache_time = time.time()
+    _local_cache_dir = LOCAL_SCHOOL_LOGO_DIR
+    return result_logos, result_groups
 
 
 def _list_cos_school_logo_keys() -> list[str]:
@@ -294,9 +317,11 @@ def get_school_logo_local_path(key: str) -> Path | None:
 
 
 def is_school_logo_latex_supported(key: str, *, offline: bool = False) -> bool:
+    path = get_school_logo_local_path(key)
+    if path and path.is_file():
+        return path.suffix.lower() in LATEX_SUPPORTED_EXTS
     if offline:
-        path = get_school_logo_local_path(key)
-        return bool(path and path.suffix.lower() in LATEX_SUPPORTED_EXTS)
+        return False
 
     get_all_school_logos_with_urls()
     if _using_local:
@@ -321,16 +346,41 @@ def get_school_logo_cos_url(key: str) -> str | None:
     return f"{COS_BASE_URL}/{urllib.request.quote(object_key, safe='/')}"
 
 
+def _persist_school_logo_to_local(source_name: str, downloaded_path: Path) -> None:
+    """将 COS 下载的校徽最佳努力持久化到 LOCAL_SCHOOL_LOGO_DIR，供后续编译零网络命中。"""
+    global _local_cache, _local_group_cache, _local_cache_time, _local_cache_dir
+    try:
+        if not downloaded_path.is_file() or downloaded_path.stat().st_size <= 0:
+            return
+        rel = Path(source_name)
+        parts = [p for p in rel.parts if p and p not in (".", "..")]
+        if parts and parts[0] == "school_logo":
+            parts = parts[1:]
+        if not parts:
+            return
+        dest_path = LOCAL_SCHOOL_LOGO_DIR.joinpath(*parts)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = dest_path.parent / f".{dest_path.name}.tmp"
+        shutil.copy2(downloaded_path, tmp_path)
+        tmp_path.replace(dest_path)
+        _local_cache = None
+        _local_group_cache = None
+        _local_cache_time = 0
+        _local_cache_dir = None
+    except Exception:
+        pass
+
+
 def download_school_logos_to_dir(
     education_list: list,
     target_dir: str,
     *,
     offline: bool = False,
 ) -> dict[int, str]:
-    if not offline:
-        get_all_school_logos_with_urls()
     logos_dir = Path(target_dir) / "logos"
     logo_map: dict[int, str] = {}
+    scanned_local = False
+    scanned_cos = False
 
     for idx, edu in enumerate(education_list or []):
         logo_key = edu.get("logo")
@@ -338,10 +388,12 @@ def download_school_logos_to_dir(
             continue
 
         logos_dir.mkdir(parents=True, exist_ok=True)
-        if offline or _using_local:
-            src = get_school_logo_local_path(logo_key)
-            if not src or not src.is_file():
-                continue
+        if not scanned_local:
+            _scan_local_school_logos()
+            scanned_local = True
+
+        src = get_school_logo_local_path(logo_key)
+        if src and src.is_file():
             local_filename = f"school_logo_{idx}{src.suffix.lower() or '.png'}"
             local_path = logos_dir / local_filename
             try:
@@ -351,20 +403,27 @@ def download_school_logos_to_dir(
                 print(f"[SchoolLogo] 复制失败 ({logo_key}): {e}")
             continue
 
+        if offline:
+            continue
+
         source_name = _cos_key_to_file.get(logo_key)
+        if not source_name and not scanned_cos:
+            _scan_cos_school_logos()
+            scanned_cos = True
+            source_name = _cos_key_to_file.get(logo_key)
         if not source_name:
             continue
+
+        cos_url = f"{COS_BASE_URL}/{urllib.request.quote(source_name, safe='/')}"
         ext = Path(source_name).suffix.lower() or ".png"
         local_filename = f"school_logo_{idx}{ext}"
         local_path = logos_dir / local_filename
-        cos_url = get_school_logo_cos_url(logo_key)
-        if not cos_url:
-            continue
         try:
             from .company_logos import _download_url_to_path
 
             _download_url_to_path(cos_url, local_path, timeout=15.0)
             logo_map[idx] = local_filename
+            _persist_school_logo_to_local(source_name, local_path)
         except Exception as e:
             print(f"[SchoolLogo] 下载失败 ({logo_key}): {e}")
 
