@@ -30,6 +30,8 @@ import {
   type TemplateSettings,
 } from '@/pages/Builder/settings'
 import ResumeRenderer from '@/pages/Builder/templates/ResumeRenderer'
+import { fetchLogos, onLogosLoaded } from '@/pages/Workspace/v2/constants/companyLogos'
+import { fetchSchoolLogos } from '@/pages/Workspace/v2/constants/schoolLogos'
 import { useAuth } from '@/contexts/AuthContext'
 import { saveResume, setCurrentResumeId } from '@/services/resumeStorage'
 import type { ResumeData } from '@/pages/Workspace/v2/types'
@@ -39,16 +41,16 @@ import { cn } from '@/lib/utils'
 const A4_PREVIEW_WIDTH = 794
 const A4_PREVIEW_HEIGHT = 1123
 
-type FilterTab = 'all' | 'recommended' | '单栏' | '侧栏' | '双栏' | '双页' | 'latex'
+type FilterTab = 'all' | 'recommended' | 'LaTeX' | '单栏' | '侧栏' | '双栏' | '双页'
 
 const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: 'all', label: '全部模板' },
   { id: 'recommended', label: '推荐默认' },
+  { id: 'LaTeX', label: 'LaTeX 精排' },
   { id: '单栏', label: '单栏' },
   { id: '侧栏', label: '侧栏双列' },
   { id: '双栏', label: '双栏' },
   { id: '双页', label: '双页' },
-  { id: 'latex', label: 'LaTeX' },
 ]
 
 function buildSkillPrompt(templateId: string): string {
@@ -95,8 +97,8 @@ function matchesFilter(tpl: TemplateMetadata, tab: FilterTab, query: string): bo
     if (!haystack.includes(q)) return false
   }
   if (tab === 'all') return true
-  if (tab === 'recommended') return tpl.id === 'asu-tech' || tpl.id === 'default' || tpl.id === 'asu-01'
-  if (tab === 'latex') return tpl.type === 'latex'
+  if (tab === 'recommended') return Boolean(tpl.recommended)
+  if (tab === 'LaTeX') return tpl.type === 'latex'
   return tpl.category === tab || (tpl.tags || []).includes(tab)
 }
 
@@ -152,9 +154,25 @@ export default function TemplatesPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [previewTemplate, setPreviewTemplate] = useState<TemplateMetadata | null>(null)
   const [tryingId, setTryingId] = useState<string | null>(null)
+  const [logosVersion, setLogosVersion] = useState(0)
+
+  // 拉取公司与学校 Logo，确保模板广场与工作台预览一致显示品牌图标
+  useEffect(() => {
+    let alive = true
+    const bump = () => {
+      if (alive) setLogosVersion((v) => v + 1)
+    }
+    void fetchLogos().then(bump).catch(() => {})
+    void fetchSchoolLogos().then(bump).catch(() => {})
+    const off = onLogosLoaded(bump)
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
 
   const previewResume = importedResume || DEFAULT_RESUME_TEMPLATE
-  const builderPreviewData = useMemo(() => toBuilderResumeData(previewResume), [previewResume])
+  const builderPreviewData = useMemo(() => toBuilderResumeData(previewResume), [previewResume, logosVersion])
 
   const filteredTemplates = useMemo(
     () => TEMPLATE_METADATA.filter((tpl) => matchesFilter(tpl, activeTab, searchQuery)),
@@ -209,7 +227,7 @@ export default function TemplatesPage() {
       const raw = await file.text()
       const parsed = parseImportedResumeJson(raw)
       setImportedResume(parsed)
-      toast.success(`已载入「${parsed.basic.name || '本地简历'}」，下方 21 套模板已实时切换为你的内容`)
+      toast.success(`已载入「${parsed.basic.name || '本地简历'}」，下方模板已实时切换为你的内容`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '导入 JSON 失败，请确认文件格式')
     }
@@ -218,6 +236,11 @@ export default function TemplatesPage() {
   const settingsForTemplate = useCallback((templateId: string): TemplateSettings => {
     return applyTemplatePreset(DEFAULT_TEMPLATE_SETTINGS, resolveBuilderTemplateType(templateId))
   }, [])
+
+  const useStaticXeLatexPreview = useCallback(
+    (tpl: TemplateMetadata) => Boolean(tpl.type === 'latex' && tpl.thumbnail && !importedResume),
+    [importedResume],
+  )
 
   return (
     <WorkspaceLayout>
@@ -230,7 +253,7 @@ export default function TemplatesPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 border border-black fresh:border-blue-200 bg-[#D7E7FF] fresh:bg-blue-50 px-2.5 py-0.5 text-xs font-mono fresh:font-sans font-bold text-[#1a73e8] fresh:rounded-full">
                     <LayoutGrid className="h-3.5 w-3.5" />
-                    21 套模板广场
+                    {TEMPLATE_METADATA.length} 套真实工作台模板
                   </span>
                   <span className="inline-flex items-center gap-1.5 border border-black/20 fresh:border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 fresh:rounded-full">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -238,10 +261,10 @@ export default function TemplatesPage() {
                   </span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                  选好模板直接写，或复制口令交给 AI Agent
+                  所见即工作台真实排版，选好直接写或交给 AI Agent
                 </h1>
                 <p className="text-sm text-slate-600 dark:text-slate-300 max-w-3xl">
-                  点「复制口令」粘贴到 Codex / Claude Code 即可在本地离线出稿；点「免登录体验」直接在浏览器编辑预览并导出自包含 HTML / 打印 PDF。
+                  与工作台抽屉 1:1 对齐：支持本地免登录直接在线编辑与 HTML 导出；带「复制口令」的模板还可直接发给 Codex / Claude Code 本地出稿。
                 </p>
               </div>
 
@@ -278,7 +301,7 @@ export default function TemplatesPage() {
                 <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200">
                   <Sparkles className="h-4 w-4 shrink-0 text-blue-600" />
                   <span>
-                    正在用「<strong>{importedResume.basic.name || importedResume.title || '本地简历'}</strong>」的 JSON 实时预览 21 套模板（仅保留在当前浏览器）
+                    正在用「<strong>{importedResume.basic.name || importedResume.title || '本地简历'}</strong>」的 JSON 实时预览模板（仅保留在当前浏览器）
                   </span>
                 </div>
                 <button
@@ -338,45 +361,57 @@ export default function TemplatesPage() {
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredTemplates.map((tpl) => {
-                const isRecommended = tpl.id === 'asu-tech'
                 const promptKey = `prompt:${tpl.id}`
                 const isCopied = copiedKey === promptKey
+                const supportsCli = tpl.supportsCli !== false
+                const isXeLatexStatic = useStaticXeLatexPreview(tpl)
                 return (
                   <article
                     key={tpl.id}
                     data-testid={`template-card-${tpl.id}`}
                     className="group flex flex-col border-2 fresh:border border-black fresh:border-slate-200 bg-white dark:bg-[#1C1C1C] dark:border-white shadow-[4px_4px_0px_0px_#000000] fresh:rounded-xl fresh:shadow-sm dark:shadow-[4px_4px_0px_0px_#ffffff] overflow-hidden transition-transform hover:-translate-y-0.5"
                   >
-                    {/* 实时缩略图区 */}
-                    <div className="relative border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-3">
-                      <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">
-                        {isRecommended && (
-                          <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
-                            默认推荐
-                          </span>
+                    {/* 顶部标签条（不遮挡简历正文抬头） */}
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 px-3 py-2">
+                      <span
+                        className={cn(
+                          'border px-2 py-0.5 text-[10px] font-bold fresh:rounded-md',
+                          tpl.type === 'latex'
+                            ? 'border-amber-700/40 bg-amber-100 text-amber-900'
+                            : supportsCli
+                              ? 'border-emerald-700/30 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-300 bg-white text-slate-700',
                         )}
-                        <span
-                          className={cn(
-                            'border px-2 py-0.5 text-[10px] font-bold fresh:rounded-md',
-                            tpl.type === 'latex'
-                              ? 'border-amber-700 bg-amber-100 text-amber-900'
-                              : 'border-emerald-700/30 bg-emerald-50 text-emerald-800',
-                          )}
-                        >
-                          {tpl.type === 'latex' ? 'XeLaTeX' : 'HTML 零依赖'}
+                      >
+                        {tpl.type === 'latex' ? 'XeLaTeX 精排' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
+                      </span>
+                      {tpl.recommended && (
+                        <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
+                          推荐
                         </span>
-                      </div>
+                      )}
+                    </div>
 
+                    {/* 真实渲染缩略图区 */}
+                    <div className="relative border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-3">
                       <button
                         type="button"
                         onClick={() => setPreviewTemplate(tpl)}
                         className="relative block w-full overflow-hidden border border-slate-300 bg-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4]"
                         aria-label={`放大预览 ${tpl.name}`}
                       >
-                        <ScaledResumePreview
-                          builderData={builderPreviewData}
-                          settings={settingsForTemplate(tpl.id)}
-                        />
+                        {isXeLatexStatic ? (
+                          <img
+                            src={tpl.thumbnail}
+                            alt={`${tpl.name} XeLaTeX 真实渲染预览`}
+                            className="w-full aspect-[210/297] object-cover object-top bg-white"
+                          />
+                        ) : (
+                          <ScaledResumePreview
+                            builderData={builderPreviewData}
+                            settings={settingsForTemplate(tpl.id)}
+                          />
+                        )}
                         <div className="absolute inset-0 flex items-center justify-center bg-slate-900/0 opacity-0 transition-all group-hover:bg-slate-900/20 group-hover:opacity-100">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-900 shadow">
                             <Eye className="h-3.5 w-3.5" />
@@ -412,34 +447,45 @@ export default function TemplatesPage() {
                           <Play className="h-3.5 w-3.5 shrink-0" />
                           <span>{importedResume ? '套用模板' : '在线体验'}</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleCopy(
-                              promptKey,
-                              buildSkillPrompt(tpl.id),
-                              `已复制口令：${buildSkillPrompt(tpl.id)}`,
-                            )
-                          }
-                          className={cn(
-                            'inline-flex items-center justify-center gap-1 whitespace-nowrap border px-2.5 py-2 text-xs font-bold fresh:rounded-lg transition-colors',
-                            isCopied
-                              ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                              : 'border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] text-slate-800 dark:text-slate-100 hover:bg-slate-50',
-                          )}
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 shrink-0" />
-                              <span>已复制</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3.5 w-3.5 shrink-0" />
-                              <span>复制口令</span>
-                            </>
-                          )}
-                        </button>
+                        {supportsCli ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleCopy(
+                                promptKey,
+                                buildSkillPrompt(tpl.id),
+                                `已复制口令：${buildSkillPrompt(tpl.id)}`,
+                              )
+                            }
+                            className={cn(
+                              'inline-flex items-center justify-center gap-1 whitespace-nowrap border px-2.5 py-2 text-xs font-bold fresh:rounded-lg transition-colors',
+                              isCopied
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                                : 'border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] text-slate-800 dark:text-slate-100 hover:bg-slate-50',
+                            )}
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                <span>已复制</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3.5 w-3.5 shrink-0" />
+                                <span>复制口令</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewTemplate(tpl)}
+                            className="inline-flex items-center justify-center gap-1 whitespace-nowrap border border-black/40 fresh:border-slate-300 bg-white dark:bg-[#2A2A2A] px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 fresh:rounded-lg hover:bg-slate-50 transition-colors"
+                          >
+                            <Eye className="h-3.5 w-3.5 shrink-0" />
+                            <span>放大预览</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -473,27 +519,29 @@ export default function TemplatesPage() {
                 </code>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleCopy(
-                      `modal-prompt:${previewTemplate.id}`,
-                      buildSkillPrompt(previewTemplate.id),
-                      `已复制口令：${buildSkillPrompt(previewTemplate.id)}`,
-                    )
-                  }
-                  className="inline-flex items-center gap-1.5 border border-slate-300 bg-white dark:bg-[#2A2A2A] px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 fresh:rounded-lg hover:bg-slate-50"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                  复制 Agent 口令
-                </button>
+                {previewTemplate.supportsCli !== false && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleCopy(
+                        `modal-prompt:${previewTemplate.id}`,
+                        buildSkillPrompt(previewTemplate.id),
+                        `已复制口令：${buildSkillPrompt(previewTemplate.id)}`,
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 border border-slate-300 bg-white dark:bg-[#2A2A2A] px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 fresh:rounded-lg hover:bg-slate-50"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    复制 Agent 口令
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleTryTemplate(previewTemplate.id)}
                   className="inline-flex items-center gap-1.5 bg-[#4285F4] px-3.5 py-1.5 text-xs font-bold text-white fresh:rounded-lg hover:bg-[#3367D6]"
                 >
                   <Play className="h-3.5 w-3.5" />
-                  {importedResume ? '套用并进入编辑' : '免登录体验这套模板'}
+                  {importedResume ? '套用并进入编辑' : '免登录用此模板编辑'}
                 </button>
                 <button
                   type="button"
@@ -509,10 +557,18 @@ export default function TemplatesPage() {
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] flex-1 min-h-0 overflow-hidden">
               <div className="overflow-y-auto bg-slate-100 dark:bg-slate-950 p-4 sm:p-6 flex justify-center">
                 <div className="w-full max-w-[794px] border border-slate-300 bg-white shadow-lg">
-                  <ResumeRenderer
-                    resumeData={builderPreviewData}
-                    settings={settingsForTemplate(previewTemplate.id)}
-                  />
+                  {useStaticXeLatexPreview(previewTemplate) ? (
+                    <img
+                      src={previewTemplate.thumbnail}
+                      alt={`${previewTemplate.name} XeLaTeX 真实渲染预览`}
+                      className="w-full h-auto block bg-white"
+                    />
+                  ) : (
+                    <ResumeRenderer
+                      resumeData={builderPreviewData}
+                      settings={settingsForTemplate(previewTemplate.id)}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -522,6 +578,11 @@ export default function TemplatesPage() {
                   <p className="mt-1.5 text-sm text-slate-700 dark:text-slate-300">
                     {previewTemplate.description}
                   </p>
+                  {previewTemplate.type === 'latex' && importedResume && (
+                    <p className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800 border border-amber-200">
+                      已加载你导入的 JSON（上方为排版结构示意；点击「套用并进入编辑」即可在工作台调用 XeLaTeX 编译真实矢量 PDF）。
+                    </p>
+                  )}
                   {previewTemplate.tags && previewTemplate.tags.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
                       {previewTemplate.tags.map((tag) => (
@@ -536,55 +597,66 @@ export default function TemplatesPage() {
                   )}
                 </div>
 
-                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
-                      <Sparkles className="h-3.5 w-3.5 text-[#4285F4]" />
-                      发给 Codex / Claude Code
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleCopy(
-                          `side-prompt:${previewTemplate.id}`,
-                          buildSkillPrompt(previewTemplate.id),
-                          '已复制 Skill 对话口令',
-                        )
-                      }
-                      className="text-xs font-bold text-[#4285F4] hover:underline"
-                    >
-                      {copiedKey === `side-prompt:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
-                    </button>
-                  </div>
-                  <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-2.5 text-xs text-slate-100 font-mono">
-                    {buildSkillPrompt(previewTemplate.id)}
-                  </pre>
-                </div>
+                {previewTemplate.supportsCli !== false ? (
+                  <>
+                    <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
+                          <Sparkles className="h-3.5 w-3.5 text-[#4285F4]" />
+                          发给 Codex / Claude Code
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleCopy(
+                              `side-prompt:${previewTemplate.id}`,
+                              buildSkillPrompt(previewTemplate.id),
+                              '已复制 Skill 对话口令',
+                            )
+                          }
+                          className="text-xs font-bold text-[#4285F4] hover:underline"
+                        >
+                          {copiedKey === `side-prompt:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
+                        </button>
+                      </div>
+                      <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-2.5 text-xs text-slate-100 font-mono">
+                        {buildSkillPrompt(previewTemplate.id)}
+                      </pre>
+                    </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
-                      <Terminal className="h-3.5 w-3.5 text-emerald-600" />
-                      本地 CLI 命令
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleCopy(
-                          `side-cli:${previewTemplate.id}`,
-                          buildCliCommand(previewTemplate.id),
-                          '已复制本地 CLI 命令',
-                        )
-                      }
-                      className="text-xs font-bold text-[#4285F4] hover:underline"
-                    >
-                      {copiedKey === `side-cli:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
-                    </button>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
+                          <Terminal className="h-3.5 w-3.5 text-emerald-600" />
+                          本地 CLI 命令
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleCopy(
+                              `side-cli:${previewTemplate.id}`,
+                              buildCliCommand(previewTemplate.id),
+                              '已复制本地 CLI 命令',
+                            )
+                          }
+                          className="text-xs font-bold text-[#4285F4] hover:underline"
+                        >
+                          {copiedKey === `side-cli:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
+                        </button>
+                      </div>
+                      <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-2.5 text-xs text-emerald-300 font-mono">
+                        {buildCliCommand(previewTemplate.id)}
+                      </pre>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-3 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
+                    <div className="font-bold text-slate-800 dark:text-slate-100">网页工作台专属模板</div>
+                    <p>
+                      此版式仅在网页工作台提供，无需登录即可直接在线编辑并导出；如需在 Codex / Claude 本地 CLI 生成，建议选用「Classic LaTeX」或「ASu」系列模板。
+                    </p>
                   </div>
-                  <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-2.5 text-xs text-emerald-300 font-mono">
-                    {buildCliCommand(previewTemplate.id)}
-                  </pre>
-                </div>
+                )}
 
                 <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
                   <button

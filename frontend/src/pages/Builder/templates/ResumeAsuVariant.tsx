@@ -137,25 +137,28 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
       <div className={styles.sectionBlock}>
         {renderSectionTitle(title, 'workExperience', idx)}
         <div className={config.hasTimeline ? styles.timelineContainer : undefined}>
-          {items.map((exp) => (
-            <div key={exp.id} data-no-break="true" className={styles.entryItem}>
-              <div className={styles.entryHead}>
-                <span className={styles.entryDate}>{formatDateRange(exp.years)}</span>
-                <span className={styles.entryOrg}>
-                  {exp.companyLogoUrl && (
-                    <TemplateLogo
-                      src={exp.companyLogoUrl}
-                      alt={exp.company || 'Company'}
-                      size={20}
-                    />
-                  )}
-                  <InlineBold text={exp.company || ''} />
-                </span>
-                {exp.title && <span className={styles.entryRole}>{exp.title}</span>}
+          {items.map((exp) => {
+            const dateStr = formatDateRange(exp.years)
+            return (
+              <div key={exp.id} data-no-break="true" className={styles.entryItem}>
+                <div className={dateStr ? styles.entryHead : `${styles.entryHead} ${styles.entryHeadNoDate}`}>
+                  {dateStr && <span className={styles.entryDate}>{dateStr}</span>}
+                  <span className={styles.entryOrg}>
+                    {exp.companyLogoUrl && (
+                      <TemplateLogo
+                        src={exp.companyLogoUrl}
+                        alt={exp.company || 'Company'}
+                        size={20}
+                      />
+                    )}
+                    <InlineBold text={exp.company || ''} />
+                  </span>
+                  {exp.title && <span className={styles.entryRole}>{exp.title}</span>}
+                </div>
+                {renderBullets(exp.description)}
               </div>
-              {renderBullets(exp.description)}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     )
@@ -166,25 +169,28 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     return (
       <div className={styles.sectionBlock}>
         {renderSectionTitle(title, 'education', idx)}
-        {items.map((edu) => (
-          <div key={edu.id} data-no-break="true" className={styles.entryItem}>
-            <div className={styles.entryHead}>
-              <span className={styles.entryDate}>{formatDateRange(edu.years)}</span>
-              <span className={styles.entryOrg}>
-                {edu.schoolLogoUrl && (
-                  <TemplateLogo
-                    src={edu.schoolLogoUrl}
-                    alt={edu.institution || 'School'}
-                    size={20}
-                  />
-                )}
-                <InlineBold text={edu.institution || ''} />
-              </span>
-              {edu.degree && <span className={styles.entryRole}>{edu.degree}</span>}
+        {items.map((edu) => {
+          const dateStr = formatDateRange(edu.years)
+          return (
+            <div key={edu.id} data-no-break="true" className={styles.entryItem}>
+              <div className={dateStr ? styles.entryHead : `${styles.entryHead} ${styles.entryHeadNoDate}`}>
+                {dateStr && <span className={styles.entryDate}>{dateStr}</span>}
+                <span className={styles.entryOrg}>
+                  {edu.schoolLogoUrl && (
+                    <TemplateLogo
+                      src={edu.schoolLogoUrl}
+                      alt={edu.institution || 'School'}
+                      size={20}
+                    />
+                  )}
+                  <InlineBold text={edu.institution || ''} />
+                </span>
+                {edu.degree && <span className={styles.entryRole}>{edu.degree}</span>}
+              </div>
+              {renderBullets(edu.description)}
             </div>
-            {renderBullets(edu.description)}
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -199,11 +205,12 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
             const roleText = proj.role?.trim() || ''
             const shortRoleText = isShortRole(roleText) ? roleText : ''
             const longRoleText = roleText && !shortRoleText ? roleText : ''
+            const dateStr = formatDateRange(proj.years)
 
             return (
               <div key={proj.id} data-no-break="true" className={styles.entryItem}>
-                <div className={styles.entryHead}>
-                  <span className={styles.entryDate}>{formatDateRange(proj.years)}</span>
+                <div className={dateStr ? styles.entryHead : `${styles.entryHead} ${styles.entryHeadNoDate}`}>
+                  {dateStr && <span className={styles.entryDate}>{dateStr}</span>}
                   <span className={styles.entryOrg}>
                     {proj.name}
                     {(proj.github || proj.website) && (
@@ -271,18 +278,21 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     return (
       <div className={styles.sectionBlock}>
         {renderSectionTitle(title, secKey, idx)}
-        {items.map((item) => (
-          <div key={item.id} data-no-break="true" className={styles.entryItem}>
-            <div className={styles.entryHead}>
-              <span className={styles.entryDate}>{formatDateRange(item.years)}</span>
-              <span className={styles.entryOrg}>
-                <InlineBold text={item.title || ''} />
-              </span>
-              {item.subtitle && <span className={styles.entryRole}>{item.subtitle}</span>}
+        {items.map((item) => {
+          const dateStr = formatDateRange(item.years)
+          return (
+            <div key={item.id} data-no-break="true" className={styles.entryItem}>
+              <div className={dateStr ? styles.entryHead : `${styles.entryHead} ${styles.entryHeadNoDate}`}>
+                {dateStr && <span className={styles.entryDate}>{dateStr}</span>}
+                <span className={styles.entryOrg}>
+                  <InlineBold text={item.title || ''} />
+                </span>
+                {item.subtitle && <span className={styles.entryRole}>{item.subtitle}</span>}
+              </div>
+              {renderBullets(item.description)}
             </div>
-            {renderBullets(item.description)}
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
@@ -382,37 +392,53 @@ export const ResumeAsuVariant: React.FC<ResumeAsuVariantProps> = ({
     )
   }
 
+  const renderedSections = sortedSections.reduce<React.ReactNode[]>((acc, sec) => {
+    const idx = acc.length
+    let node: React.ReactNode = null
+    switch (sec.key) {
+      case 'education':
+        node = renderEducation(education, normalizeSectionTitle(sec.displayName, '教育背景'), idx)
+        break
+      case 'fullTimeExperience':
+        node = renderWorkExperience(fullTimeExperience, normalizeSectionTitle(sec.displayName, '工作经历'), idx)
+        break
+      case 'workExperience':
+        node = renderWorkExperience(internshipItems, normalizeSectionTitle(sec.displayName, '实习经历'), idx)
+        break
+      case 'personalProjects':
+        node = renderProjects(personalProjects, normalizeSectionTitle(sec.displayName, '项目经历'), 'personalProjects', idx)
+        break
+      case 'openSource':
+        node = renderProjects(openSource, normalizeSectionTitle(sec.displayName, '开源经历'), 'openSource', idx)
+        break
+      case 'skills':
+        node = renderSkills(skills, normalizeSectionTitle(sec.displayName, '专业技能'), idx)
+        break
+      case 'awards':
+        node = renderAwards(awards, normalizeSectionTitle(sec.displayName, '荣誉奖项'), idx)
+        break
+      case 'summary':
+        node = renderSummary(summary, normalizeSectionTitle(sec.displayName, '自我评价'), idx)
+        break
+      default: {
+        const custom = customSections?.[sec.key]
+        if (custom?.items?.length) {
+          node = renderCustomSection(custom.items, normalizeSectionTitle(sec.displayName, sec.key), sec.key, idx)
+        }
+        break
+      }
+    }
+    if (node) {
+      acc.push(<React.Fragment key={sec.id}>{node}</React.Fragment>)
+    }
+    return acc
+  }, [])
+
   return (
     <div className={containerClasses}>
       {headerElement}
       <div className={styles.layoutSingleColumn}>
-        {sortedSections.map((sec, idx) => {
-          switch (sec.key) {
-            case 'education':
-              return <React.Fragment key={sec.id}>{renderEducation(education, normalizeSectionTitle(sec.displayName, '教育背景'), idx)}</React.Fragment>
-            case 'fullTimeExperience':
-              return <React.Fragment key={sec.id}>{renderWorkExperience(fullTimeExperience, normalizeSectionTitle(sec.displayName, '工作经历'), idx)}</React.Fragment>
-            case 'workExperience':
-              return <React.Fragment key={sec.id}>{renderWorkExperience(internshipItems, normalizeSectionTitle(sec.displayName, '实习经历'), idx)}</React.Fragment>
-            case 'personalProjects':
-              return <React.Fragment key={sec.id}>{renderProjects(personalProjects, normalizeSectionTitle(sec.displayName, '项目经历'), 'personalProjects', idx)}</React.Fragment>
-            case 'openSource':
-              return <React.Fragment key={sec.id}>{renderProjects(openSource, normalizeSectionTitle(sec.displayName, '开源经历'), 'openSource', idx)}</React.Fragment>
-            case 'skills':
-              return <React.Fragment key={sec.id}>{renderSkills(skills, normalizeSectionTitle(sec.displayName, '专业技能'), idx)}</React.Fragment>
-            case 'awards':
-              return <React.Fragment key={sec.id}>{renderAwards(awards, normalizeSectionTitle(sec.displayName, '荣誉奖项'), idx)}</React.Fragment>
-            case 'summary':
-              return <React.Fragment key={sec.id}>{renderSummary(summary, normalizeSectionTitle(sec.displayName, '自我评价'), idx)}</React.Fragment>
-            default: {
-              const custom = customSections?.[sec.key]
-              if (custom?.items?.length) {
-                return <React.Fragment key={sec.id}>{renderCustomSection(custom.items, normalizeSectionTitle(sec.displayName, sec.key), sec.key, idx)}</React.Fragment>
-              }
-              return null
-            }
-          }
-        })}
+        {renderedSections}
       </div>
     </div>
   )

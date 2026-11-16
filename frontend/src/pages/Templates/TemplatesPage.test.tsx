@@ -50,6 +50,7 @@ vi.mock('@/lib/toast', () => ({
 import TemplatesPage from './index'
 import { applyRequestedTemplate, parseImportedResumeJson, TEMPLATE_METADATA } from '@/data/templates'
 import { DEFAULT_RESUME_TEMPLATE } from '@/data/defaultTemplate'
+import { htmlToBullets } from '@/pages/Builder/adapter'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -88,7 +89,7 @@ describe('TemplatesPage & template helpers', () => {
     container.remove()
   })
 
-  it('renders all 21 templates and copies skill prompt without login', async () => {
+  it('renders all 27 real Workspace templates, uses static XeLaTeX preview for default, and hides CLI copy for web-only templates', async () => {
     await act(async () => {
       root.render(<TemplatesPage />)
     })
@@ -96,11 +97,22 @@ describe('TemplatesPage & template helpers', () => {
 
     const cards = container.querySelectorAll('[data-testid^="template-card-"]')
     expect(cards).toHaveLength(TEMPLATE_METADATA.length)
-    expect(cards).toHaveLength(21)
+    expect(cards).toHaveLength(27)
 
+    // Classic LaTeX renders authentic XeLaTeX preview image
+    const defaultCard = container.querySelector('[data-testid="template-card-default"]') as HTMLElement
+    const defaultImg = defaultCard.querySelector('img') as HTMLImageElement
+    expect(defaultImg).not.toBeNull()
+    expect(defaultImg.getAttribute('src')).toBe('/templates/classic-latex-preview.png')
+
+    // Web-only template (modern) should NOT expose a broken CLI copy button
+    const modernCard = container.querySelector('[data-testid="template-card-modern"]') as HTMLElement
+    expect(modernCard).not.toBeNull()
+    expect(modernCard.textContent).not.toContain('复制口令')
+    expect(modernCard.textContent).toContain('放大预览')
+
+    // CLI-supported ASu template copies Skill prompt
     const asuCard = container.querySelector('[data-testid="template-card-asu-13"]') as HTMLElement
-    expect(asuCard).not.toBeNull()
-
     const copyBtn = Array.from(asuCard.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('复制口令'),
     ) as HTMLButtonElement
@@ -194,6 +206,16 @@ describe('TemplatesPage & template helpers', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/workspace/local_imported_1')
   })
 
+  it('htmlToBullets flattens nested lists cleanly without duplicating child items', () => {
+    const nestedHtml =
+      '<ul class="custom-list"><li><p><strong>专项一</strong></p><ul class="custom-list"><li><p>子任务 A</p></li><li><p>子任务 B</p></li></ul></li></ul>'
+    expect(htmlToBullets(nestedHtml)).toEqual([
+      '<strong>专项一</strong>',
+      '  子任务 A',
+      '  子任务 B',
+    ])
+  })
+
   it('applyRequestedTemplate and parseImportedResumeJson handle html, default latex, and invalid JSON', () => {
     const htmlApplied = applyRequestedTemplate(structuredClone(DEFAULT_RESUME_TEMPLATE), 'asu-tech')
     expect(htmlApplied.templateType).toBe('html')
@@ -204,10 +226,9 @@ describe('TemplatesPage & template helpers', () => {
     expect(latexApplied.templateType).toBe('latex')
     expect(latexApplied.templateId).toBe('default')
 
-    const classicHtml = applyRequestedTemplate(structuredClone(DEFAULT_RESUME_TEMPLATE), 'html-classic')
-    expect(classicHtml.templateType).toBe('html')
-    expect(classicHtml.templateId).toBe('html-classic')
-    expect((classicHtml.globalSettings?.builderSettings as { template?: string })?.template).toBe('swiss-single')
+    const modernApplied = applyRequestedTemplate(structuredClone(DEFAULT_RESUME_TEMPLATE), 'modern')
+    expect(modernApplied.templateType).toBe('html')
+    expect((modernApplied.globalSettings?.builderSettings as { template?: string })?.template).toBe('modern')
 
     expect(() => parseImportedResumeJson('not-json')).toThrow('JSON 解析失败')
     expect(() => parseImportedResumeJson('{}')).toThrow('缺少 basic 或 education 字段')

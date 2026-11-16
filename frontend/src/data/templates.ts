@@ -1,7 +1,10 @@
 /**
  * 简历模板数据管理
- * 
- * 定义所有可用的简历模板及其元数据
+ *
+ * 与 Workspace SettingsDrawer 真实可用的 27 套模板严格一一对应：
+ * - 1 套服务端 XeLaTeX 精排模板：default (Classic LaTeX)
+ * - 7 套网页工作台经典 HTML 模板：latex, swiss-single, swiss-two-column, modern, modern-two-column, clean, vivid
+ * - 19 套 ASu 系列高密度技术简历模板：asu-tech, asu-01 .. asu-18
  */
 import type { ResumeData } from '../pages/Workspace/v2/types'
 import { DEFAULT_RESUME_TEMPLATE } from './defaultTemplate'
@@ -19,45 +22,98 @@ export interface TemplateMetadata {
   name: string
   description: string
   type: TemplateType // 模板类型：latex 或 html
-  thumbnail?: string // 预览图 URL（未来可扩展）
-  category?: string // 分类（未来可扩展）
-  tags?: string[] // 标签（未来可扩展）
+  thumbnail?: string // 真实渲染缩略图路径（用于无法纯前端直出的 XeLaTeX 等）
+  category?: string // 分类
+  tags?: string[] // 标签
+  supportsCli?: boolean // 是否支持本地 CLI / Agent Skill 直出
+  recommended?: boolean // 是否首页推荐
 }
-
-/**
- * 模板元数据列表
- * 包含 LaTeX 和 HTML 模板
- */
-// COS 图片 URL
-const COS_BASE_URL = 'https://resumecos-1327706280.cos.ap-guangzhou.myqcloud.com'
 
 export const TEMPLATE_METADATA: TemplateMetadata[] = [
   {
     id: 'default',
-    name: '经典模板（LaTeX）',
-    description: 'LATEX简历模板：适用于程序员大多数求职场景',
+    name: 'Classic LaTeX',
+    description: '默认推荐：服务端 XeLaTeX 精确排版，支持公司/学校 Logo 与高清矢量文字 PDF',
     type: 'latex',
-    category: '通用',
-    tags: ['标准', '通用', '经典', '高质量'],
-    thumbnail: `${COS_BASE_URL}/classic.png`
+    category: 'LaTeX',
+    tags: ['推荐', 'XeLaTeX', '矢量 PDF', 'Logo 嵌入'],
+    thumbnail: '/templates/classic-latex-preview.png',
+    supportsCli: true,
+    recommended: true,
   },
   {
-    id: 'html-classic',
-    name: '经典模板（HTML）',
-    description: 'HTML实时编辑模板：支持实时预览',
+    id: 'latex',
+    name: 'LaTeX Style',
+    description: '网页工作台经典衬线单栏 HTML 版，实时预览即改即见',
     type: 'html',
-    category: '通用',
-    tags: ['实时预览', '快速编辑', '经典'],
-    thumbnail: `${COS_BASE_URL}/html.png`
+    category: '单栏',
+    tags: ['推荐', '衬线', '单栏', '实时预览'],
+    supportsCli: false,
+    recommended: true,
+  },
+  {
+    id: 'swiss-single',
+    name: 'Single Column',
+    description: '传统通栏高密度排版，聚焦经历细节与文字容量',
+    type: 'html',
+    category: '单栏',
+    tags: ['单栏', '高密度', '极简'],
+    supportsCli: false,
+  },
+  {
+    id: 'swiss-two-column',
+    name: 'Two Column',
+    description: '瑞士极简双栏，左侧主履历、右侧教育与技能栏',
+    type: 'html',
+    category: '双栏',
+    tags: ['双栏', '瑞士风格', '结构清晰'],
+    supportsCli: false,
+  },
+  {
+    id: 'modern',
+    name: 'Modern',
+    description: '现代蓝线强调色单栏排版，支持在工作台切换主题色',
+    type: 'html',
+    category: '单栏',
+    tags: ['现代', '主题色', '单栏'],
+    supportsCli: false,
+  },
+  {
+    id: 'modern-two-column',
+    name: 'Modern 2-Col',
+    description: '现代强调色双栏侧边布局，兼顾重点与模块均衡',
+    type: 'html',
+    category: '双栏',
+    tags: ['现代', '双栏', '主题色'],
+    supportsCli: false,
+  },
+  {
+    id: 'clean',
+    name: 'Clean',
+    description: '无衬线极简留白单栏，清爽易读',
+    type: 'html',
+    category: '单栏',
+    tags: ['极简', '无衬线', '留白'],
+    supportsCli: false,
+  },
+  {
+    id: 'vivid',
+    name: 'Vivid',
+    description: '彩色视觉双栏版式，箭头项目符号与左侧履历主栏',
+    type: 'html',
+    category: '双栏',
+    tags: ['双栏', '活泼', '彩色强调'],
+    supportsCli: false,
   },
   {
     id: 'asu-tech',
     name: 'ASu 极客单栏',
-    description: '高密度技术单栏简历，精配公司条目灰色气泡与多层级项目列表',
+    description: '高密度技术单栏简历，精配公司条目灰色气泡与多层级 STAR 列表（支持本地 CLI 秒出）',
     type: 'html',
-    category: '技术',
-    tags: ['ASu', '高密度', '单栏', '大厂标准'],
-    thumbnail: `${COS_BASE_URL}/asu-tech.png`
+    category: '单栏',
+    tags: ['ASu', '高密度', '单栏', 'CLI 离线'],
+    supportsCli: true,
+    recommended: true,
   },
   {
     id: 'asu-01',
@@ -66,6 +122,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['经典', '蓝线', '紧凑'],
+    supportsCli: true,
   },
   {
     id: 'asu-02',
@@ -74,6 +131,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['色块', '蓝底', '醒目'],
+    supportsCli: true,
   },
   {
     id: 'asu-03',
@@ -82,6 +140,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['时间轴', '科技感'],
+    supportsCli: true,
   },
   {
     id: 'asu-04',
@@ -90,6 +149,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['通栏', '深蓝顶幅'],
+    supportsCli: true,
   },
   {
     id: 'asu-05',
@@ -98,6 +158,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '侧栏',
     tags: ['侧栏', '双列', '灰调'],
+    supportsCli: true,
   },
   {
     id: 'asu-06',
@@ -106,6 +167,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双页',
     tags: ['双页', '纯黑', '时间轴'],
+    supportsCli: true,
   },
   {
     id: 'asu-07',
@@ -114,6 +176,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['右轨', '蓝线'],
+    supportsCli: true,
   },
   {
     id: 'asu-08',
@@ -122,6 +185,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双栏',
     tags: ['双栏', '双页', '色块'],
+    supportsCli: true,
   },
   {
     id: 'asu-09',
@@ -130,6 +194,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双页',
     tags: ['卡片', '双页', '黑灰'],
+    supportsCli: true,
   },
   {
     id: 'asu-10',
@@ -138,6 +203,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['丝带', '标签', '活力'],
+    supportsCli: true,
   },
   {
     id: 'asu-11',
@@ -146,6 +212,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['衬线', '优雅', '学术'],
+    supportsCli: true,
   },
   {
     id: 'asu-12',
@@ -154,6 +221,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双页',
     tags: ['作品集', '居中', '双页'],
+    supportsCli: true,
   },
   {
     id: 'asu-13',
@@ -162,6 +230,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '侧栏',
     tags: ['纯黑', '侧栏', '高密度'],
+    supportsCli: true,
   },
   {
     id: 'asu-14',
@@ -170,6 +239,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双栏',
     tags: ['双栏', '双页', '蓝线'],
+    supportsCli: true,
   },
   {
     id: 'asu-15',
@@ -178,6 +248,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '单栏',
     tags: ['序号', '现代', '色块'],
+    supportsCli: true,
   },
   {
     id: 'asu-16',
@@ -186,6 +257,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双栏',
     tags: ['超高密度', '双栏', '双页'],
+    supportsCli: true,
   },
   {
     id: 'asu-17',
@@ -194,6 +266,7 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双页',
     tags: ['学术', '纯黑', '双页'],
+    supportsCli: true,
   },
   {
     id: 'asu-18',
@@ -202,15 +275,14 @@ export const TEMPLATE_METADATA: TemplateMetadata[] = [
     type: 'html',
     category: '双页',
     tags: ['现代', '蓝线', '紧凑', '双页'],
-  }
+    supportsCli: true,
+  },
 ]
 
 /**
  * 根据模板 ID 获取模板数据
  */
 export function getTemplateById(templateId: string): ResumeData | null {
-  // 目前所有模板都使用默认模板数据
-  // 未来可以根据 templateId 返回不同的模板结构
   const template = structuredClone(DEFAULT_RESUME_TEMPLATE)
   template.templateId = templateId
   return template
@@ -233,7 +305,7 @@ export function getTemplateMetadata(templateId: string): TemplateMetadata | null
 const VALID_BUILDER_TEMPLATES = new Set<BuilderTemplateType>(TEMPLATE_OPTIONS.map((t) => t.id))
 
 /**
- * 将模板广场 / CLI 的模板 ID 映射为 Builder 预览模板 ID
+ * 将模板广场 / URL 参数的模板 ID 映射为 Builder 预览模板 ID
  */
 export function resolveBuilderTemplateType(templateId?: string | null): BuilderTemplateType {
   if (!templateId || templateId === 'default') return 'latex'
@@ -318,4 +390,3 @@ export function parseImportedResumeJson(rawText: string): ResumeData {
     },
   }
 }
-

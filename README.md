@@ -106,12 +106,12 @@ Agent 会先静默探测本机环境，再引导你走以下三条路线之一�
   - **本地导出 PDF（`-o resume.pdf --png`）**：调用本机 Chrome 或 XeLaTeX 离线直出
   - **网页工作台精修（`handoff`）**：仅在你主动要求时生成 60 分钟临时链接导入 `cococv.cn` 拖拽微调
 
-### 3. 21 套内置简历模板总览
+### 3. 27 套工作台真实简历模板总览
 
-默认推荐零依赖极客单栏 **`asu-tech`**（20 套 HTML 模板均支持本地零依赖直出，另有 1 套经典 XeLaTeX 模板 `default`）。你也可以随时打开免登录在线模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)，预览全部样式、导入自己的 `resume.json` 试套、直接留在本地浏览器编辑，或一键复制口令发给你的 AI Agent：
+工作台共内置 **27 套真实模板**：`Classic LaTeX`（服务端 XeLaTeX 精排）、7 套网页实时 HTML 经典模板（`LaTeX Style` / `Single Column` / `Two Column` / `Modern` / `Modern 2-Col` / `Clean` / `Vivid`）以及 19 套高密度 ASu 系列（`asu-tech` + `asu-01`～`asu-18`，均支持本地 CLI 离线直出）。你也可以随时打开免登录在线模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)，预览真实排版、导入自己的 `resume.json` 试套、直接留在本地浏览器编辑，或一键复制口令发给你的 AI Agent：
 
 <div align="center">
-  <img src="docs/readme/template-overview.png" alt="CocoCV 21 套内置简历模板总览" width="95%" />
+  <img src="docs/readme/template-overview.png" alt="CocoCV 27 套工作台真实简历模板总览" width="95%" />
 </div>
 
 ## 🏗️ 技术架构与目录结构

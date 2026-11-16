@@ -253,6 +253,15 @@
   margin-bottom: 2px;
 }
 
+.entryHeadNoDate {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sidebar .entryHeadNoDate,
+.layoutTwoColumn .entryHeadNoDate {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .entryDate {
   color: #4f5965;
   font-size: 8.8pt;
