@@ -270,4 +270,37 @@ describe('ResumeAsuTech & ResumeAsuVariant hardening', () => {
     expect(fullText.split('Beta Intern One').length - 1).toBe(1)
     expect(fullText.split('Gamma Intern Two').length - 1).toBe(1)
   })
+
+  it('keeps 工作经历 and 实习经历 separate and groups logo with company across all 7 classic Builder templates', async () => {
+    const { toBuilderResumeData, normalizeResumeData } = await import('../adapter')
+    const { ResumeRenderer } = await import('./ResumeRenderer')
+    const { applyTemplatePreset, DEFAULT_TEMPLATE_SETTINGS } = await import('../settings')
+
+    const raw = normalizeResumeData({
+      basic: { name: '张三', title: '后端开发工程师', email: 'z@example.com', phone: '13800138000' },
+      education: [{ id: 'e1', school: '北京大学', degree: '本科', major: '计算机' }],
+      workExperience: [
+        { id: 'w1', company: '腾讯', position: '后端工程师', date: '2025.07 - 至今', companyLogo: 'tencent', details: '<ul><li>核心开发</li></ul>' },
+      ],
+      experience: [
+        { id: 'x1', company: '字节跳动', position: '后端实习生', date: '2024.06 - 2024.09', details: '<ul><li>性能优化</li></ul>' },
+      ],
+    })
+    const built = toBuilderResumeData(raw)
+    // Inject synthetic companyLogoUrl directly so unit test runs without network logo cache
+    built.fullTimeExperience = built.fullTimeExperience?.map((item) => ({ ...item, companyLogoUrl: '/api/logos/file/tencent' }))
+
+    const classicIds = ['latex', 'swiss-single', 'swiss-two-column', 'modern', 'modern-two-column', 'clean', 'vivid'] as const
+    for (const tplId of classicIds) {
+      act(() => {
+        root.render(<ResumeRenderer resumeData={built} settings={applyTemplatePreset(DEFAULT_TEMPLATE_SETTINGS, tplId)} />)
+      })
+      const headings = Array.from(container.querySelectorAll('h3')).map((h) => h.textContent?.trim())
+      expect(headings).toContain('工作经历')
+      expect(headings).toContain('实习经历')
+      const logoImg = container.querySelector('img[alt="腾讯"]')
+      expect(logoImg).not.toBeNull()
+      expect(logoImg?.parentElement?.textContent).toContain('腾讯')
+    }
+  })
 })

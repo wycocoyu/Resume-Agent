@@ -14,7 +14,7 @@
  */
 import React from 'react'
 import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react'
-import type { BuilderResumeData, Project, SectionMeta } from '../types'
+import type { BuilderResumeData, Experience, Project, SectionMeta } from '../types'
 import { getSortedSections, formatDateRange } from '../types'
 import { SafeHtml, InlineBold } from './SafeHtml'
 import { TemplateLogo } from './TemplateLogo'
@@ -27,7 +27,17 @@ interface ResumeCleanProps {
 }
 
 export const ResumeClean: React.FC<ResumeCleanProps> = ({ data, showContactIcons = false }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
 
   const sortedSections = getSortedSections(data)
 
@@ -207,6 +217,23 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({ data, showContactIcons
     )
   }
 
+  const renderExperienceSection = (keyId: string, title: string, items?: Experience[]) => {
+    if (!items || items.length === 0) return null
+    return (
+      <div key={keyId} className={baseStyles['resume-section']}>
+        <h3 className={styles.sectionTitle}>{title}</h3>
+        <div className={baseStyles['resume-items']}>
+          {items.map((exp) => (
+            <div key={exp.id} className={baseStyles['resume-item']}>
+              {renderEntryHeader(exp.company, exp.title, exp.location, exp.years, true, exp.companyLogoUrl, exp.companyLogoSize)}
+              {renderBullets(exp.description)}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const renderSection = (section: SectionMeta) => {
     switch (section.key) {
       case 'personalInfo':
@@ -227,21 +254,11 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({ data, showContactIcons
           </div>
         )
 
+      case 'fullTimeExperience':
+        return renderExperienceSection(section.id, section.displayName, fullTimeExperience)
+
       case 'workExperience':
-        if (!workExperience || workExperience.length === 0) return null
-        return (
-          <div key={section.id} className={baseStyles['resume-section']}>
-            <h3 className={styles.sectionTitle}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  {renderEntryHeader(exp.company, exp.title, exp.location, exp.years, true, exp.companyLogoUrl, exp.companyLogoSize)}
-                  {renderBullets(exp.description)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )
+        return renderExperienceSection(section.id, section.displayName, internshipItems)
 
       case 'personalProjects':
         if (!personalProjects || personalProjects.length === 0) return null

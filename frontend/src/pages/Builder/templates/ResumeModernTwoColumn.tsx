@@ -21,7 +21,7 @@
  */
 import React from 'react'
 import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react'
-import type { BuilderResumeData, Project, SectionMeta } from '../types'
+import type { BuilderResumeData, Experience, Project, SectionMeta } from '../types'
 import { getSortedSections, formatDateRange, DEFAULT_SECTION_META } from '../types'
 import { SafeHtml, InlineBold } from './SafeHtml'
 import { TemplateLogo } from './TemplateLogo'
@@ -37,7 +37,17 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
   data,
   showContactIcons = false,
 }) => {
-  const { personalInfo, summary, workExperience, education, personalProjects, openSource } = data
+  const {
+    personalInfo,
+    summary,
+    workExperience,
+    fullTimeExperience,
+    internships,
+    education,
+    personalProjects,
+    openSource,
+  } = data
+  const internshipItems = internships !== undefined ? internships : workExperience
 
   // Get sorted visible sections
   const sortedSections = getSortedSections(data)
@@ -258,39 +268,44 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
             </div>
           )}
 
-          {/* Experience Section */}
-          {isSectionVisible('workExperience') && workExperience && workExperience.length > 0 && (
-            <div className={baseStyles['resume-section']}>
-              <h3 className={styles.sectionTitleAccent}>
-                {getSectionDisplayName('workExperience', '实习经历')}
-              </h3>
-              <div className={baseStyles['resume-items']}>
-                {workExperience.map((exp) => (
-                  <div key={exp.id} className={baseStyles['resume-item']}>
-                    <div
-                      className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                    >
-                      <h4 className={baseStyles['resume-item-title-sm']}><InlineBold text={exp.title} /></h4>
-                      <span className={`${baseStyles['resume-date']} ml-4`}>
-                        {formatDateRange(exp.years)}
-                      </span>
-                    </div>
+          {/* Full-Time & Internship Experience Sections */}
+          {[
+            { key: 'fullTimeExperience', fallback: '工作经历', items: fullTimeExperience },
+            { key: 'workExperience', fallback: '实习经历', items: internshipItems },
+          ].map(({ key, fallback, items }) =>
+            isSectionVisible(key) && items && items.length > 0 ? (
+              <div key={key} className={baseStyles['resume-section']}>
+                <h3 className={styles.sectionTitleAccent}>
+                  {getSectionDisplayName(key, fallback)}
+                </h3>
+                <div className={baseStyles['resume-items']}>
+                  {items.map((exp) => (
+                    <div key={exp.id} className={baseStyles['resume-item']}>
+                      <div
+                        className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
+                      >
+                        <h4 className={baseStyles['resume-item-title-sm']}><InlineBold text={exp.title} /></h4>
+                        <span className={`${baseStyles['resume-date']} ml-4`}>
+                          {formatDateRange(exp.years)}
+                        </span>
+                      </div>
 
-                    <div
-                      className={`flex justify-between items-center ${baseStyles['resume-row-tight']} ${baseStyles['resume-item-subtitle-sm']}`}
-                    >
-                      <span>
-                        <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} />
-                        <InlineBold text={exp.company} weightControlled />
-                        {exp.location && <> • {exp.location}</>}
-                      </span>
-                    </div>
+                      <div
+                        className={`flex justify-between items-center ${baseStyles['resume-row-tight']} ${baseStyles['resume-item-subtitle-sm']}`}
+                      >
+                        <span>
+                          <TemplateLogo url={exp.companyLogoUrl} size={exp.companyLogoSize} alt={exp.company} />
+                          <InlineBold text={exp.company} weightControlled />
+                          {exp.location && <> • {exp.location}</>}
+                        </span>
+                      </div>
 
-                    {renderBullets(exp.description)}
-                  </div>
-                ))}
+                      {renderBullets(exp.description)}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null,
           )}
 
           {/* Projects Section */}
