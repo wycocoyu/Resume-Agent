@@ -108,7 +108,7 @@ Agent 会先静默探测本机环境，再引导你走以下三条路线之一�
 
 ### 3. 21 套内置简历模板总览
 
-默认推荐零依赖极客单栏 **`asu-tech`**（20 套 HTML 模板均支持本地零依赖直出，另有 1 套经典 XeLaTeX 模板 `default`）：
+默认推荐零依赖极客单栏 **`asu-tech`**（20 套 HTML 模板均支持本地零依赖直出，另有 1 套经典 XeLaTeX 模板 `default`）。你也可以随时打开免登录在线模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)，预览全部样式、导入自己的 `resume.json` 试套、直接留在本地浏览器编辑，或一键复制口令发给你的 AI Agent：
 
 <div align="center">
   <img src="docs/readme/template-overview.png" alt="CocoCV 21 套内置简历模板总览" width="95%" />

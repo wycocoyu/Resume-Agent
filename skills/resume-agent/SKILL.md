@@ -19,16 +19,17 @@ metadata:
 4. **渲染前强制校验**：每次修改 `resume.json` 后必须执行 `validate` 且返回退出码 `0` 再渲染。
 5. **Page balance and density self-check（页面平衡与视觉密度自检）**：生成 `.png` 预览图后必须看图自检，防止出现多出 2～3 行溢出到第二页或大面积留白。
 
-## 零步 · 静默探测本机环境
+## 零步 · 静默探测本机环境与定位脚本
 
-回复新请求前，先静默执行一次环境探测（无需向用户输出命令行）：
+回复新请求前，先静默探测本机能力（无需向用户输出命令行）。**切勿假设当前工作目录下存在 `./scripts/cococv_local.py`**——先用 `SKILL_PY` 变量定位本技能自带的零依赖脚本（与本 `SKILL.md` 同级的 `scripts/cococv_local.py`）：
 
 ```bash
-python3 scripts/cococv_local.py env --json
+SKILL_PY="$(find ~/.codex ~/.agents ~/.codebuddy skills -name cococv_local.py 2>/dev/null | head -n1)"
+python3 "$SKILL_PY" env --json
 ```
 
 - **已安装完整 CLI（`cococv` / `resume-agent`）**：支持 `.html`、多页 `.png`、Headless Chrome CDP `.pdf` 及本机 `xelatex` `.pdf`。
-- **零依赖兜底（仅 Python 3.10+）**：`python3 scripts/cococv_local.py` 内置完整 `env`、`read-source`、`templates`、`init`、`validate`、`render` 与 `handoff` 能力，无需 `pip install`、无需启动后端服务。
+- **零依赖兜底（仅 Python 3.10+）**：`python3 "$SKILL_PY"` 内置完整 `env`、`read-source`、`templates`、`init`、`validate`、`render` 与 `handoff` 能力，无需 `pip install`、无需启动后端服务。
 - **安装到当前宿主**：
   ```bash
   resume-agent skill install --harness codex --dry-run
@@ -58,7 +59,7 @@ python3 scripts/cococv_local.py env --json
 >      技能：
 >      其他链接（GitHub / 作品集）：
 >      ```
-> 3. **版式与导出偏好**：单页还是双页？需要输出 **HTML / PNG 预览图 / PDF** 哪种？如果想先看模板对比，也可以让我先生成 21 套模板预览画廊给你挑。
+> 3. **版式与模板选择**：单页还是双页？需要输出 **HTML / PNG 预览图 / PDF** 哪种？如果想先看样式，可打开官网模板广场 [**cococv.cn/templates**](https://cococv.cn/templates) 挑完直接「复制口令」发给我（也支持免登录在浏览器体验或导入 JSON 试套），或让我直接在本地生成 21 套对比画廊。
 >
 > 暂时缺的数据我会标成 `【待补】`，绝不替你编造。
 
@@ -67,7 +68,7 @@ python3 scripts/cococv_local.py env --json
 - **路径 A · 用户提供了本地文件路径或上传了简历（PDF / Word / Markdown / HTML / JSON / 截图）**
   立即离线读取（纯标准库优先支持 `.docx`/`.md`/`.html`/`.json`，`pymupdf`/`pdftotext` 支持 `.pdf`）：
   ```bash
-  python3 scripts/cococv_local.py read-source "<本地文件路径>" --json
+  python3 "$SKILL_PY" read-source "<本地文件路径>" --json
   ```
   - 若返回 `format == "image"` 或 `page_images`（扫描件 PDF / 截图），直接调用读图能力提取文字与版面，不要让用户手打。
   - 提取真实经历写入 `resume.json`，缺口标为 `【待补】`，与用户确认后渲染。
@@ -89,14 +90,14 @@ python3 scripts/cococv_local.py env --json
 | 资深研发 / 多项目 / 学术科研双页 | `asu-06` / `asu-08` / `asu-16` / `asu-17` / `asu-18` | 双页时间轴 / 双栏双页 / 纯黑学术双页 | 零依赖直出 |
 | 偏好传统 LaTeX 排版 | `default` | CocoCV 原生经典单栏 XeLaTeX 模板 | 需本机 `xelatex` 或 Web `handoff` |
 
-用户想看全部模板或犹豫版式时，用下面命令展示中文清单或生成单文件可视化对比画廊：
+用户想看全部模板或犹豫版式时，先指引用户打开官网免登录模板广场 [**cococv.cn/templates**](https://cococv.cn/templates)（支持查看全部 21 套预览、复制口令发回给你、免登录在线微调或导入 `resume.json` 试套），也可以直接用下面命令查看清单或生成本地单文件可视化对比画廊：
 
 ```bash
 # 查看全部 21 套模板中文说明与适用场景
-python3 scripts/cococv_local.py templates --json
+python3 "$SKILL_PY" templates --json
 
 # 用用户自己的 resume.json 生成单文件 21 套模板同屏对比画廊
-python3 scripts/cococv_local.py templates --gallery template-gallery.html --resume resume.json --json
+python3 "$SKILL_PY" templates --gallery template-gallery.html --resume resume.json --json
 ```
 
 ## 第四步 · 生成并校验 `ResumeData` (`resume.json`)
@@ -106,7 +107,7 @@ python3 scripts/cococv_local.py templates --gallery template-gallery.html --resu
 ```bash
 resume-agent init -o resume.json --title "后端开发简历" --json
 # 零依赖兜底：
-python3 scripts/cococv_local.py init -o resume.json --title "后端开发简历" --json
+python3 "$SKILL_PY" init -o resume.json --title "后端开发简历" --json
 ```
 
 编辑前务必先读 [references/schema.md](references/schema.md)（或运行 `resume-agent schema`）核对精确字段与内置公司/学校 Logo 键名：
@@ -120,7 +121,7 @@ python3 scripts/cococv_local.py init -o resume.json --title "后端开发简历"
 ```bash
 resume-agent validate resume.json --json
 # 零依赖兜底：
-python3 scripts/cococv_local.py validate resume.json --json
+python3 "$SKILL_PY" validate resume.json --json
 ```
 
 ## 第五步 · HTML / PNG / PDF / LaTeX 渲染与 Print-preview QA
@@ -131,7 +132,7 @@ python3 scripts/cococv_local.py validate resume.json --json
 # 1. 自包含可编辑 HTML（默认推荐，任意机器零依赖直出，浏览器可打印导出 PDF）
 cococv render resume.json -o resume.html --template asu-tech --json
 # 零依赖兜底：
-python3 scripts/cococv_local.py render resume.json -o resume.html --template asu-tech --json
+python3 "$SKILL_PY" render resume.json -o resume.html --template asu-tech --json
 
 # 2. 逐页 PNG 预览图（方便手机核对或视觉 QA）
 cococv render resume.json -o resume.png --template asu-tech --json
@@ -158,5 +159,5 @@ cococv render resume.json -o resume.pdf --template default --engine latex --png 
 ```bash
 cococv handoff resume.json --ttl-minutes 60 --json
 # 零依赖兜底：
-python3 scripts/cococv_local.py handoff resume.json --ttl-minutes 60 --json
+python3 "$SKILL_PY" handoff resume.json --ttl-minutes 60 --json
 ```

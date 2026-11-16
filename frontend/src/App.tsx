@@ -21,6 +21,7 @@ const LandingPage = lazyWithRetry(() => import('./pages/LandingPage'))
 const LoginPage = lazyWithRetry(() => import('./pages/Login'))
 const SettingsPage = lazyWithRetry(() => import('./pages/Settings'))
 const SharePage = lazyWithRetry(() => import('./pages/SharePage'))
+const TemplatesPage = lazyWithRetry(() => import('./pages/Templates'))
 const Workspace = lazyWithRetry(() => import('./pages/Workspace/v2'))
 /** 旧编辑器路由兼容：/workspace/latex|html/:resumeId → 统一 /workspace/:resumeId */
 function WorkspaceLegacyRedirect() {
@@ -102,6 +103,7 @@ function App() {
                 <Route path="/admin" element={<Navigate to="/workspace" replace />} />
               )}
               <Route path="/create-new" element={<CreateNew />} />
+              <Route path="/templates" element={<TemplatesPage />} />
               <Route path="/leetcode/*" element={<LeetCodePage />} />
               <Route path="/share/:shareId" element={<SharePage />} />
               <Route path="/terms" element={<TermsPage />} />

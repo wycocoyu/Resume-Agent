@@ -1,0 +1,215 @@
+// @vitest-environment jsdom
+
+import { act, type ReactNode } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockNavigate = vi.fn()
+const mockSaveResume = vi.fn()
+const mockSetCurrentResumeId = vi.fn()
+const mockToastSuccess = vi.fn()
+const mockToastError = vi.fn()
+const mockWriteText = vi.fn()
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}))
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    isAuthenticated: false,
+    loading: false,
+    openModal: vi.fn(),
+  }),
+}))
+
+vi.mock('@/pages/WorkspaceLayout', () => ({
+  default: ({ children }: { children: ReactNode }) => <div data-testid="workspace-layout">{children}</div>,
+}))
+
+vi.mock('@/pages/Builder/templates/ResumeRenderer', () => ({
+  default: ({ resumeData, settings }: { resumeData: { personalInfo?: { name?: string } }; settings?: { template?: string } }) => (
+    <div data-testid="mock-renderer" data-template={settings?.template || ''}>
+      {resumeData.personalInfo?.name || ''}
+    </div>
+  ),
+}))
+
+vi.mock('@/services/resumeStorage', () => ({
+  saveResume: (...args: unknown[]) => mockSaveResume(...args),
+  setCurrentResumeId: (...args: unknown[]) => mockSetCurrentResumeId(...args),
+}))
+
+vi.mock('@/lib/toast', () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
+}))
+
+import TemplatesPage from './index'
+import { applyRequestedTemplate, parseImportedResumeJson, TEMPLATE_METADATA } from '@/data/templates'
+import { DEFAULT_RESUME_TEMPLATE } from '@/data/defaultTemplate'
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+describe('TemplatesPage & template helpers', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    mockNavigate.mockReset()
+    mockSaveResume.mockReset()
+    mockSetCurrentResumeId.mockReset()
+    mockToastSuccess.mockReset()
+    mockToastError.mockReset()
+    mockWriteText.mockReset().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: mockWriteText },
+      configurable: true,
+    })
+  })
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
+  })
+
+  it('renders all 21 templates and copies skill prompt without login', async () => {
+    await act(async () => {
+      root.render(<TemplatesPage />)
+    })
+    await flushMicrotasks()
+
+    const cards = container.querySelectorAll('[data-testid^="template-card-"]')
+    expect(cards).toHaveLength(TEMPLATE_METADATA.length)
+    expect(cards).toHaveLength(21)
+
+    const asuCard = container.querySelector('[data-testid="template-card-asu-13"]') as HTMLElement
+    expect(asuCard).not.toBeNull()
+
+    const copyBtn = Array.from(asuCard.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('复制口令'),
+    ) as HTMLButtonElement
+    expect(copyBtn).toBeDefined()
+
+    await act(async () => {
+      copyBtn.click()
+    })
+    await flushMicrotasks()
+
+    expect(mockWriteText).toHaveBeenCalledWith('用 $resume-agent 按模板 asu-13 做一份简历')
+    expect(mockToastSuccess).toHaveBeenCalled()
+  })
+
+  it('navigates directly to /workspace/new?template=xxx for anonymous trial', async () => {
+    await act(async () => {
+      root.render(<TemplatesPage />)
+    })
+    await flushMicrotasks()
+
+    const asuCard = container.querySelector('[data-testid="template-card-asu-tech"]') as HTMLElement
+    const tryBtn = Array.from(asuCard.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('在线体验'),
+    ) as HTMLButtonElement
+
+    await act(async () => {
+      tryBtn.click()
+    })
+
+    expect(mockNavigate).toHaveBeenCalledWith('/workspace/new?template=asu-tech')
+  })
+
+  it('filters templates and imports local resume.json to preview and apply locally', async () => {
+    mockSaveResume.mockResolvedValue({ id: 'local_imported_1' })
+
+    await act(async () => {
+      root.render(<TemplatesPage />)
+    })
+    await flushMicrotasks()
+
+    // Filter to LaTeX only
+    const latexTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+      el.textContent?.includes('LaTeX'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      latexTab.click()
+    })
+    expect(container.querySelectorAll('[data-testid^="template-card-"]')).toHaveLength(1)
+
+    // Switch back to all
+    const allTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+      el.textContent?.includes('全部模板'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      allTab.click()
+    })
+
+    // Simulate local resume.json import
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    const payload = JSON.stringify({
+      basic: { name: '李四', title: 'AI 工程师', email: 'lisi@example.com', phone: '13900001111' },
+      education: [{ id: 'e1', school: '清华大学', major: '计算机', degree: '硕士', startDate: '2021-09', endDate: '2024-06' }],
+    })
+    const fakeFile = { text: async () => payload } as unknown as File
+    Object.defineProperty(fileInput, 'files', { value: [fakeFile], configurable: true })
+
+    await act(async () => {
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await flushMicrotasks()
+
+    expect(container.textContent).toContain('李四')
+
+    // Apply imported resume with asu-05 into local browser workspace
+    const card05 = container.querySelector('[data-testid="template-card-asu-05"]') as HTMLElement
+    const applyBtn = Array.from(card05.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('套用模板'),
+    ) as HTMLButtonElement
+
+    await act(async () => {
+      applyBtn.click()
+    })
+    await flushMicrotasks()
+
+    expect(mockSaveResume).toHaveBeenCalledTimes(1)
+    const savedArg = mockSaveResume.mock.calls[0][0]
+    expect(savedArg.templateType).toBe('html')
+    expect(savedArg.templateId).toBe('asu-05')
+    expect((savedArg.globalSettings?.builderSettings as { template?: string })?.template).toBe('asu-05')
+    expect(mockSetCurrentResumeId).toHaveBeenCalledWith('local_imported_1')
+    expect(mockNavigate).toHaveBeenCalledWith('/workspace/local_imported_1')
+  })
+
+  it('applyRequestedTemplate and parseImportedResumeJson handle html, default latex, and invalid JSON', () => {
+    const htmlApplied = applyRequestedTemplate(structuredClone(DEFAULT_RESUME_TEMPLATE), 'asu-tech')
+    expect(htmlApplied.templateType).toBe('html')
+    expect(htmlApplied.templateId).toBe('asu-tech')
+    expect((htmlApplied.globalSettings?.builderSettings as { template?: string })?.template).toBe('asu-tech')
+
+    const latexApplied = applyRequestedTemplate(htmlApplied, 'default')
+    expect(latexApplied.templateType).toBe('latex')
+    expect(latexApplied.templateId).toBe('default')
+
+    const classicHtml = applyRequestedTemplate(structuredClone(DEFAULT_RESUME_TEMPLATE), 'html-classic')
+    expect(classicHtml.templateType).toBe('html')
+    expect(classicHtml.templateId).toBe('html-classic')
+    expect((classicHtml.globalSettings?.builderSettings as { template?: string })?.template).toBe('swiss-single')
+
+    expect(() => parseImportedResumeJson('not-json')).toThrow('JSON 解析失败')
+    expect(() => parseImportedResumeJson('{}')).toThrow('缺少 basic 或 education 字段')
+  })
+})

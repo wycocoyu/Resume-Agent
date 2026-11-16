@@ -5,6 +5,12 @@
  */
 import type { ResumeData } from '../pages/Workspace/v2/types'
 import { DEFAULT_RESUME_TEMPLATE } from './defaultTemplate'
+import {
+  applyTemplatePreset,
+  TEMPLATE_OPTIONS,
+  withSettingsDefaults,
+  type TemplateType as BuilderTemplateType,
+} from '../pages/Builder/settings'
 
 export type TemplateType = 'latex' | 'html'
 
@@ -222,5 +228,94 @@ export function getAllTemplates(): TemplateMetadata[] {
  */
 export function getTemplateMetadata(templateId: string): TemplateMetadata | null {
   return TEMPLATE_METADATA.find(t => t.id === templateId) || null
+}
+
+const VALID_BUILDER_TEMPLATES = new Set<BuilderTemplateType>(TEMPLATE_OPTIONS.map((t) => t.id))
+
+/**
+ * 将模板广场 / CLI 的模板 ID 映射为 Builder 预览模板 ID
+ */
+export function resolveBuilderTemplateType(templateId?: string | null): BuilderTemplateType {
+  if (!templateId || templateId === 'default') return 'latex'
+  if (templateId === 'html-classic') return 'swiss-single'
+  if (VALID_BUILDER_TEMPLATES.has(templateId as BuilderTemplateType)) {
+    return templateId as BuilderTemplateType
+  }
+  return 'asu-tech'
+}
+
+/**
+ * 在 ResumeData 上应用指定模板（统一供 /templates 与 /workspace/new?template=xxx 复用）
+ */
+export function applyRequestedTemplate(data: ResumeData, templateId?: string | null): ResumeData {
+  if (!templateId) return data
+  if (templateId === 'default') {
+    return {
+      ...data,
+      templateId: 'default',
+      templateType: 'latex',
+    }
+  }
+  const builderTemplate = resolveBuilderTemplateType(templateId)
+  const currentSettings = withSettingsDefaults(data.globalSettings?.builderSettings)
+  return {
+    ...data,
+    templateId,
+    templateType: 'html',
+    globalSettings: {
+      ...data.globalSettings,
+      builderSettings: applyTemplatePreset(currentSettings, builderTemplate) as unknown as Record<string, unknown>,
+    },
+  }
+}
+
+/**
+ * 解析并校验本地导入的 resume.json，缺省字段用默认模板补齐结构
+ */
+export function parseImportedResumeJson(rawText: string): ResumeData {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(rawText)
+  } catch {
+    throw new Error('JSON 解析失败，请确认上传的是有效的 resume.json 文件')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('无效的简历 JSON 结构')
+  }
+  const obj = parsed as Record<string, unknown>
+  const hasBasic = obj.basic && typeof obj.basic === 'object' && !Array.isArray(obj.basic)
+  const hasEdu = Array.isArray(obj.education)
+  if (!hasBasic && !hasEdu) {
+    throw new Error('无效的简历 JSON：缺少 basic 或 education 字段')
+  }
+  const base = structuredClone(DEFAULT_RESUME_TEMPLATE)
+  const rawBasic = hasBasic ? (obj.basic as Record<string, unknown>) : {}
+  return {
+    ...base,
+    ...(obj as Partial<ResumeData>),
+    id: typeof obj.id === 'string' && obj.id.trim() ? obj.id : `resume_${Date.now()}`,
+    title: typeof obj.title === 'string' && obj.title.trim()
+      ? obj.title
+      : (typeof rawBasic.name === 'string' && rawBasic.name.trim() ? `${rawBasic.name}的简历` : base.title),
+    basic: {
+      ...base.basic,
+      ...(rawBasic as Partial<ResumeData['basic']>),
+    },
+    education: Array.isArray(obj.education) ? (obj.education as ResumeData['education']) : [],
+    workExperience: Array.isArray(obj.workExperience) ? (obj.workExperience as ResumeData['workExperience']) : [],
+    experience: Array.isArray(obj.experience) ? (obj.experience as ResumeData['experience']) : [],
+    projects: Array.isArray(obj.projects) ? (obj.projects as ResumeData['projects']) : [],
+    openSource: Array.isArray(obj.openSource) ? (obj.openSource as ResumeData['openSource']) : [],
+    awards: Array.isArray(obj.awards) ? (obj.awards as ResumeData['awards']) : [],
+    menuSections: Array.isArray(obj.menuSections) && obj.menuSections.length > 0
+      ? (obj.menuSections as ResumeData['menuSections'])
+      : base.menuSections,
+    globalSettings: {
+      ...base.globalSettings,
+      ...(obj.globalSettings && typeof obj.globalSettings === 'object'
+        ? (obj.globalSettings as ResumeData['globalSettings'])
+        : {}),
+    },
+  }
 }
 
