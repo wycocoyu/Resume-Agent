@@ -26,6 +26,7 @@ from typing import Any
 import urllib.error
 import urllib.request
 
+sys.dont_write_bytecode = True
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
@@ -481,9 +482,18 @@ def _delegate_render_if_available(args: argparse.Namespace) -> dict[str, Any] | 
         return None
     if proc.returncode != 0:
         err = payload.get("error") if isinstance(payload, dict) else {}
+        err_code = str(err.get("code") or "")
+        err_msg = str(err.get("message") or "Render failed")
+        lower_msg = err_msg.lower()
+        if (
+            err_code in {"usage_error", "invalid_argument"}
+            or "no such option" in lower_msg
+            or "unsupported output extension" in lower_msg
+        ):
+            return None
         raise LocalToolError(
-            str(err.get("message") or "Render failed"),
-            code=str(err.get("code") or "render_failed"),
+            err_msg,
+            code=err_code or "render_failed",
             exit_code=proc.returncode,
             extra={k: v for k, v in payload.items() if k not in {"ok", "error"}} if isinstance(payload, dict) else {},
         )

@@ -487,3 +487,52 @@ def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -
     assert tex_payload["error"]["code"] == "xelatex_not_found"
     assert "--template asu-tech" in tex_payload.get("fallback_hint", "")
 
+
+def test_cococv_local_falls_back_when_global_cli_lacks_png_flags(tmp_path: Path) -> None:
+    """If an outdated `cococv` on PATH returns usage_error/invalid_argument for --png, fall back cleanly."""
+    import shutil
+
+    scripts_dst = tmp_path / "skill" / "scripts"
+    shutil.copytree(COMMITTED_SKILL / "scripts", scripts_dst)
+    local_script = scripts_dst / "cococv_local.py"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_cli = fake_bin / "cococv"
+    fake_cli.write_text(
+        "#!/bin/sh\n"
+        'echo \'{"ok": false, "error": {"code": "usage_error", "message": "No such option: --png"}}\'\n'
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    fake_cli.chmod(0o755)
+
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    resume_path = work_dir / "resume.json"
+    subprocess.run(
+        [sys.executable, str(local_script), "init", "-o", str(resume_path), "--title", "降级测试"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Run render -o out.html (no --png) and render -o out.html --png via mocked outdated PATH CLI
+    # Wait: test render -o out.html --png with a fake Chrome path? Instead verify _delegate_render_if_available directly
+    probe_code = (
+        f"import argparse, sys; sys.path.insert(0, {str(scripts_dst)!r}); "
+        "import cococv_local; "
+        "ns = argparse.Namespace(file='r.json', output='out.pdf', template='asu-tech', engine=None, "
+        "png=True, dpi=150, no_print_background=False, force=False); "
+        "print('DELEGATED:', cococv_local._delegate_render_if_available(ns))"
+    )
+    res = subprocess.run(
+        [sys.executable, "-c", probe_code],
+        cwd=str(work_dir),
+        env={"PATH": str(fake_bin), "HOME": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode == 0, res.stderr
+    assert "DELEGATED: None" in res.stdout
+

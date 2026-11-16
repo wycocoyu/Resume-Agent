@@ -30,6 +30,21 @@ python3 scripts/cococv_local.py env --json
 
 ## Standard Workflow
 
+### End-to-End Flow & Expected Outcome Matrix
+
+1. Run `python3 scripts/cococv_local.py env --json` with zero upfront login or token setup.
+2. Initialize or update `resume.json` locally and validate strictly before rendering (`init` -> edit -> `validate`).
+3. Let the user pick local output format (**HTML** / **PNG images** / **PDF** / **PDF + PNG**), falling back automatically from `cococv` CLI to `scripts/cococv_local.py` on bare Python machines.
+4. Visually inspect generated `.png` previews to catch 2-3 line page overflow or sparse whitespace.
+5. Keep all artifacts on local disk by default, and remind the user they can open the Web workspace on demand (`resume.json` manual import or explicit 60-minute `handoff` URL) for drag-and-drop editing, cloud backup, or cloud `XeLaTeX`.
+
+| Scenario / User Choice | Required Environment | Local Output | Login Needed |
+| --- | --- | --- | --- |
+| Local HTML preview (`-o resume.html`) | Bare Python 3.10+ only | Self-contained `.html` (browser `Cmd/Ctrl+P` PDF) | No (stays local) |
+| Preview images (`-o resume.png`) | Chrome/Edge (or `PyMuPDF` + `XeLaTeX`) | Per-page `.png` (`-page-N.png` when multipage) | No (stays local) |
+| Direct PDF (`-o resume.pdf`, optional `--png`) | Chrome/Edge CDP or local `xelatex` | A4 `.pdf` (plus `.png` previews with `--png`) | No (stays local) |
+| Cloud `XeLaTeX` / Web UI continuation | Network opt-in via `handoff` | 60-min `/share/<id>` URL -> local edit or cloud save | Only in browser if saving/compiling in cloud |
+
 ### 1. Probe Output Preference & Initialize JSON
 
 Ask or confirm which deliverable format the user prefers (defaulting to local **HTML** on bare environments, or **HTML / PNG / PDF / images + PDF** when Chrome or XeLaTeX is available):
