@@ -335,7 +335,7 @@ describe('TemplatesPage & template helpers', () => {
     await flushMicrotasks()
 
     const defaultCard = container.querySelector('[data-testid="template-card-default"]') as HTMLElement
-    expect(defaultCard.textContent).toContain('XeLaTeX · 建议在线')
+    expect(defaultCard.textContent).toContain('XeLaTeX · 网站云端编译')
 
     const defaultCopyBtn = Array.from(defaultCard.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('复制口令'),
@@ -352,8 +352,8 @@ describe('TemplatesPage & template helpers', () => {
     })
     const banner = container.querySelector('[data-testid="latex-remote-first-banner"]') as HTMLElement
     expect(banner).not.toBeNull()
-    expect(banner.textContent).toContain('一般建议直接在网页端在线生成')
-    expect(banner.textContent).toContain('网页链接')
+    expect(banner.textContent).toContain('直接用我们网站的云端编译环境最省事')
+    expect(banner.textContent).toContain('云端编译环境')
 
     const closeBtn = container.querySelector('button[aria-label="关闭预览"]') as HTMLButtonElement
     await act(async () => {
