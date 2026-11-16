@@ -147,6 +147,7 @@ data/conversations/
 
 # --- 真实用户数据（对话记录、上传内容等）---
 backend/data/conversations/
+backend/data/shares/
 
 # --- 服务器远程工具（含 SSH 连接信息；symlink → internal）---
 remote

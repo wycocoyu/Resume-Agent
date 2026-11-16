@@ -195,10 +195,12 @@ def validate_cmd(
         stdout_stream.flush()
 
 
+from backend.cli.handoff_cmd import register_handoff_command
 from backend.cli.render_cmd import register_render_command
 from backend.cli.skill_cmd import register_skill_commands
 from backend.cli.sync_cmd import register_sync_commands
 
+register_handoff_command(app, get_output_context)
 register_render_command(app, get_output_context)
 register_sync_commands(app, get_output_context)
 register_skill_commands(app, get_output_context)

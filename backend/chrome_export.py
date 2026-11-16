@@ -79,24 +79,30 @@ def find_chrome_executable() -> Path | None:
     return None
 
 
-def export_html_to_pdf(
+def _atomic_write_bytes(output_path: Path, data: bytes) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dst = output_path.with_name(f".{output_path.name}.tmp")
+    tmp_dst.write_bytes(data)
+    tmp_dst.replace(output_path)
+
+
+def _run_headless_chrome(
+    *,
     html_content: str,
     output_path: Path,
-    print_background: bool = True,
-    timeout: float = 30.0,
+    temp_out_name: str,
+    chrome_args: list[str],
+    magic_prefix: bytes,
+    magic_error_msg: str,
+    timeout: float,
 ) -> bytes:
-    """Export self-contained HTML content to an A4 PDF using headless Chrome.
-
-    Raises:
-        CLIError: with code 'chrome_not_found' when Chrome binary is missing.
-        CLIError: with code 'chrome_timeout' or 'chrome_export_failed' on subprocess failure.
-    """
+    """Shared headless Chrome runner for PDF and PNG exports."""
     from backend.cli.errors import CLIError
 
     chrome_bin = find_chrome_executable()
     if chrome_bin is None:
         raise CLIError(
-            "Google Chrome or Chromium executable is required for HTML CDP PDF export but was not found on your system. "
+            "Google Chrome or Chromium executable is required for HTML CDP export but was not found on your system. "
             "Please install Google Chrome or set the CHROME_BIN environment variable.",
             code="chrome_not_found",
             extra={"command": "render", "output": str(output_path)},
@@ -105,18 +111,16 @@ def export_html_to_pdf(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         temp_html = temp_dir_path / "resume.html"
-        temp_pdf = temp_dir_path / "resume.pdf"
-
+        temp_out = temp_dir_path / temp_out_name
         temp_html.write_text(html_content, encoding="utf-8")
 
         cmd = [
             str(chrome_bin),
             "--headless=new",
             "--disable-gpu",
-            "--no-pdf-header-footer",
             "--no-sandbox",
             "--disable-dev-shm-usage",
-            f"--print-to-pdf={temp_pdf}",
+            *[arg.format(out=temp_out) for arg in chrome_args],
             str(temp_html),
         ]
 
@@ -129,31 +133,72 @@ def export_html_to_pdf(
             )
         except subprocess.TimeoutExpired as exc:
             raise CLIError(
-                f"Headless Chrome PDF export timed out after {timeout} seconds",
+                f"Headless Chrome export timed out after {timeout} seconds",
                 code="chrome_timeout",
                 extra={"command": "render", "output": str(output_path)},
             ) from exc
 
-        if not temp_pdf.is_file() or temp_pdf.stat().st_size == 0:
-            err_msg = res.stderr.decode("utf-8", errors="replace").strip() or "No output PDF generated"
+        if not temp_out.is_file() or temp_out.stat().st_size == 0:
+            err_msg = res.stderr.decode("utf-8", errors="replace").strip() or f"No output {temp_out_name} generated"
             raise CLIError(
-                f"Headless Chrome failed to generate PDF: {err_msg}",
+                f"Headless Chrome failed to generate {temp_out_name}: {err_msg}",
                 code="chrome_export_failed",
                 extra={"command": "render", "output": str(output_path), "exit_code": res.returncode},
             )
 
-        pdf_bytes = temp_pdf.read_bytes()
-        if not pdf_bytes.startswith(b"%PDF-"):
+        out_bytes = temp_out.read_bytes()
+        if not out_bytes.startswith(magic_prefix):
             raise CLIError(
-                "Headless Chrome generated an invalid PDF document (corrupt header).",
+                magic_error_msg,
                 code="chrome_export_failed",
                 extra={"command": "render", "output": str(output_path)},
             )
 
-        # Write to destination atomically
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_dst = output_path.with_name(f".{output_path.name}.tmp")
-        tmp_dst.write_bytes(pdf_bytes)
-        tmp_dst.replace(output_path)
+        _atomic_write_bytes(output_path, out_bytes)
+        return out_bytes
 
-        return pdf_bytes
+
+def export_html_to_pdf(
+    html_content: str,
+    output_path: Path,
+    print_background: bool = True,
+    timeout: float = 30.0,
+) -> bytes:
+    """Export self-contained HTML content to an A4 PDF using headless Chrome.
+
+    Raises:
+        CLIError: with code 'chrome_not_found' when Chrome binary is missing.
+        CLIError: with code 'chrome_timeout' or 'chrome_export_failed' on subprocess failure.
+    """
+    return _run_headless_chrome(
+        html_content=html_content,
+        output_path=output_path,
+        temp_out_name="resume.pdf",
+        chrome_args=["--no-pdf-header-footer", "--print-to-pdf={out}"],
+        magic_prefix=b"%PDF-",
+        magic_error_msg="Headless Chrome generated an invalid PDF document (corrupt header).",
+        timeout=timeout,
+    )
+
+
+def export_html_to_png(
+    html_content: str,
+    output_path: Path,
+    width: int = 794,
+    height: int = 1123,
+    timeout: float = 30.0,
+) -> bytes:
+    """Export self-contained HTML content to an A4-proportioned PNG screenshot via headless Chrome."""
+    return _run_headless_chrome(
+        html_content=html_content,
+        output_path=output_path,
+        temp_out_name="resume.png",
+        chrome_args=[
+            "--hide-scrollbars",
+            f"--window-size={width},{height}",
+            "--screenshot={out}",
+        ],
+        magic_prefix=b"\x89PNG\r\n\x1a\n",
+        magic_error_msg="Headless Chrome generated an invalid PNG image (corrupt header).",
+        timeout=timeout,
+    )

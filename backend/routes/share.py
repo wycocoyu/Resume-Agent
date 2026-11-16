@@ -2,14 +2,19 @@
 分享简历的 API 路由
 提供生成分享链接和查看分享简历的功能
 """
-import uuid
+from collections.abc import MutableMapping
+from datetime import datetime, timedelta
 import json
 import os
-from datetime import datetime, timedelta
+from pathlib import Path
+import re
+import secrets
+import tempfile
+from typing import Any, Dict, Iterator, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
 from loguru import logger
+from pydantic import BaseModel, Field
 
 try:
     from backend.api_docs import is_production_env
@@ -24,8 +29,110 @@ except ImportError:
 # 与其他接口保持一致，使用 /api 前缀
 router = APIRouter(prefix="/api/resume", tags=["Resume Share"])
 
-# 使用内存存储（生产环境请替换为数据库/Redis）
-share_store: Dict[str, Dict[str, Any]] = {}
+MAX_SHARE_PAYLOAD_BYTES = 512 * 1024
+_SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_share_store_dir() -> Path:
+    env_dir = (os.getenv("SHARE_STORE_DIR") or "").strip()
+    if env_dir:
+        return Path(env_dir)
+    docker_data = Path("/app/data")
+    if docker_data.is_dir():
+        return docker_data / "shares"
+    return _REPO_ROOT / "backend" / "data" / "shares"
+
+
+class DiskShareStore(MutableMapping[str, Dict[str, Any]]):
+    """Cross-worker file-backed share store with atomic writes and strict key validation."""
+
+    def _base_dir(self) -> Path:
+        return _resolve_share_store_dir()
+
+    def _validate_key(self, key: str) -> str:
+        if not isinstance(key, str) or not _SHARE_ID_RE.fullmatch(key):
+            raise KeyError(key)
+        return key
+
+    def _entry_path(self, key: str) -> Path:
+        valid_key = self._validate_key(key)
+        return self._base_dir() / f"{valid_key}.json"
+
+    def __getitem__(self, key: str) -> Dict[str, Any]:
+        path = self._entry_path(key)
+        if not path.is_file():
+            raise KeyError(key)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise KeyError(key) from exc
+        if not isinstance(payload, dict):
+            raise KeyError(key)
+        return payload
+
+    def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
+        path = self._entry_path(key)
+        base = path.parent
+        base.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps(value, ensure_ascii=False)
+        fd, tmp_name = tempfile.mkstemp(prefix=".share_", suffix=".tmp", dir=str(base))
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(encoded)
+                fh.flush()
+            os.replace(tmp_path, path)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+
+    def __delitem__(self, key: str) -> None:
+        path = self._entry_path(key)
+        if not path.is_file():
+            raise KeyError(key)
+        path.unlink(missing_ok=True)
+
+    def __iter__(self) -> Iterator[str]:
+        base = self._base_dir()
+        if not base.is_dir():
+            return iter(())
+        keys = [
+            p.stem
+            for p in sorted(base.glob("*.json"))
+            if _SHARE_ID_RE.fullmatch(p.stem)
+        ]
+        return iter(keys)
+
+    def __len__(self) -> int:
+        base = self._base_dir()
+        if not base.is_dir():
+            return 0
+        return sum(1 for p in base.glob("*.json") if _SHARE_ID_RE.fullmatch(p.stem))
+
+    def clear(self) -> None:
+        base = self._base_dir()
+        if not base.is_dir():
+            return
+        for path in base.glob("*.json"):
+            if _SHARE_ID_RE.fullmatch(path.stem):
+                path.unlink(missing_ok=True)
+
+
+def _prune_expired_shares(store: MutableMapping[str, Dict[str, Any]]) -> None:
+    now = datetime.now()
+    for sid in list(store.keys()):
+        try:
+            record = store[sid]
+            exp = record.get("expires_at")
+            if isinstance(exp, str) and now > datetime.fromisoformat(exp):
+                del store[sid]
+        except (KeyError, ValueError, TypeError):
+            continue
+
+
+# 跨 worker 共享的磁盘持久化存储（避免 --workers 2 进程间 404）
+share_store: MutableMapping[str, Dict[str, Any]] = DiskShareStore()
 
 # 获取前端域名（从环境变量读取，默认为生产环境域名）
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://cococv.cn")
@@ -37,6 +144,7 @@ class ShareResumeRequest(BaseModel):
     resume_data: Dict[str, Any]
     resume_name: str
     expire_days: int = Field(default=30, ge=1, le=365)  # 默认 30 天后过期
+    expire_minutes: Optional[int] = Field(default=None, ge=1, le=10080)
 
 
 class ShareResumeResponse(BaseModel):
@@ -51,11 +159,22 @@ async def create_share_link(request: ShareResumeRequest):
     """
     生成分享链接
     """
-    # 生成唯一 ID
-    share_id = str(uuid.uuid4())[:8]
+    payload_bytes = len(json.dumps(request.resume_data, ensure_ascii=False).encode("utf-8"))
+    if payload_bytes > MAX_SHARE_PAYLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="简历体积超出临时同步上限（512KB）")
 
-    # 计算过期时间
-    expires_at = datetime.now() + timedelta(days=request.expire_days)
+    _prune_expired_shares(share_store)
+
+    # 生成高熵 URL 安全 ID
+    share_id = secrets.token_urlsafe(9)
+
+    # 计算过期时间（CLI handoff 可传分钟级 TTL）
+    delta = (
+        timedelta(minutes=request.expire_minutes)
+        if request.expire_minutes is not None
+        else timedelta(days=request.expire_days)
+    )
+    expires_at = datetime.now() + delta
 
     # 存储分享数据
     share_store[share_id] = {
@@ -66,14 +185,11 @@ async def create_share_link(request: ShareResumeRequest):
         "views": 0,
     }
 
-    # 分享链接配置（根据环境变量动态设置）
-    # 开发环境：http://localhost:5173/share/{share_id}
-    # 生产环境：从环境变量 FRONTEND_URL 读取
-    share_url = f"{FRONTEND_URL}/share/{share_id}"
+    frontend_base = (os.getenv("FRONTEND_URL") or FRONTEND_URL).rstrip("/")
+    share_url = f"{frontend_base}/share/{share_id}"
 
     logger.info(f"[Share] 创建分享链接: share_id={share_id}, name={request.resume_name}")
     logger.info(f"[Share] 生成的链接: {share_url}")
-    logger.info(f"[Share] 当前存储的所有 share_id: {list(share_store.keys())}")
 
     return ShareResumeResponse(
         share_url=share_url,
@@ -86,13 +202,12 @@ async def create_share_link(request: ShareResumeRequest):
 async def get_shared_resume(share_id: str):
     """获取分享的简历"""
     logger.info(f"[Share] 访问分享链接: share_id={share_id}")
-    logger.info(f"[Share] 当前存储的所有 share_id: {list(share_store.keys())}")
-    
-    if share_id not in share_store:
+
+    try:
+        share_data = share_store[share_id]
+    except KeyError:
         logger.warning(f"[Share] 分享链接不存在: share_id={share_id}")
         raise HTTPException(status_code=404, detail="分享链接不存在或已过期")
-
-    share_data = share_store[share_id]
 
     # 检查是否过期
     expires_at = datetime.fromisoformat(share_data["expires_at"])
@@ -101,8 +216,9 @@ async def get_shared_resume(share_id: str):
         del share_store[share_id]
         raise HTTPException(status_code=404, detail="分享链接已过期")
 
-    # 增加浏览次数
-    share_data["views"] += 1
+    # 增加浏览次数并持久化
+    share_data["views"] = int(share_data.get("views", 0)) + 1
+    share_store[share_id] = share_data
     logger.info(f"[Share] 获取成功: share_id={share_id}, views={share_data['views']}")
 
     return {

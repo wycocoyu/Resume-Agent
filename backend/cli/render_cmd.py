@@ -104,22 +104,91 @@ def _resolve_cli_photo(
     return "__cli_local_photo__", (ext, raw_bytes)
 
 
-def _atomic_write_pdf(output: Path, pdf_bytes: bytes) -> None:
+def _atomic_write_bytes(output: Path, raw_bytes: bytes, *, prefix: str = ".resume_agent_out_") -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
-        prefix=".resume_agent_pdf_",
+        prefix=prefix,
         suffix=".tmp",
         dir=str(output.parent),
     )
     tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "wb") as fh:
-            fh.write(pdf_bytes)
+            fh.write(raw_bytes)
             fh.flush()
         os.replace(tmp_path, output)
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
+
+
+def _import_fitz():
+    try:
+        import pymupdf as fitz_mod  # type: ignore[import-not-found]
+
+        return fitz_mod
+    except ImportError:
+        try:
+            import fitz as fitz_mod  # type: ignore[import-not-found]
+
+            return fitz_mod
+        except ImportError:
+            return None
+
+
+def render_pdf_bytes_to_pngs(
+    pdf_bytes: bytes,
+    output: Path,
+    *,
+    dpi: int = 150,
+    single_primary: bool = True,
+    force: bool = False,
+) -> list[Path]:
+    """Rasterize PDF pages into PNG preview files via PyMuPDF."""
+    fitz_mod = _import_fitz()
+    if fitz_mod is None:
+        raise CLIError(
+            "PyMuPDF is required to render PNG page previews.",
+            code="pymupdf_not_found",
+            extra={"command": "render", "output": str(output)},
+        )
+
+    scale = dpi / 72.0
+    matrix = fitz_mod.Matrix(scale, scale)
+    with fitz_mod.open(stream=pdf_bytes, filetype="pdf") as doc:
+        if doc.page_count < 1:
+            raise CLIError(
+                "Rendered PDF contains 0 pages.",
+                code="render_failed",
+                extra={"command": "render", "output": str(output)},
+            )
+        png_pages = [
+            doc[idx].get_pixmap(matrix=matrix, alpha=False).tobytes("png")
+            for idx in range(doc.page_count)
+        ]
+
+    if single_primary and len(png_pages) == 1:
+        _atomic_write_bytes(output, png_pages[0], prefix=".resume_agent_png_")
+        return [output]
+
+    sidecar_paths = [
+        output.with_name(f"{output.stem}-page-{idx}.png")
+        for idx in range(1, len(png_pages) + 1)
+    ]
+    if not force:
+        for path in sidecar_paths:
+            if path.exists():
+                raise CLIError(
+                    f"Target preview file already exists: {path} (use --force to overwrite)",
+                    code="file_exists",
+                    extra={"command": "render", "output": str(path)},
+                )
+
+    if single_primary:
+        _atomic_write_bytes(output, png_pages[0], prefix=".resume_agent_png_")
+    for path, page_bytes in zip(sidecar_paths, png_pages):
+        _atomic_write_bytes(path, page_bytes, prefix=".resume_agent_png_")
+    return sidecar_paths
 
 
 def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
@@ -131,7 +200,7 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             ...,
             "-o",
             "--output",
-            help="Output PDF or HTML file path.",
+            help="Output PDF, HTML, or PNG file path.",
         ),
         template: str = typer.Option(
             "default",
@@ -142,6 +211,19 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             None,
             "--engine",
             help="Rendering engine ('latex' or 'html').",
+        ),
+        png: bool = typer.Option(
+            False,
+            "--png",
+            "--images",
+            help="Also emit per-page PNG preview images alongside output.",
+        ),
+        dpi: int = typer.Option(
+            150,
+            "--dpi",
+            min=72,
+            max=300,
+            help="PNG preview resolution in DPI.",
         ),
         print_background: bool = typer.Option(
             True,
@@ -169,15 +251,16 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             help="Emit a single machine-readable JSON object on stdout.",
         ),
     ) -> None:
-        """Render a ResumeData JSON file to PDF or HTML via local XeLaTeX or Headless Chrome CDP."""
+        """Render a ResumeData JSON file to PDF, HTML, or PNG via local XeLaTeX or Headless Chrome CDP."""
         json_mode, stdout_stream = get_output_context(ctx, json_output)
         offline = not online
         warnings: list[str] = []
+        page_paths: list[Path] = []
 
         ext = output.suffix.lower()
-        if ext not in {".pdf", ".html"}:
+        if ext not in {".pdf", ".html", ".png"}:
             raise CLIError(
-                f"Unsupported output extension '{ext}': expected .pdf or .html",
+                f"Unsupported output extension '{ext}': expected .pdf, .html, or .png",
                 code="invalid_argument",
                 extra={"command": "render", "input": str(file), "output": str(output)},
             )
@@ -188,6 +271,14 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                 code="file_exists",
                 extra={"command": "render", "input": str(file), "output": str(output), "warnings": warnings},
             )
+        if png and ext != ".png":
+            first_sidecar = output.with_name(f"{output.stem}-page-1.png")
+            if first_sidecar.exists() and not force:
+                raise CLIError(
+                    f"Target preview file already exists: {first_sidecar} (use --force to overwrite)",
+                    code="file_exists",
+                    extra={"command": "render", "input": str(file), "output": str(first_sidecar), "warnings": warnings},
+                )
 
         raw_data, _, issues, io_or_syntax_err = load_and_validate_resume_file(file)
         if io_or_syntax_err and not issues:
@@ -246,16 +337,40 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                 )
                 if ext == ".html":
                     html_bytes = html_content.encode("utf-8")
-                    output.parent.mkdir(parents=True, exist_ok=True)
-                    output.write_bytes(html_bytes)
+                    _atomic_write_bytes(output, html_bytes, prefix=".resume_agent_html_")
                     result_bytes = len(html_bytes)
-                else:
+                    if png:
+                        with tempfile.TemporaryDirectory() as tmp_dir:
+                            pdf_bytes = export_html_to_pdf(
+                                html_content,
+                                output_path=Path(tmp_dir) / "preview.pdf",
+                                print_background=print_background,
+                            )
+                        page_paths = render_pdf_bytes_to_pngs(
+                            pdf_bytes, output, dpi=dpi, single_primary=False, force=force
+                        )
+                elif ext == ".pdf":
                     pdf_bytes = export_html_to_pdf(
                         html_content,
                         output_path=output,
                         print_background=print_background,
                     )
                     result_bytes = len(pdf_bytes)
+                    if png:
+                        page_paths = render_pdf_bytes_to_pngs(
+                            pdf_bytes, output, dpi=dpi, single_primary=False, force=force
+                        )
+                else:
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        pdf_bytes = export_html_to_pdf(
+                            html_content,
+                            output_path=Path(tmp_dir) / "preview.pdf",
+                            print_background=print_background,
+                        )
+                    page_paths = render_pdf_bytes_to_pngs(
+                        pdf_bytes, output, dpi=dpi, single_primary=True, force=force
+                    )
+                    result_bytes = output.stat().st_size
             except CLIError:
                 raise
             except Exception as exc:
@@ -324,38 +439,57 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                 pdf_bytes = pdf_io.getvalue()
                 if not pdf_bytes.startswith(b"%PDF-"):
                     raise RuntimeError("Generated output is not a valid PDF document")
-                _atomic_write_pdf(output, pdf_bytes)
-                result_bytes = len(pdf_bytes)
+                if ext == ".pdf":
+                    _atomic_write_bytes(output, pdf_bytes, prefix=".resume_agent_pdf_")
+                    result_bytes = len(pdf_bytes)
+                    if png:
+                        page_paths = render_pdf_bytes_to_pngs(
+                            pdf_bytes, output, dpi=dpi, single_primary=False, force=force
+                        )
+                else:
+                    page_paths = render_pdf_bytes_to_pngs(
+                        pdf_bytes, output, dpi=dpi, single_primary=True, force=force
+                    )
+                    result_bytes = output.stat().st_size
+            except CLIError:
+                raise
             except Exception as exc:
                 deduped_warnings = list(dict.fromkeys(warnings))
+                extra: dict[str, Any] = {
+                    "command": "render",
+                    "input": str(file),
+                    "output": str(output),
+                    "offline": offline,
+                    "warnings": deduped_warnings,
+                }
+                if "xelatex" in str(exc).lower():
+                    extra["fallback_hint"] = (
+                        "Local XeLaTeX is unavailable. Use '--template asu-tech' for local HTML/Chrome rendering "
+                        "or run 'cococv handoff <file>' for Web cloud LaTeX rendering."
+                    )
                 raise CLIError(
                     str(exc),
                     code="render_failed",
-                    extra={
-                        "command": "render",
-                        "input": str(file),
-                        "output": str(output),
-                        "offline": offline,
-                        "warnings": deduped_warnings,
-                    },
+                    extra=extra,
                 ) from exc
 
         deduped_warnings = list(dict.fromkeys(warnings))
         if json_mode:
-            emit_json(
-                {
-                    "ok": True,
-                    "command": "render",
-                    "input": str(file),
-                    "output": str(output),
-                    "engine": resolved_engine,
-                    "template": template,
-                    "bytes": result_bytes,
-                    "offline": offline,
-                    "warnings": deduped_warnings,
-                },
-                stream=stdout_stream,
-            )
+            payload: dict[str, Any] = {
+                "ok": True,
+                "command": "render",
+                "input": str(file),
+                "output": str(output),
+                "engine": resolved_engine,
+                "template": template,
+                "bytes": result_bytes,
+                "offline": offline,
+                "warnings": deduped_warnings,
+            }
+            if page_paths:
+                payload["pages"] = [str(p) for p in page_paths]
+                payload["page_count"] = len(page_paths)
+            emit_json(payload, stream=stdout_stream)
         else:
             for warn in deduped_warnings:
                 sys.stderr.write(f"Warning: {warn}\n")
@@ -363,4 +497,6 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
             stdout_stream.write(
                 f"Rendered {output.suffix[1:].upper()} to {output} ({result_bytes} bytes, engine={resolved_engine}, offline={offline})\n"
             )
+            if page_paths:
+                stdout_stream.write(f"PNG previews ({len(page_paths)}): {', '.join(str(p) for p in page_paths)}\n")
             stdout_stream.flush()
