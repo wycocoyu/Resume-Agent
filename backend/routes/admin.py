@@ -10,12 +10,13 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sse_starlette.sse import EventSourceResponse
 
 from database import get_db
-from models import RenderPDFRequest
+from models import BetterAuthEntitlement, RenderPDFRequest, Resume
 from middleware.auth import AppUser, require_admin_only
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -27,15 +28,39 @@ class PDFRenderModeLogRequest(BaseModel):
     to_mode: str
 
 
+def _format_admin_user(
+    *,
+    user_id: str,
+    email: str | None,
+    name: str | None,
+    role: str | None,
+    created_at,
+    pdf_download_count: int | None,
+    resume_count: int | None,
+) -> dict:
+    return {
+        "id": user_id,
+        "username": name or (email.split("@")[0] if email else ""),
+        "email": email,
+        "role": role or "user",
+        "created_at": str(created_at) if created_at else None,
+        "pdf_download_count": int(pdf_download_count or 0),
+        "resume_count": int(resume_count or 0),
+    }
+
+
 @router.get("/stats/users")
 def get_user_stats(
     _current_user: AppUser = Depends(require_admin_only),
     db: Session = Depends(get_db),
 ):
-    # 以 BetterAuth "user" 表为准（所有登录用户），与用户列表口径一致。
-    from sqlalchemy import text
-
-    total_users = db.execute(text('SELECT count(*) FROM "user"')).scalar() or 0
+    # 以 BetterAuth "user" 表为准（所有登录用户），与用户列表口径一致；
+    # 无 BetterAuth "user" 表（如本地 SQLite）时回退到 BetterAuthEntitlement。
+    try:
+        total_users = db.execute(text('SELECT count(*) FROM "user"')).scalar() or 0
+    except SQLAlchemyError:
+        db.rollback()
+        total_users = db.query(BetterAuthEntitlement).count()
     return {
         "total_users": int(total_users),
     }
@@ -47,44 +72,73 @@ def list_users(
     db: Session = Depends(get_db),
 ):
     # 以 BetterAuth "user" 表为准（所有登录用户），role/pdf 从 entitlements 读（2026-07-17 身份统一，legacy users 已退役）。
-    from sqlalchemy import text
-
-    rows = db.execute(
-        text(
-            '''
-            SELECT bu.id,
-                   bu.email,
-                   bu.name,
-                   COALESCE(e.role, 'user')             AS role,
-                   bu."createdAt"                       AS created_at,
-                   COALESCE(e.pdf_download_count, 0)    AS pdf_download_count,
-                   COALESCE(rc.resume_count, 0)         AS resume_count
-            FROM "user" bu
-            LEFT JOIN better_auth_entitlements e ON e.better_auth_user_id = bu.id
-            LEFT JOIN (
-                SELECT user_id, COUNT(*) AS resume_count
-                FROM resumes
-                GROUP BY user_id
-            ) rc ON rc.user_id = bu.id
-            ORDER BY CASE COALESCE(e.role, 'user') WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,
-                     bu."createdAt" ASC
-            '''
-        )
-    ).fetchall()
-    return {
-        "total": len(rows),
-        "users": [
-            {
-                "id": r[0],
-                "username": r[2] or (r[1].split("@")[0] if r[1] else ""),
-                "email": r[1],
-                "role": r[3],
-                "created_at": str(r[4]) if r[4] else None,
-                "pdf_download_count": r[5],
-                "resume_count": r[6],
-            }
+    # 无 BetterAuth "user" 表（如本地 SQLite）时回退到 BetterAuthEntitlement + resumes 统计。
+    try:
+        rows = db.execute(
+            text(
+                '''
+                SELECT bu.id,
+                       bu.email,
+                       bu.name,
+                       COALESCE(e.role, 'user')             AS role,
+                       bu."createdAt"                       AS created_at,
+                       COALESCE(e.pdf_download_count, 0)    AS pdf_download_count,
+                       COALESCE(rc.resume_count, 0)         AS resume_count
+                FROM "user" bu
+                LEFT JOIN better_auth_entitlements e ON e.better_auth_user_id = bu.id
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) AS resume_count
+                    FROM resumes
+                    GROUP BY user_id
+                ) rc ON rc.user_id = bu.id
+                ORDER BY CASE COALESCE(e.role, 'user') WHEN 'admin' THEN 0 WHEN 'staff' THEN 1 WHEN 'member' THEN 2 ELSE 3 END,
+                         bu."createdAt" ASC
+                '''
+            )
+        ).fetchall()
+        users = [
+            _format_admin_user(
+                user_id=r[0],
+                email=r[1],
+                name=r[2],
+                role=r[3],
+                created_at=r[4],
+                pdf_download_count=r[5],
+                resume_count=r[6],
+            )
             for r in rows
-        ],
+        ]
+    except SQLAlchemyError:
+        db.rollback()
+        entitlements = db.query(BetterAuthEntitlement).all()
+        resume_counts = dict(
+            db.query(Resume.user_id, func.count(Resume.id))
+            .group_by(Resume.user_id)
+            .all()
+        )
+        role_rank = {"admin": 0, "staff": 1, "member": 2}
+        entitlements.sort(
+            key=lambda e: (
+                role_rank.get(e.role or "user", 3),
+                str(e.created_at or ""),
+            )
+        )
+        users = [
+            _format_admin_user(
+                user_id=e.better_auth_user_id,
+                email=e.email,
+                name=e.name,
+                role=e.role,
+                created_at=e.created_at,
+                pdf_download_count=e.pdf_download_count,
+                resume_count=resume_counts.get(e.better_auth_user_id, 0),
+            )
+            for e in entitlements
+        ]
+
+    return {
+        "total": len(users),
+        "users": users,
     }
 
 
@@ -100,28 +154,39 @@ def set_user_role(
     db: Session = Depends(get_db),
 ):
     """给指定 BetterAuth 用户分配角色（role 直写 better_auth_entitlements，2026-07-17 身份统一）。"""
-    from sqlalchemy import text
-
-    from models import BetterAuthEntitlement
-
     allowed = {"user", "member", "staff", "admin"}
     if body.role not in allowed:
         raise HTTPException(status_code=400, detail=f"role 必须是 {sorted(allowed)} 之一")
 
-    row = db.execute(
-        text('SELECT email, name FROM "user" WHERE id = :id'),
-        {"id": better_auth_user_id},
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    email, name = row[0], row[1]
+    user_table_available = True
+    email = None
+    name = None
+    try:
+        row = db.execute(
+            text('SELECT email, name FROM "user" WHERE id = :id'),
+            {"id": better_auth_user_id},
+        ).fetchone()
+    except SQLAlchemyError:
+        db.rollback()
+        user_table_available = False
+        row = None
+
+    if user_table_available:
+        if not row:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        email, name = row[0], row[1]
 
     entitlement = (
         db.query(BetterAuthEntitlement)
         .filter(BetterAuthEntitlement.better_auth_user_id == better_auth_user_id)
         .first()
     )
-    if entitlement:
+    if not user_table_available:
+        if not entitlement:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        entitlement.role = body.role
+        email = entitlement.email
+    elif entitlement:
         entitlement.role = body.role
     else:
         db.add(
@@ -291,7 +356,19 @@ async def _proxy_remote_pdf(
         return EventSourceResponse(_generate())
 
     async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-        upstream = await client.post(target_url, json=payload, headers=headers)
+        try:
+            upstream = await client.post(target_url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "[Admin PDF] remote render unreachable trace_id=%s target=%s error=%s",
+                request.headers.get("X-PDF-Trace-Id") or "-",
+                target_url,
+                exc,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"远程 PDF 渲染服务不可达: {exc}",
+            ) from exc
         logger.info(
             "[Admin PDF] remote response status=%s trace_id=%s content_type=%s",
             upstream.status_code,

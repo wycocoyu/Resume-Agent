@@ -6,10 +6,20 @@ import uuid
 import json
 import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional
 from loguru import logger
+
+try:
+    from backend.api_docs import is_production_env
+except ImportError:
+    from api_docs import is_production_env
+
+try:
+    from middleware.auth import AppUser, get_current_user_optional
+except ImportError:
+    from backend.middleware.auth import AppUser, get_current_user_optional
 
 # 与其他接口保持一致，使用 /api 前缀
 router = APIRouter(prefix="/api/resume", tags=["Resume Share"])
@@ -18,7 +28,7 @@ router = APIRouter(prefix="/api/resume", tags=["Resume Share"])
 share_store: Dict[str, Dict[str, Any]] = {}
 
 # 获取前端域名（从环境变量读取，默认为生产环境域名）
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://resume-agent-staging.pages.dev")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://cococv.cn")
 logger.info(f"[Share] FRONTEND_URL 配置: {FRONTEND_URL}")
 
 
@@ -26,7 +36,7 @@ class ShareResumeRequest(BaseModel):
     """分享简历请求"""
     resume_data: Dict[str, Any]
     resume_name: str
-    expire_days: int = 30  # 默认 30 天后过期
+    expire_days: int = Field(default=30, ge=1, le=365)  # 默认 30 天后过期
 
 
 class ShareResumeResponse(BaseModel):
@@ -105,8 +115,13 @@ async def get_shared_resume(share_id: str):
 
 
 @router.delete("/share/{share_id}")
-async def delete_share_link(share_id: str):
+async def delete_share_link(
+    share_id: str,
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
+):
     """删除分享链接"""
+    if is_production_env() and current_user is None:
+        raise HTTPException(status_code=401, detail="未提供有效的认证信息")
     if share_id not in share_store:
         raise HTTPException(status_code=404, detail="分享链接不存在")
 
@@ -115,8 +130,12 @@ async def delete_share_link(share_id: str):
 
 
 @router.get("/shares")
-async def list_share_links():
+async def list_share_links(
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
+):
     """列出所有分享链接"""
+    if is_production_env() and current_user is None:
+        raise HTTPException(status_code=401, detail="未提供有效的认证信息")
     shares = []
     for share_id, data in share_store.items():
         expires_at = datetime.fromisoformat(data["expires_at"])

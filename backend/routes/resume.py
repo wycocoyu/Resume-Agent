@@ -768,6 +768,8 @@ async def resume_health_check(body: HealthCheckRequest):
 
     try:
         raw = await asyncio.to_thread(call_llm, provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 

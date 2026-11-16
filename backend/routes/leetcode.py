@@ -49,9 +49,14 @@ def create_router(base_dir: str | Path | None = None) -> APIRouter:
 
     @router.post("/problems")
     async def create_problem(problem: dict):
-        if store.problem_exists(problem["slug"]):
+        raw_slug = problem.get("slug") if isinstance(problem, dict) else None
+        slug = raw_slug.strip() if isinstance(raw_slug, str) else ""
+        if not slug:
+            raise HTTPException(status_code=422, detail="Missing required field: slug")
+        if store.problem_exists(slug):
             raise HTTPException(status_code=409, detail="Problem already exists")
-        return store.save_problem(problem)
+        normalized = {**problem, "slug": slug} if problem.get("slug") != slug else problem
+        return store.save_problem(normalized)
 
     @router.put("/problems/{slug}")
     async def update_problem(slug: str, problem: dict):
@@ -87,7 +92,10 @@ def create_router(base_dir: str | Path | None = None) -> APIRouter:
 
     @router.post("/run")
     async def run_problem(payload: RunPayload, response: Response):
-        problem = store.get_problem(payload.slug)
+        try:
+            problem = store.get_problem(payload.slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         cases = [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in payload.testCases]
         result = runner.run_cases(problem, payload.code, cases)
         result["programRun"] = runner.run_raw_program(payload.code)
@@ -97,7 +105,10 @@ def create_router(base_dir: str | Path | None = None) -> APIRouter:
 
     @router.post("/submit")
     async def submit_problem(payload: SubmitPayload):
-        problem = store.get_problem(payload.slug)
+        try:
+            problem = store.get_problem(payload.slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         result = runner.submit_problem(problem, payload.code)
         record = {
             "id": f"sub_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",

@@ -5,6 +5,7 @@ ASR (Automatic Speech Recognition) 服务
 
 import io
 import logging
+import os
 from typing import Optional, Literal, List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -46,6 +47,10 @@ async def recognize_speech(
         识别结果
     """
     try:
+        asr_url = os.getenv("ASR_API_URL", "").strip()
+        if not asr_url:
+            raise HTTPException(status_code=503, detail="ASR 语音识别服务未配置")
+
         import aiohttp
 
         # 读取音频文件
@@ -62,10 +67,6 @@ async def recognize_speech(
                 detail=f"Audio file too large. Max size: {MAX_AUDIO_SIZE} bytes"
             )
 
-        # 使用 Vosk API（免费）
-        # API Key: 可选，Vosk 也提供免费层
-        # 参考: https://alphacep.v.com/api/speechrecognize
-
         async with aiohttp.ClientSession() as session:
             # 准备请求数据
             data = aiohttp.FormData()
@@ -73,19 +74,19 @@ async def recognize_speech(
             data.add_field('language', config.language)
 
             # 添加音频文件
-            audio_part = aiohttp.FormData()
-            audio_part.add_field('file', audio_data,
-                               filename=audio_file.filename,
-                               content_type=audio_file.content_type)
-            data.add_field(audio_part)
+            data.add_field(
+                "file",
+                audio_data,
+                filename=audio_file.filename or "audio.wav",
+                content_type=audio_file.content_type or "application/octet-stream",
+            )
 
             # 发送请求
-            url = "https://api.v.com/api/v2/speechrecognize"
             headers = {
-                "User-Agent": "Resume-Agent/1.0"
+                "User-Agent": "CocoCV/3.12.1"
             }
 
-            async with session.post(url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            async with session.post(asr_url, data=data, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status == 200:
                     result = await response.json()
 

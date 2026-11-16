@@ -19,6 +19,22 @@ DEFAULT_RESUME_DIR = Path("app/docs")
 DEFAULT_RESUME_FILE = "韦宇_简历.md"
 
 
+def _resolve_safe_resume_path(file_path: Optional[str]) -> Path:
+    """Resolve a resume markdown path strictly inside DEFAULT_RESUME_DIR."""
+    if file_path is None:
+        return DEFAULT_RESUME_DIR / DEFAULT_RESUME_FILE
+
+    candidate = Path(file_path)
+    if candidate.is_absolute() or ".." in candidate.parts or candidate.suffix.lower() != ".md":
+        raise HTTPException(status_code=400, detail="Invalid resume file path")
+
+    base_dir = DEFAULT_RESUME_DIR.resolve()
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid resume file path")
+    return resolved
+
+
 @router.get("/")  # 🔴 添加 /resume 端点，供前端获取简历数据
 async def get_resume_data() -> dict[str, Any]:
     """Get full resume data for frontend rendering.
@@ -71,10 +87,7 @@ async def get_resume_content(
     Raises:
         HTTPException: If file not found or cannot be read
     """
-    if file_path:
-        resume_path = Path(file_path)
-    else:
-        resume_path = DEFAULT_RESUME_DIR / DEFAULT_RESUME_FILE
+    resume_path = _resolve_safe_resume_path(file_path)
 
     if not resume_path.exists():
         raise HTTPException(
@@ -128,10 +141,7 @@ async def get_resume_section(
     Raises:
         HTTPException: If file not found or section not found
     """
-    if file_path:
-        resume_path = Path(file_path)
-    else:
-        resume_path = DEFAULT_RESUME_DIR / DEFAULT_RESUME_FILE
+    resume_path = _resolve_safe_resume_path(file_path)
 
     if not resume_path.exists():
         raise HTTPException(
@@ -179,7 +189,7 @@ async def get_resume_section(
 
 
 @router.get("/list")
-async def list_resumes() -> dict[str, list[dict[str, str]]]:
+async def list_resumes() -> dict[str, list[dict[str, Any]]]:
     """List available resume files.
 
     Returns:

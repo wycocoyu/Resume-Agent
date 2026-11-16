@@ -122,15 +122,19 @@ register_observability_handlers(app)
 app.include_router(health_router)
 
 # TTS 路由（可选，如果 TTS 依赖已安装）
+tts_mounted = False
 try:
     tts_router = routes_module.tts_router
     if tts_router is not None:
         app.include_router(tts_router)
+        tts_mounted = True
         logger.info("[TTS] TTS 路由已注册，前缀: /api/tts")
     else:
         logger.warning("[TTS] TTS 路由未加载（TTS 依赖未安装）")
 except Exception as exc:
     logger.warning(f"[TTS] TTS 路由注册失败: {exc}")
+if not tts_mounted:
+    app.openapi_tags = [t for t in (app.openapi_tags or []) if t.get("name") != "TTS"]
 app.include_router(config_router)
 app.include_router(resume_router)
 app.include_router(pdf_router)
@@ -157,7 +161,7 @@ if jd_router:
 # 注册官方 CocoCV MCP Server (Feature 19 / Issue #57)
 try:
     from backend.mcp.server import create_sse_app
-    app.mount("/mcp", create_sse_app())
+    app.mount("/mcp", create_sse_app(mount_prefix="/mcp"))
     logger.info("[MCP] Official CocoCV MCP Server mounted at /mcp")
 except Exception as exc:
     logger.warning(f"[MCP] Failed to mount MCP SSE app: {exc}")

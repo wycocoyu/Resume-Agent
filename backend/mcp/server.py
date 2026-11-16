@@ -25,8 +25,13 @@ _orig_sys_path = list(sys.path)
 try:
     sys.path = [p for p in sys.path if Path(p).resolve() != _backend_dir.resolve()]
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.sse import SseServerTransport
 finally:
     sys.path = _orig_sys_path
+
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.routing import Mount, Route
 
 logger = logging.getLogger("cococv.mcp")
 
@@ -322,9 +327,32 @@ def create_stdio_server() -> FastMCP:
     return server
 
 
-def create_sse_app():
+def create_sse_app(mount_prefix: str = "") -> Starlette:
     """Create and return Starlette application for SSE transport."""
-    return server.sse_app()
+    prefix = mount_prefix.rstrip("/")
+    if prefix and not prefix.startswith("/"):
+        prefix = f"/{prefix}"
+    sse = SseServerTransport(f"{prefix}{server.settings.message_path}")
+
+    async def handle_sse(request: Request) -> None:
+        async with sse.connect_sse(
+            request.scope,
+            request.receive,
+            request._send,  # type: ignore[reportPrivateUsage]
+        ) as streams:
+            await server._mcp_server.run(
+                streams[0],
+                streams[1],
+                server._mcp_server.create_initialization_options(),
+            )
+
+    return Starlette(
+        debug=server.settings.debug,
+        routes=[
+            Route(server.settings.sse_path, endpoint=handle_sse),
+            Mount(server.settings.message_path, app=sse.handle_post_message),
+        ],
+    )
 
 
 def get_registered_tools() -> list:

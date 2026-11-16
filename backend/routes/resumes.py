@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -196,7 +197,10 @@ def create_resume(
     """创建简历"""
     resume_id = payload.id or f"resume_{uuid4().hex}"
     name = payload.name or payload.data.get("basic", {}).get("name") or "未命名简历"
-    
+
+    if db.query(Resume.id).filter(Resume.id == resume_id).first():
+        raise HTTPException(status_code=409, detail="简历ID已存在，请重试")
+
     # 如果 payload 中有 template_type，确保同步到 data 中
     data = payload.data.copy()
     if payload.template_type:
@@ -210,7 +214,11 @@ def create_resume(
         data=data
     )
     db.add(resume)
-    db.commit()
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="简历ID已存在，请重试")
     db.refresh(resume)
 
     return ResumeResponse(
@@ -390,11 +398,13 @@ def export_resume_json(
     }
     body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
     filename = _safe_filename(resume.name, resume.id)
+    ascii_name = re.sub(r"[^\x20-\x7e]+", "_", filename).strip("_") or resume.id
+    utf8_name = urllib.parse.quote(f"{filename}.json", safe="")
     return Response(
         content=body,
         media_type="application/json",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}.json"; filename*=UTF-8\'\'{filename}.json'
+            "Content-Disposition": f'attachment; filename="{ascii_name}.json"; filename*=UTF-8\'\'{utf8_name}'
         },
     )
 

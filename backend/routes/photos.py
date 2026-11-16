@@ -71,7 +71,7 @@ async def upload_photo(
         bucket = os.getenv('COS_BUCKET', 'resumecos-1327706280')
 
         if not secret_id or not secret_key:
-            raise HTTPException(status_code=500, detail="COS 凭证未配置")
+            raise HTTPException(status_code=503, detail="COS 凭证未配置")
 
         # 以数据库 username 创建目录；文件名用内容哈希实现去重复用
         account = getattr(current_user, 'username', '') or getattr(current_user, 'email', '') or str(getattr(current_user, 'id', ''))
@@ -128,7 +128,7 @@ async def list_photos(current_user=Depends(get_current_user)):
         bucket = os.getenv('COS_BUCKET', 'resumecos-1327706280')
 
         if not secret_id or not secret_key:
-            raise HTTPException(status_code=500, detail="COS 凭证未配置")
+            raise HTTPException(status_code=503, detail="COS 凭证未配置")
 
         account = getattr(current_user, 'username', '') or getattr(current_user, 'email', '') or str(getattr(current_user, 'id', ''))
         safe_account = _sanitize_account_name(account)

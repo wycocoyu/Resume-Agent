@@ -59,10 +59,13 @@ def match_jd(
     """Compute 3D radar matching scores (Technical, Project, Experience) between resume and target JD."""
     resume_data = payload.resume_data
     if not resume_data and payload.resume_id:
-        query = db.query(Resume).filter(Resume.id == payload.resume_id)
-        if current_user:
-            query = query.filter(Resume.user_id == current_user.id)
-        resume = query.first()
+        if not current_user:
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        resume = (
+            db.query(Resume)
+            .filter(Resume.id == payload.resume_id, Resume.user_id == current_user.id)
+            .first()
+        )
         if not resume or not resume.data:
             raise HTTPException(status_code=404, detail="简历不存在或无数据")
         resume_data = resume.data

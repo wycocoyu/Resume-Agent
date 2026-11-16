@@ -15,7 +15,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.12.1',
+    version: '3.12.2',
     date: '2026-11-15',
     added: [
       '新增离线自托管 API 接口参考与在线调试看板（Scalar 主看板 + Swagger UI 备用面板），支持全局搜索与生产管理员鉴权保护',
@@ -32,6 +32,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       '强化 XeLaTeX PDF 编译与 /ToUnicode CMap 中文字符提取，彻底杜绝中文复制乱码',
     ],
     fixed: [
+      '修复中文名简历导出 JSON 时偶发报错的问题，并优化重复创建简历时的冲突提示',
+      '修复 MCP 本地连接握手路径与部分接口在未配置可选服务时的状态提示',
       '修复开源经历等模块角色或简介较长时 PDF 与 HTML 标题行文字重叠越界，以及 HTML 模板切换时的多余空白页问题',
       '修复上传图片简历耗时较长时连接意外断开的问题，改为实时流式识别与进度提示',
       '修复部分用户触发云端简历同步时偶发保存报错的问题',

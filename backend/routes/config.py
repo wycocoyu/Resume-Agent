@@ -12,6 +12,11 @@ try:
 except ImportError:
     load_dotenv = None
 
+try:
+    from backend.api_docs import is_production_env
+except ImportError:
+    from api_docs import is_production_env
+
 # 统一优先使用顶层模块，避免 models 被重复加载为两个模块名
 try:
     from models import SaveKeysRequest, AITestRequest, ChatRequest
@@ -406,8 +411,13 @@ async def test_ai_keys(
 
 
 @router.post("/ai/test")
-async def ai_test(body: AITestRequest):
+async def ai_test(
+    body: AITestRequest,
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
+):
     """测试已有 AI 接口是否可用"""
+    if is_production_env() and current_user is None:
+        raise HTTPException(status_code=401, detail="未提供有效的认证信息")
     try:
         result = call_llm(body.provider, body.prompt, return_usage=True)
         if isinstance(result, dict):
@@ -425,8 +435,13 @@ async def ai_test(body: AITestRequest):
 
 
 @router.post("/chat")
-async def chat_api(body: ChatRequest):
+async def chat_api(
+    body: ChatRequest,
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
+):
     """通用聊天接口，用于AI改写等功能"""
+    if is_production_env() and current_user is None:
+        raise HTTPException(status_code=401, detail="未提供有效的认证信息")
     try:
         prompt_parts = []
         for msg in body.messages:

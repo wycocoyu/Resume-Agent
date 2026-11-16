@@ -111,7 +111,7 @@ async def upload_logo(
         bucket = os.getenv('COS_BUCKET', 'resumecos-1327706280')
 
         if not secret_id or not secret_key:
-            raise HTTPException(status_code=500, detail="COS 凭证未配置")
+            raise HTTPException(status_code=503, detail="COS 凭证未配置")
 
         m = _import_logos()
         cos_key = f"{m.COMPANY_LOGO_PREFIX}{safe_filename}"
@@ -172,7 +172,7 @@ async def delete_logo(
         region = os.getenv('COS_REGION', 'ap-guangzhou')
         bucket = os.getenv('COS_BUCKET', 'resumecos-1327706280')
         if not secret_id or not secret_key:
-            raise HTTPException(status_code=500, detail="COS 凭证未配置")
+            raise HTTPException(status_code=503, detail="COS 凭证未配置")
 
         def _delete_sync():
             from qcloud_cos import CosConfig, CosS3Client

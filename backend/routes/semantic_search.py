@@ -1,15 +1,18 @@
 """
 语义搜索 API - 基于向量嵌入的简历内容搜索
 """
-from fastapi import APIRouter, Depends
+import logging
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
 from database import get_db
+from middleware.auth import AppUser, get_current_user
 from services.embedding_service import EmbeddingService
 
 
+logger = logging.getLogger("backend")
 router = APIRouter(prefix="/api/search", tags=["Semantic Search"])
 
 
@@ -33,6 +36,7 @@ class SearchResult(BaseModel):
 @router.post("/semantic", response_model=List[SearchResult])
 async def semantic_search(
     request: SearchRequest,
+    current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -50,28 +54,24 @@ async def semantic_search(
     - "机器学习项目"
     - "React 前端工程师"
     """
-    from routes.auth import get_current_user
-
-    # 获取当前用户
-    current_user = await get_current_user(dependency=None)
-    if not current_user:
+    try:
+        service = EmbeddingService(db)
+        results = service.search_similar(
+            query=request.query,
+            user_id=current_user.id,
+            limit=request.limit,
+            content_type=request.content_type
+        )
+        return results
+    except Exception as exc:
+        logger.warning(f"[SemanticSearch] search_similar failed user_id={current_user.id}: {exc}")
         return []
-
-    service = EmbeddingService(db)
-
-    results = service.search_similar(
-        query=request.query,
-        user_id=current_user.id,
-        limit=request.limit,
-        content_type=request.content_type
-    )
-
-    return results
 
 
 @router.post("/embeddings/generate/{resume_id}")
 async def generate_embeddings(
     resume_id: str,
+    current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -85,15 +85,15 @@ async def generate_embeddings(
 
     调用此 API 会产生 OpenAI API 费用。
     """
-    from routes.auth import get_current_user
-
-    current_user = await get_current_user(dependency=None)
-    if not current_user:
-        return {"error": "Unauthorized"}
-
     from services.embedding_service import create_embeddings_for_user_resume
 
-    success = create_embeddings_for_user_resume(db, current_user.id, resume_id)
+    try:
+        success = create_embeddings_for_user_resume(db, current_user.id, resume_id)
+    except Exception as exc:
+        logger.warning(
+            f"[SemanticSearch] generate_embeddings failed user_id={current_user.id} resume_id={resume_id}: {exc}"
+        )
+        success = False
 
     if success:
         return {"status": "ok", "message": "Embeddings generated successfully"}
@@ -104,6 +104,7 @@ async def generate_embeddings(
 @router.get("/embeddings/status/{resume_id}")
 async def get_embedding_status(
     resume_id: str,
+    current_user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -111,13 +112,8 @@ async def get_embedding_status(
 
     返回该简历已生成的嵌入数量和类型分布。
     """
-    from routes.auth import get_current_user
     from models import ResumeEmbedding
     from sqlalchemy import func
-
-    current_user = await get_current_user(dependency=None)
-    if not current_user:
-        return {"error": "Unauthorized"}
 
     # 统计嵌入数量
     total = db.query(ResumeEmbedding).filter(

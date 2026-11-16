@@ -2,10 +2,12 @@
 Billing routes — mock checkout for development.
 Real Creem webhook handler will replace mock_checkout when payment goes live.
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from backend.api_docs import is_production_env
 from backend.database import get_db
 from backend.better_auth import BetterAuthUser, get_current_better_auth_user
 from backend.services.better_auth_entitlements import get_or_create_entitlement
@@ -36,6 +38,9 @@ async def mock_checkout(
     db: Session = Depends(get_db),
 ) -> EntitlementResponse:
     """Mock 支付：直接充值 credits，无真实扣款。上线 Creem 后替换此端点。"""
+    if is_production_env() and os.getenv("ALLOW_MOCK_CHECKOUT", "").strip().lower() not in {"1", "true", "yes"}:
+        raise HTTPException(status_code=403, detail="生产环境已禁用模拟充值")
+
     pkg = MOCK_PLANS.get(body.package)
     if not pkg:
         raise HTTPException(status_code=400, detail=f"Unknown package: {body.package}")
