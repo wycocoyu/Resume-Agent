@@ -1,12 +1,12 @@
 <div align="center">
 
-# 🤖 Resume-Agent
+# 🤖 CocoCV（原 Resume-Agent）
 
 ### 帮你把经历聊成一份好简历：AI 生成、可解释诊断与 LaTeX 高清排版
 
 <p>
   <a href="https://cococv.cn"><img src="https://img.shields.io/badge/🌐_在线体验-cococv.cn-36BCF7?style=for-the-badge" alt="Live Demo" /></a>
-  <a href="https://github.com/wycocoyu/Resume-Agent/stargazers"><img src="https://img.shields.io/github/stars/wycocoyu/Resume-Agent?style=for-the-badge&color=yellow" alt="Stars" /></a>
+  <a href="https://github.com/wycocoyu/cococv/stargazers"><img src="https://img.shields.io/github/stars/wycocoyu/cococv?style=for-the-badge&color=yellow" alt="Stars" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 
@@ -27,7 +27,7 @@
 
 ## 📖 项目简介
 
-**Resume-Agent（[cococv.cn](https://cococv.cn)）** 是一个面向中文求职场景的全栈 AI 简历平台，打通了从 **一句话对话生成 / PDF 与图片导入 → 可解释简历诊断与 ATS 检查 → 自然语言增量改写 → 双栏可视化排版与 LaTeX PDF 导出** 的全流程，让你把精力放回经历打磨本身，告别深夜反复调格式。
+**CocoCV（[cococv.cn](https://cococv.cn)，原 Resume-Agent）** 是一个面向中文求职场景的全栈 AI 简历平台，打通了从 **一句话对话生成 / PDF 与图片导入 → 可解释简历诊断与 ATS 检查 → 自然语言增量改写 → 双栏可视化排版与 LaTeX PDF 导出** 的全流程，让你把精力放回经历打磨本身，告别深夜反复调格式。
 
 ## ✨ 核心特性（v3.7）
 
@@ -95,8 +95,8 @@
 ### 2. 克隆仓库与安装依赖
 
 ```bash
-git clone https://github.com/wycocoyu/Resume-Agent.git
-cd Resume-Agent
+git clone https://github.com/wycocoyu/cococv.git
+cd cococv
 pip install uv
 uv pip install -r requirements.txt
 cd frontend && npm install && cd ..
@@ -236,7 +236,7 @@ BETTER_AUTH_SECRET=BetterAuth-Cookie-签名密钥
 
 ## 🤝 参与贡献
 
-欢迎通过 [Issues](https://github.com/wycocoyu/Resume-Agent/issues) 反馈问题或提交 [Pull Requests](https://github.com/wycocoyu/Resume-Agent/pulls)。如果本项目对你有帮助，欢迎点亮右上角 ⭐ **Star** 支持！
+欢迎通过 [Issues](https://github.com/wycocoyu/cococv/issues) 反馈问题或提交 [Pull Requests](https://github.com/wycocoyu/cococv/pulls)。如果本项目对你有帮助，欢迎点亮右上角 ⭐ **Star** 支持！
 
 ## 📄 开源许可
 

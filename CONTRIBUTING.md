@@ -1,8 +1,8 @@
-# Contributing to Resume-Agent (CocoCV) / 参与贡献
+# Contributing to CocoCV (formerly Resume-Agent) / 参与贡献
 
-Thank you for your interest in contributing to **Resume-Agent ([cococv.cn](https://cococv.cn))**! Before making changes, please review [`AGENTS.md`](AGENTS.md) for architecture notes and project conventions.
+Thank you for your interest in contributing to **CocoCV ([cococv.cn](https://cococv.cn))**! Before making changes, please review [`AGENTS.md`](AGENTS.md) for architecture notes and project conventions.
 
-感谢你参与 **Resume-Agent（[cococv.cn](https://cococv.cn)）** 开源共建！在开始修改前，请先阅读 [`AGENTS.md`](AGENTS.md) 了解项目架构与工程约定。
+感谢你参与 **CocoCV（[cococv.cn](https://cococv.cn)，原 Resume-Agent）** 开源共建！在开始修改前，请先阅读 [`AGENTS.md`](AGENTS.md) 了解项目架构与工程约定。
 
 ## Project Structure / 目录结构
 

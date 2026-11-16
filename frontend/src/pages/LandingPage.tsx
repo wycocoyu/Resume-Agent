@@ -49,7 +49,7 @@ const popIn = {
   transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] as const }
 }
 
-const REPO_URL = 'https://github.com/kkooww77/Resume-Agent'
+const REPO_URL = 'https://github.com/wycocoyu/cococv'
 
 // 首屏输入框下方的示例快捷入口：一点即进对话（降低冷启动，并埋「按岗位改一版」的高频钩子）
 // 「按 JD 改简历」chip 特殊处理：进对话后打开结构化 JD 优化交互卡（而非发文字给 Agent）
@@ -345,7 +345,7 @@ export default function LandingPage() {
 
   // 拉取 GitHub star 数（公开 API，无需 token）
   useEffect(() => {
-    fetch('https://api.github.com/repos/kkooww77/Resume-Agent')
+    fetch('https://api.github.com/repos/wycocoyu/cococv')
       .then((res) => res.json())
       .then((data) => {
         if (typeof data.stargazers_count === 'number') setGithubStars(data.stargazers_count)

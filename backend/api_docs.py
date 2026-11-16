@@ -65,7 +65,7 @@ def is_production_env() -> bool:
     """Detect whether the backend is running in a production environment."""
     return any(
         os.getenv(key, "").strip().lower() in _PROD_VALUES
-        for key in ("LOG_MODE", "APP_ENV", "ENVIRONMENT")
+        for key in ("LOG_MODE", "NODE_ENV", "APP_ENV", "ENVIRONMENT")
     )
 
 

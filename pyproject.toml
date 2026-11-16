@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "resume-agent"
 version = "0.1.0"
-description = "Resume-Agent CLI and backend utilities"
+description = "CocoCV (formerly Resume-Agent) CLI and backend utilities"
 requires-python = ">=3.10"
 dependencies = [
     "typer>=0.12",

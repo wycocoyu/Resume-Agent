@@ -19,6 +19,9 @@ def client():
 def test_dev_api_docs_scalar_and_swagger_are_offline(client: TestClient, monkeypatch):
     """In dev mode, Scalar (/api/docs) & Swagger (/api/swagger) load local assets only."""
     monkeypatch.delenv("ENABLE_API_DOCS", raising=False)
+    monkeypatch.delenv("NODE_ENV", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.setenv("LOG_MODE", "console")
 
     scalar_resp = client.get("/api/docs")
@@ -101,6 +104,14 @@ def test_prod_api_docs_require_admin_and_respect_env_override(client: TestClient
     # 5. ENABLE_API_DOCS=true opens docs even in production
     monkeypatch.setenv("ENABLE_API_DOCS", "true")
     app.dependency_overrides[get_current_user_optional] = _anon
+    assert client.get("/api/docs").status_code == 200
+
+    # 6. PM2 NODE_ENV=production without LOG_MODE also enforces admin access
+    monkeypatch.delenv("ENABLE_API_DOCS", raising=False)
+    monkeypatch.setenv("LOG_MODE", "console")
+    monkeypatch.setenv("NODE_ENV", "production")
+    assert client.get("/api/docs").status_code == 401
+    app.dependency_overrides[get_current_user_optional] = _admin_user
     assert client.get("/api/docs").status_code == 200
 
 

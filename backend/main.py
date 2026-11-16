@@ -98,7 +98,7 @@ jd_router = getattr(routes_module, "jd_router", None)
 # 初始化 FastAPI 应用（关闭默认 CDN 文档路由，统一交由离线自托管 Scalar + Swagger UI 挂载）
 app = FastAPI(
     title="CocoCV API",
-    version="3.12.0",
+    version="3.12.1",
     description=API_DESCRIPTION_MARKDOWN,
     openapi_tags=OPENAPI_TAGS_METADATA,
     docs_url=None,
