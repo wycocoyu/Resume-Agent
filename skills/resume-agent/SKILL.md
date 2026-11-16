@@ -38,14 +38,32 @@ python3 scripts/cococv_local.py env --json
 
 ## Step 1 · Conversational Intake & Branch Routing
 
-When the user starts a fresh conversation without already handing over full details or a file path, greet briefly and ask **which starting path** they want (one short prompt, plain language, no jargon). Example first reply:
+When the user starts a fresh conversation without already handing over full details or a file path (for example, just saying `"用 $resume-agent 帮我制作一个简历"`), reply immediately with a **single actionable intake card** like this (plain language, zero CLI jargon, zero login prompt):
 
-> 「我是 CocoCV 简历助手（全程本地免登录，无需本机装 LaTeX）。先选一个起点：
-> 1. **手上有现成简历**：直接把本地路径发我（PDF / Word / Markdown / HTML / JSON / 截图都行），我直接读取整理
-> 2. **手上没有简历**：我分几轮每次只问 2～3 个问题，带你把经历聊成简历
-> 3. **已有简历想对照 JD 改写或换模板**：把简历路径和目标 JD 发我，我帮你诊断并生成模板预览对比」
+> 可以，我现在按 **CocoCV（Resume-Agent）** 开始制作。全程本机离线处理、无需登录、无需本机装 LaTeX；默认使用 **`asu-tech`（ASu 极客单栏）**，支持导出 **HTML / PNG 预览图 / PDF**（也可从 21 套模板里对比挑选），所有经历只采用你确认过的事实。
+>
+> 你可以任选最省事的方式发我信息（**有现成简历直接给路径或上传，没有就按下面粗略填**）：
+>
+> 1. **目标岗位**：例如后端开发、AI Agent、前端、产品经理；校招 / 实习还是社招？如果有目标 JD 也可以一起贴给我。
+> 2. **个人材料（三选一）**：
+>    - 直接发我**本地文件路径**（支持 `.pdf`、`.docx`、`.md`、`.txt`、`.html`、`resume.json` 或简历截图）
+>    - 直接**上传/粘贴**已有简历内容或项目笔记
+>    - 暂时没有整理好的材料，直接复制下面模板粗略发我（也可以边聊我分轮问你）：
+>      ```text
+>      姓名：
+>      电话 / 邮箱：
+>      目标岗位：
+>      教育经历：
+>      工作 / 实习：
+>      项目经历：
+>      技能：
+>      其他链接（GitHub / 作品集）：
+>      ```
+> 3. **版式与导出偏好**：单页还是双页？需要输出 **HTML / PNG 预览图 / PDF** 哪种？如果想先看模板对比，也可以让我先生成 21 套模板预览画廊给你挑。
+>
+> 暂时缺的数据我会标成 `【待补】`，绝不替你编造。
 
-Route based on their choice:
+Route based on what the user sends back:
 
 - **Path A · 手上有现成简历（本地路径直接读，免抄写）**
   Ask for the **local file path** (PDF, `.docx`, `.md`, `.txt`, `.html`, `resume.json`, or resume screenshots) or pasted text.
