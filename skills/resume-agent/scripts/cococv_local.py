@@ -1138,6 +1138,129 @@ def _read_text_with_fallback(path: Path) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _extract_pdf_macos_quartz(
+    path: Path,
+    pages_dir: Path | None,
+    max_pages: int = 6,
+    *,
+    need_text: bool = True,
+    render_if_needed: bool = True,
+) -> dict[str, Any] | None:
+    """Zero-dependency macOS PDFKit/Quartz fallback for multi-page text and PNG extraction."""
+    if sys.platform != "darwin":
+        return None
+    osascript_bin = shutil.which("osascript") or (
+        "/usr/bin/osascript" if os.access("/usr/bin/osascript", os.X_OK) else None
+    )
+    if not osascript_bin:
+        return None
+
+    created_tmp: Path | None = None
+    out_dir_str = ""
+    if pages_dir is not None:
+        pages_dir.mkdir(parents=True, exist_ok=True)
+        out_dir_str = str(pages_dir)
+    elif render_if_needed:
+        created_tmp = Path(tempfile.mkdtemp(prefix="cococv_pdf_pages_"))
+        out_dir_str = str(created_tmp)
+
+    jxa_script = r"""
+ObjC.import("Quartz");
+ObjC.import("AppKit");
+function run(argv) {
+  const pdfPath = argv[0];
+  const outDir = argv[1] || "";
+  const stem = argv[2] || "resume";
+  const maxPages = Math.max(1, parseInt(argv[3] || "6", 10));
+  const needText = argv[4] === "1";
+  const forceRender = argv[5] === "1";
+  const renderSparse = argv[6] === "1";
+
+  const url = $.NSURL.fileURLWithPath(pdfPath);
+  const doc = $.PDFDocument.alloc.initWithURL(url);
+  if (!doc) {
+    return JSON.stringify({ok: false});
+  }
+  const pageCount = Number(doc.pageCount);
+  const texts = [];
+  if (needText) {
+    for (let i = 0; i < pageCount; i++) {
+      const page = doc.pageAtIndex(i);
+      const raw = page ? ObjC.unwrap(page.string) : "";
+      const txt = (raw || "").trim();
+      if (txt) {
+        texts.push("--- Page " + (i + 1) + " ---\n" + txt);
+      }
+    }
+  }
+  const totalText = texts.join("\n\n").trim();
+  const pageImages = [];
+  const shouldRender = Boolean(outDir) && (forceRender || (renderSparse && totalText.length < 40));
+  if (shouldRender) {
+    const limit = Math.min(pageCount, maxPages);
+    for (let i = 0; i < limit; i++) {
+      const page = doc.pageAtIndex(i);
+      if (!page) continue;
+      const box = page.boundsForBox($.kPDFDisplayBoxMediaBox);
+      if (!box || box.size.width <= 0 || box.size.height <= 0) continue;
+      const scale = 2.0;
+      const size = $.NSMakeSize(box.size.width * scale, box.size.height * scale);
+      const img = page.thumbnailOfSizeForBox(size, $.kPDFDisplayBoxMediaBox);
+      if (!img) continue;
+      const tiff = img.TIFFRepresentation;
+      if (!tiff) continue;
+      const rep = $.NSBitmapImageRep.imageRepWithData(tiff);
+      if (!rep) continue;
+      const pngData = rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
+      if (!pngData) continue;
+      const outPath = outDir + "/" + stem + "-page-" + (i + 1) + ".png";
+      if (pngData.writeToFileAtomically(outPath, true)) {
+        pageImages.push(outPath);
+      }
+    }
+  }
+  return JSON.stringify({
+    ok: true,
+    page_count: pageCount,
+    text: totalText,
+    page_images: pageImages
+  });
+}
+"""
+    try:
+        proc = subprocess.run(
+            [
+                osascript_bin,
+                "-l",
+                "JavaScript",
+                "-e",
+                jxa_script,
+                str(path),
+                out_dir_str,
+                path.stem,
+                str(max_pages),
+                "1" if need_text else "0",
+                "1" if pages_dir is not None or (not need_text and render_if_needed) else "0",
+                "1" if render_if_needed else "0",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        payload = json.loads(proc.stdout.strip().splitlines()[-1])
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            return None
+        return payload
+    except Exception:
+        return None
+    finally:
+        if created_tmp is not None and not any(created_tmp.iterdir()):
+            shutil.rmtree(created_tmp, ignore_errors=True)
+
+
 def _extract_pdf_local(path: Path, pages_dir: Path | None, max_pages: int = 6) -> dict[str, Any]:
     """Extract PDF text cleanly with optional fallback page PNG export for visual reading."""
     text_parts: list[str] = []
@@ -1216,6 +1339,26 @@ def _extract_pdf_local(path: Path, pages_dir: Path | None, max_pages: int = 6) -
                 check=False,
             )
             page_images = [str(p) for p in sorted(out_dir.glob(f"{path.stem}-page*.png"))]
+
+    need_quartz_text = not total_text
+    need_quartz_images = (pages_dir is not None or len(total_text) < 40) and not page_images
+    if need_quartz_text or need_quartz_images:
+        quartz_info = _extract_pdf_macos_quartz(
+            path,
+            pages_dir,
+            max_pages=max_pages,
+            need_text=need_quartz_text,
+            render_if_needed=pages_dir is not None or not page_images,
+        )
+        if quartz_info is not None:
+            if page_count is None and quartz_info.get("page_count") is not None:
+                page_count = int(quartz_info["page_count"])
+            if need_quartz_text and quartz_info.get("text"):
+                total_text = str(quartz_info["text"]).strip()
+                method = method or "macos-quartz"
+            if not page_images and quartz_info.get("page_images"):
+                page_images = [str(p) for p in quartz_info["page_images"]]
+                method = method or "macos-quartz"
 
     return {
         "method": method,
