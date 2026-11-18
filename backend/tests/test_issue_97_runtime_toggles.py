@@ -923,3 +923,25 @@ def test_agent_middleware_blocks_proxy_mode_and_compile_latex_uses_transient_dat
     with pytest.raises(ai_guard.AiQuotaExhaustedError):
         zhipu_layout.recognize_layout_from_images([VALID_PNG_BYTES])
     assert ai_guard.is_ai_circuit_tripped() is True
+
+
+def test_quota_signal_avoids_false_positive_on_ordinary_resume_words():
+    ai_guard.reset_ai_circuit()
+
+    # 普通简历正文或业务异常里出现 balance / quota 词汇不得误触发全局熔断
+    assert ai_guard.is_quota_exhausted_signal(
+        status_code=500,
+        error_text="User snippet mentioned work-life balance and sales quota attainment",
+    ) is False
+    assert ai_guard.is_quota_exhausted_signal(
+        status_code=200,
+        error_text="Insufficient Balance",
+    ) is False
+    assert ai_guard.is_quota_exhausted_signal(
+        status_code=402,
+        error_text="",
+    ) is True
+    assert ai_guard.is_quota_exhausted_signal(
+        status_code=400,
+        error_text="Your account has Insufficient Balance",
+    ) is True

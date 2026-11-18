@@ -133,6 +133,7 @@ export function isAuthWebEnabled(): boolean {
  */
 export function isLocalDevAuthEnabled(): boolean {
   if (!import.meta.env.DEV) return false
+  if (!isAuthEnabled()) return false
   const configured = String(import.meta.env.VITE_LOCAL_DEV_AUTH ?? '').trim().toLowerCase()
   if (!configured) return true
   return TRUE_ENV_VALUES.has(configured)

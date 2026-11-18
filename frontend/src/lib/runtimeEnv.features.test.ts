@@ -207,4 +207,15 @@ describe('runtimeEnv feature flags & hydration', () => {
     })
     await expect(scoreResume('r1', 'JD text here')).rejects.toThrow('当前免费 AI 额度暂已用完')
   })
+
+  it('isLocalDevAuthEnabled stays false when auth_enabled is false even in DEV', async () => {
+    const mod = await import('./runtimeEnv')
+    mod.resetRuntimeFeaturesForTest()
+    expect(mod.isAuthEnabled()).toBe(false)
+    expect(mod.isLocalDevAuthEnabled()).toBe(false)
+
+    mod.setRuntimeFeaturesForTest({ auth_enabled: true, agent_enabled: false, editor_ai_enabled: true })
+    expect(mod.isAuthEnabled()).toBe(true)
+    expect(mod.isLocalDevAuthEnabled()).toBe(import.meta.env.DEV)
+  })
 })

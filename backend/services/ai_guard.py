@@ -103,8 +103,7 @@ _QUOTA_KEYWORDS = (
     "credit balance",
     "arrearage",
     "billing_not_active",
-    "quota",
-    "balance",
+    "1113",
     "余额不足",
     "欠费",
     "额度不足",
@@ -113,7 +112,7 @@ _QUOTA_KEYWORDS = (
     "配额不足",
     "配额已用完",
     "资源包已耗尽",
-    "账户余额",
+    "账户余额不足",
 )
 _STATUS_402_RE = re.compile(r"(?:^|[\s=:(])402(?:$|[\s:),])")
 
@@ -131,6 +130,8 @@ def is_quota_exhausted_signal(
     status_code: Optional[int] = None,
     error_text: str = "",
 ) -> bool:
+    if status_code == 200:
+        return False
     if status_code == 402:
         return True
     lower = (error_text or "").strip().lower()
