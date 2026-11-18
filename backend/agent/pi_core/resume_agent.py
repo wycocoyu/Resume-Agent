@@ -46,12 +46,14 @@ class ResumeAgentRuntime:
         user_id: Optional[str] = None,
         capability: Optional[str] = None,
         llm: Any = None,
+        owner_key: Optional[str] = None,
     ) -> None:
         object.__setattr__(self, "_domain", None)
         object.__setattr__(self, "_native_tools", None)
         object.__setattr__(self, "_native_shared_state", None)
         object.__setattr__(self, "_native_memory", None)
         object.__setattr__(self, "_native_llm", llm)
+        object.__setattr__(self, "_native_owner_key", owner_key)
         object.__setattr__(self, "_result_adapter", None)
         object.__setattr__(self, "_turn_policy", TurnPolicySnapshot())
         object.__setattr__(
@@ -76,15 +78,23 @@ class ResumeAgentRuntime:
     def _get_domain(self) -> Any:
         domain = self.__dict__.get("_domain")
         if domain is None:
+            from backend.agent.llm import LLM
             from backend.agent.pi_core.resume_domain import ResumeDomainRuntime
 
-            domain = self._construct_domain(ResumeDomainRuntime)
+            native_llm = self.llm
+            extra_kwargs = {"llm": native_llm} if isinstance(native_llm, LLM) else {}
+            domain = self._construct_domain(
+                ResumeDomainRuntime, extra_kwargs=extra_kwargs
+            )
             native_memory = self.__dict__.get("_native_memory")
             if native_memory is not None and getattr(native_memory, "messages", None):
                 domain.memory = native_memory
-            native_llm = self.__dict__.get("_native_llm")
             if native_llm is not None:
                 domain.llm = native_llm
+                if hasattr(domain, "_inject_tool_context") and hasattr(
+                    domain, "available_tools"
+                ):
+                    domain._inject_tool_context(domain.available_tools.tools)
             object.__setattr__(self, "_domain", domain)
             if hasattr(domain, "memory"):
                 object.__setattr__(
@@ -119,7 +129,12 @@ class ResumeAgentRuntime:
             self._sync_pending_attributes(domain)
         return domain
 
-    def _construct_domain(self, domain_type: Any) -> Any:
+    def _construct_domain(
+        self,
+        domain_type: Any,
+        *,
+        extra_kwargs: Optional[dict[str, Any]] = None,
+    ) -> Any:
         """Instantiate the domain runtime with only supported kwargs.
 
         Test doubles and transitional adapters do not always expose the full
@@ -128,7 +143,7 @@ class ResumeAgentRuntime:
         the real implementation.
         """
 
-        kwargs = self.__dict__["_runtime_kwargs"]
+        kwargs = {**self.__dict__["_runtime_kwargs"], **(extra_kwargs or {})}
         try:
             signature = inspect.signature(domain_type)
         except (TypeError, ValueError):
@@ -169,6 +184,7 @@ class ResumeAgentRuntime:
                 session_id=kwargs.get("session_id"),
                 user_id=kwargs.get("user_id"),
                 shared_state=self._get_native_shared_state(),
+                llm=self.llm,
             )
             object.__setattr__(self, "_native_tools", tools)
         return tools
@@ -191,7 +207,7 @@ class ResumeAgentRuntime:
         if llm is None:
             from backend.agent.llm import LLM
 
-            llm = LLM(config_name="manus")
+            llm = LLM.create_isolated(config_name="manus")
             object.__setattr__(self, "_native_llm", llm)
         return llm
 
@@ -204,12 +220,36 @@ class ResumeAgentRuntime:
                 "_native_shared_state",
                 "_native_memory",
                 "_native_llm",
+                "_native_owner_key",
             }:
                 continue
             if hasattr(domain, name):
                 setattr(domain, name, value)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        if name == "llm":
+            object.__setattr__(self, "_native_llm", value)
+            domain = self.__dict__.get("_domain")
+            if domain is not None:
+                domain.llm = value
+                if hasattr(domain, "_inject_tool_context") and hasattr(
+                    domain, "available_tools"
+                ):
+                    domain._inject_tool_context(domain.available_tools.tools)
+            tools = self.__dict__.get("_native_tools")
+            if tools is not None:
+                kwargs = self.__dict__["_runtime_kwargs"]
+                inject_resume_tool_context(
+                    tools.tools,
+                    session_id=kwargs.get("session_id"),
+                    user_id=kwargs.get("user_id"),
+                    shared_state=self.__dict__.get("_native_shared_state"),
+                    llm=value,
+                )
+            return
+        if name == "owner_key":
+            object.__setattr__(self, "_native_owner_key", value)
+            return
         if name in {"_domain", "_runtime_kwargs"} or "_domain" not in self.__dict__:
             object.__setattr__(self, name, value)
             return
@@ -412,6 +452,7 @@ class ResumeAgentRuntime:
                 call,
                 session_id=self.__dict__["_runtime_kwargs"].get("session_id"),
                 user_id=self.__dict__["_runtime_kwargs"].get("user_id"),
+                owner_key=self.__dict__.get("_native_owner_key"),
                 store_structured=getattr(
                     self._result_adapter, "capture", None
                 ),

@@ -1,6 +1,8 @@
 """CVAnalyzer Agent Tool - 输出可直接渲染的结构化简历诊断。"""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
+
+from pydantic import Field
 
 from backend.agent.tool.base import BaseTool, ToolProgress, ToolResult
 from backend.agent.tool.resume_data_store import ResumeDataStore
@@ -59,6 +61,7 @@ The CVAnalyzer Agent will:
         },
         "required": ["question"]
     }
+    llm: Optional[Any] = Field(default=None, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
@@ -101,7 +104,7 @@ The CVAnalyzer Agent will:
             ResumeGuidanceModule,
         )
 
-        guidance = ResumeGuidanceModule()
+        guidance = ResumeGuidanceModule(llm=self.llm)
         structured = await guidance.assess(
             resume_data,
             question,

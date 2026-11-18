@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic import Field, model_validator, PrivateAttr
 
+from backend.agent.llm import LLM
 from backend.agent.pi_core.tool_runtime import ToolExecutionRuntime
 from backend.agent.config import config
 from backend.core.logger import get_logger
@@ -109,6 +110,9 @@ class ResumeDomainRuntime(ToolExecutionRuntime):
 
     max_observe: int = 10000
     max_steps: int = 20
+    llm: Optional[LLM] = Field(
+        default_factory=lambda: LLM.create_isolated(config_name="manus")
+    )
 
     # Add general-purpose tools to the tool collection
     available_tools: ToolCollection = Field(default_factory=ToolCollection)
@@ -173,12 +177,13 @@ class ResumeDomainRuntime(ToolExecutionRuntime):
         self._inject_tool_context(self.available_tools.tools)
 
     def _inject_tool_context(self, tools: List[Any]) -> None:
-        """Attach session_id and shared_state to tools."""
+        """Attach session_id, shared_state, and session-isolated llm to tools."""
         inject_resume_tool_context(
             tools,
             session_id=self.session_id,
             user_id=self.user_id,
             shared_state=self._shared_state,
+            llm=self.llm,
         )
 
     def _ensure_conversation_state_llm(self):
