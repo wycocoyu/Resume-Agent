@@ -157,25 +157,25 @@ export function PreviewPanel({
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-w-0">
       {/* 工具栏 */}
       <div
         className={cn(
-          'flex items-center justify-between gap-3 px-4 py-3 flex-wrap',
+          'flex items-center justify-between gap-3 px-4 py-3 flex-wrap min-w-0',
           'bg-white/70 fresh:bg-white dark:bg-slate-800/70',
           'backdrop-blur-sm fresh:backdrop-blur-none',
           'border-b border-slate-200/50 dark:border-slate-700/50'
         )}
       >
         {/* 左组: 双引擎切换 (LaTeX / HTML) + 渲染按钮 + 缩放·边距·页数 */}
-        <div className="flex items-center gap-3 flex-wrap min-w-0">
+        <div className="flex items-center gap-3 flex-wrap min-w-0 max-w-full">
           {/* 双引擎切换 Segmented Control */}
-          <div className="inline-flex items-center p-0.5 rounded-none fresh:rounded-md border border-black fresh:border-slate-300 dark:border-white bg-[#F0F0E8] fresh:bg-slate-100 dark:bg-slate-800 shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm">
+          <div className="inline-flex items-center flex-wrap max-w-full p-0.5 rounded-none fresh:rounded-md border border-black fresh:border-slate-300 dark:border-white bg-[#F0F0E8] fresh:bg-slate-100 dark:bg-slate-800 shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm">
             <button
               type="button"
               onClick={() => onEngineChange?.('latex')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-none fresh:rounded-sm transition-all',
+                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold whitespace-nowrap rounded-none fresh:rounded-sm transition-all',
                 !isHTMLTemplate
                   ? 'bg-[#4285F4] text-white shadow-[1px_1px_0px_0px_#000000]'
                   : 'text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white'
@@ -188,7 +188,7 @@ export function PreviewPanel({
               type="button"
               onClick={() => onEngineChange?.('html')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-none fresh:rounded-sm transition-all',
+                'flex items-center gap-1.5 px-3 py-1 text-xs font-bold whitespace-nowrap rounded-none fresh:rounded-sm transition-all',
                 isHTMLTemplate
                   ? 'bg-emerald-600 text-white shadow-[1px_1px_0px_0px_#000000]'
                   : 'text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white'
@@ -201,20 +201,20 @@ export function PreviewPanel({
 
           {/* HTML 模板：显示实时预览标签 */}
           {isHTMLTemplate && (
-            <span className="px-2.5 py-0.5 text-xs font-mono fresh:font-sans font-bold uppercase fresh:normal-case tracking-wide fresh:tracking-normal bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-none fresh:rounded-md border border-black fresh:border-slate-200 dark:border-white shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[1px_1px_0px_0px_#ffffff]">
+            <span className="px-2.5 py-0.5 text-xs font-mono fresh:font-sans font-bold uppercase fresh:normal-case tracking-wide fresh:tracking-normal whitespace-nowrap bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-none fresh:rounded-md border border-black fresh:border-slate-200 dark:border-white shadow-[1px_1px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[1px_1px_0px_0px_#ffffff]">
               即时呈现
             </span>
           )}
 
           {/* LaTeX 模板：显示渲染按钮 */}
           {!isHTMLTemplate && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap min-w-0 max-w-full">
               {/* 渲染按钮 */}
               <button
                 onClick={onRender}
                 disabled={loading}
                 className={cn(
-                  'group relative px-6 py-2.5 rounded-none fresh:rounded-md border-2 fresh:border border-black fresh:border-slate-200 overflow-hidden',
+                  'group relative px-6 py-2.5 whitespace-nowrap rounded-none fresh:rounded-md border-2 fresh:border border-black fresh:border-slate-200 overflow-hidden',
                   'bg-[#4285F4] text-white text-sm font-bold tracking-tight',
                   'disabled:opacity-60 disabled:cursor-not-allowed',
                   'transition-all',
@@ -261,7 +261,7 @@ export function PreviewPanel({
         </div>
 
         {/* 右组:保存 / 皮肤 / 导入 / 导出(原独立整行,现内联到此) */}
-        {toolbarActions && <div className="shrink-0 flex items-center">{toolbarActions}</div>}
+        {toolbarActions && <div className="min-w-0 max-w-full flex items-center">{toolbarActions}</div>}
       </div>
 
       {/* 进度提示 */}

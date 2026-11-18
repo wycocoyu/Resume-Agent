@@ -21,6 +21,20 @@
   display: none;
 }
 
+/* 基本信息表单与证件照卡片：按编辑区自身容器宽度响应，而非全局视口 xl 断点 */
+.basic-info-layout-grid {
+  display: grid;
+  align-items: start;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 460px) {
+  .basic-info-layout-grid {
+    grid-template-columns: minmax(0, 1fr) 168px;
+  }
+}
+
 @layer utilities {
   .no-spinner::-webkit-inner-spin-button,
   .no-spinner::-webkit-outer-spin-button {
