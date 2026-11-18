@@ -95,7 +95,6 @@ semantic_search_router = routes_module.semantic_search_router
 admin_router = routes_module.admin_router
 leetcode_router = routes_module.leetcode_router
 billing_router = routes_module.billing_router
-jd_router = getattr(routes_module, "jd_router", None)
 
 # 初始化 FastAPI 应用（关闭默认 CDN 文档路由，统一交由离线自托管 Scalar + Swagger UI 挂载）
 app = FastAPI(
@@ -197,8 +196,6 @@ app.include_router(semantic_search_router)
 app.include_router(admin_router)
 app.include_router(leetcode_router)
 app.include_router(billing_router)
-if jd_router:
-    app.include_router(jd_router)
 
 # 注册官方 CocoCV MCP Server (Feature 19 / Issue #57)
 try:

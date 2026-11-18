@@ -66,13 +66,6 @@ class SyncRequest(BaseModel):
     resumes: List[ResumePayload]
 
 
-class ForkResumeRequest(BaseModel):
-    target_jd_title: Optional[str] = None
-    target_company: Optional[str] = None
-    custom_name: Optional[str] = None
-    jd_text: Optional[str] = None
-
-
 def _extract_template_type(data: Dict[str, Any]) -> str:
     """从简历数据中提取模板类型，默认为 latex"""
     return data.get("templateType") or "latex"
@@ -406,57 +399,4 @@ def export_resume_json(
         headers={
             "Content-Disposition": f'attachment; filename="{ascii_name}.json"; filename*=UTF-8\'\'{utf8_name}'
         },
-    )
-
-
-@router.post("/{resume_id}/fork", response_model=ResumeResponse)
-def fork_resume(
-    resume_id: str,
-    payload: ForkResumeRequest,
-    current_user: AppUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """基于现有简历派生（Fork）一个针对特定 JD 的衍生简历版本。"""
-    source = db.query(Resume).filter(
-        Resume.id == resume_id,
-        Resume.user_id == current_user.id
-    ).first()
-    if not source:
-        raise HTTPException(status_code=404, detail="源简历不存在")
-
-    forked_id = f"resume_{uuid4().hex}"
-    target_title = payload.target_jd_title or "定制岗位"
-    forked_name = payload.custom_name or f"{source.name} ({target_title}定制版)"
-    forked_alias = f"JD定制: {target_title}"
-
-    forked_data = json.loads(json.dumps(source.data or {}))
-    meta = forked_data.setdefault("_meta", {})
-    meta["forkedFrom"] = source.id
-    meta["forkedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    if payload.target_jd_title or payload.target_company or payload.jd_text:
-        meta["targetJd"] = {
-            "title": payload.target_jd_title,
-            "company": payload.target_company,
-            "snippet": (payload.jd_text or "")[:500],
-        }
-
-    forked_resume = Resume(
-        id=forked_id,
-        user_id=current_user.id,
-        name=forked_name,
-        alias=forked_alias,
-        data=forked_data,
-    )
-    db.add(forked_resume)
-    db.commit()
-    db.refresh(forked_resume)
-
-    return ResumeResponse(
-        id=forked_resume.id,
-        name=forked_resume.name,
-        alias=forked_resume.alias,
-        template_type=_extract_template_type(forked_resume.data),
-        data=forked_resume.data,
-        created_at=forked_resume.created_at.isoformat() if forked_resume.created_at else None,
-        updated_at=forked_resume.updated_at.isoformat() if forked_resume.updated_at else None,
     )

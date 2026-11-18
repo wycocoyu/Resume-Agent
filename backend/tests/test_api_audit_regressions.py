@@ -338,72 +338,7 @@ def test_agent_resume_content_path_traversal_blocked(isolated_db, monkeypatch):
     assert valid_missing.status_code == 404
 
 
-# 6. JD match IDOR: resume_id without auth -> 401; inline resume_data without auth -> 200
-def test_jd_match_idor_protection(isolated_db):
-    db = isolated_db()
-    try:
-        db.add(
-            models.Resume(
-                id="jd_victim_res",
-                user_id="victim_owner",
-                name="Victim",
-                data={"basic": {"name": "Victim"}, "skills": ["Python", "Docker"]},
-            )
-        )
-        db.add(
-            models.Resume(
-                id="jd_owner_res",
-                user_id="real_owner",
-                name="Owner",
-                data={"basic": {"name": "Owner"}, "skills": ["Python", "FastAPI"]},
-            )
-        )
-        db.commit()
-    finally:
-        db.close()
-
-    _override_user(None)
-    client = TestClient(app)
-
-    # Unauthenticated lookup by resume_id must fail with 401
-    idor_resp = client.post(
-        "/api/jd/match",
-        json={"resume_id": "jd_victim_res", "jd_text": "招聘 Python FastAPI 后端工程师"},
-    )
-    assert idor_resp.status_code == 401
-
-    # Unauthenticated inline resume_data continues to work
-    inline_resp = client.post(
-        "/api/jd/match",
-        json={
-            "resume_data": {"basic": {"name": "Anon"}, "skills": ["Python", "FastAPI"]},
-            "jd_text": "招聘 Python FastAPI 后端工程师",
-        },
-    )
-    assert inline_resp.status_code == 200
-    assert "overall_score" in inline_resp.json()
-
-    # Cross-user lookup is rejected (404), owner succeeds (200)
-    _override_user(
-        AppUser(id="attacker_u", email="a@e.com", name="Attacker", role="user", pdf_download_count=0)
-    )
-    cross_resp = client.post(
-        "/api/jd/match",
-        json={"resume_id": "jd_victim_res", "jd_text": "招聘 Python 后端工程师"},
-    )
-    assert cross_resp.status_code == 404
-
-    _override_user(
-        AppUser(id="real_owner", email="o@e.com", name="Owner", role="user", pdf_download_count=0)
-    )
-    owner_resp = client.post(
-        "/api/jd/match",
-        json={"resume_id": "jd_owner_res", "jd_text": "招聘 Python FastAPI 后端工程师"},
-    )
-    assert owner_resp.status_code == 200
-
-
-# 7. Mock billing checkout disabled in production (403) unless ALLOW_MOCK_CHECKOUT=true
+# 6. Mock billing checkout disabled in production (403) unless ALLOW_MOCK_CHECKOUT=true
 def test_mock_billing_checkout_prod_gate(isolated_db, monkeypatch):
     async def _fake_ba_user():
         return BetterAuthUser(id="ba_billing_1", email="bill@example.com", name="Buyer")

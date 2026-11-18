@@ -17,16 +17,12 @@ import SkinPickerModal from './components/SkinPickerModal'
 import { getStoredSkin } from '@/lib/skin'
 import EditPreviewLayout from './EditPreviewLayout'
 import AIImportModal from './shared/AIImportModal'
-import JdOptimizeDialog from './shared/JdOptimizeDialog'
-import JdMatchDialog from './shared/JdMatchDialog'
 import TranslateDialog from './shared/TranslateDialog'
 import HealthCheckDialog from './shared/HealthCheckDialog'
 import type { SettingsDrawerTab } from './SidePanel/SettingsDrawer'
 // AI 助手悬浮气泡暂不开放（2026-07-17），恢复时连同下方渲染处一起取消注释
 // import AiAssistantChat from './shared/AiAssistantChat'
-import { scoreResume, type JdOptimizeField } from '@/services/api'
-import { useAuth } from '@/contexts/AuthContext'
-import { stripPhotoFromResumeData } from '@/services/storage/sanitizeResume'
+import { type JdOptimizeField } from '@/services/api'
 import { stripHtmlTags } from './utils/textUtils'
 import { withSettingsDefaults } from '../../Builder/settings'
 
@@ -36,18 +32,11 @@ const PDF_RENDER_INITIAL_DELAY_MS = 300
 
 export default function WorkspaceV2() {
   const { resumeId } = useParams<{ resumeId?: string }>()
-  const { isAuthenticated } = useAuth()
 
   // 跟踪编辑状态和保存状态
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [initialResumeData, setInitialResumeData] = useState<any>(null)
   const [isAutoRenderPending, setIsAutoRenderPending] = useState(false)
-  // 评分状态
-  const [jdText, setJdText] = useState('')
-  const [scoreData, setScoreData] = useState<any>(null)
-  const [scoring, setScoring] = useState(false)
-  const [showJdMatch, setShowJdMatch] = useState(false)
-  const [showJdOptimize, setShowJdOptimize] = useState(false)
   const [showTranslate, setShowTranslate] = useState(false)
   const [showHealthCheck, setShowHealthCheck] = useState(false)
   const [settingsDrawerTab, setSettingsDrawerTab] = useState<SettingsDrawerTab | null>(null)
@@ -264,24 +253,6 @@ export default function WorkspaceV2() {
     }
   }, [])
 
-  const resumeDataRef = useRef(resumeData)
-  resumeDataRef.current = resumeData
-
-  // JD 文本变化时自动触发评分（匿名/未入库简历随请求附带脱敏后的 resume_data，避免 404）
-  useEffect(() => {
-    if (isDataLoaded && jdText && jdText.trim().length > 10) {
-      const inlineResumeData =
-        !isAuthenticated || !currentResumeId
-          ? stripPhotoFromResumeData(resumeDataRef.current)
-          : undefined
-      setScoring(true)
-      scoreResume(currentResumeId, jdText, inlineResumeData)
-        .then(setScoreData)
-        .catch(console.error)
-        .finally(() => setScoring(false))
-    }
-  }, [currentResumeId, isAuthenticated, isDataLoaded, jdText])
-
   // HTML 模板：前端 html2pdf 导出预览容器（TODO: 换 window.print 真文字方案，见设计文档）
   const handleDownloadHtmlPDF = useCallback(() => {
     const sourceElement = document.querySelector('.html-template-container') as HTMLElement | null
@@ -401,15 +372,10 @@ export default function WorkspaceV2() {
             resumeName={resumeData?.basic?.name || '我的简历'}
             pdfBlob={pdfBlob}
             onDownloadPDF={handleDownloadByTemplate}
-            onOpenJdMatch={() => setSettingsDrawerTab((prev) => (prev === 'jd' ? null : 'jd'))}
           />
         }
         resumeData={resumeData}
         setResumeData={setResumeData}
-        currentResumeId={currentResumeId}
-        jdFields={jdFields}
-        applyTextReplacement={applyTextReplacement}
-        applyTextReplacements={applyTextReplacements}
         settingsDrawerTab={settingsDrawerTab}
         onToggleSettingsDrawerTab={setSettingsDrawerTab}
         activeSection={activeSection}
@@ -453,28 +419,6 @@ export default function WorkspaceV2() {
         handleDownload={handleDownloadByTemplate}
       />
 
-      {/* JD 匹配优化 —— 聚焦弹窗（粘 JD → 多维评分 → 一键深度优化），取代页面底部常驻大框 */}
-      <JdMatchDialog
-        open={showJdMatch}
-        onOpenChange={setShowJdMatch}
-        jdText={jdText}
-        onJdTextChange={(v) => { setJdText(v); setScoreData(null) }}
-        scoreData={scoreData}
-        scoring={scoring}
-        hasContent={jdFields.length > 0}
-        onOptimize={() => { setShowJdMatch(false); setShowJdOptimize(true) }}
-      />
-
-      {/* 针对 JD 优化弹窗 */}
-      <JdOptimizeDialog
-        open={showJdOptimize}
-        onOpenChange={setShowJdOptimize}
-        fields={jdFields}
-        jdText={jdText}
-        onApply={applyTextReplacement}
-        onApplyBatch={applyTextReplacements}
-      />
-
       {/* 简历一键翻译弹窗 */}
       <TranslateDialog
         open={showTranslate}
@@ -493,17 +437,7 @@ export default function WorkspaceV2() {
         onApplyBatch={applyTextReplacements}
       />
 
-      {/* AI 助手（右下角绿色悬浮气泡）暂不开放，先隐藏（2026-07-17 产品决定）。
-          恢复时取消下面注释即可，props 契约未变。 */}
-      {/* <AiAssistantChat
-        resumeData={resumeData}
-        onJdOptimize={() => setShowJdMatch(true)}
-        jdReady={jdText.trim().length >= 10 && jdFields.length > 0}
-        onFocusJd={() => setShowJdMatch(true)}
-        onTranslate={() => setShowTranslate(true)}
-        onHealthCheck={() => setShowHealthCheck(true)}
-        hasContent={jdFields.length > 0}
-      /> */}
+      {/* AI 助手（右下角绿色悬浮气泡）暂不开放（2026-07-17 产品决定） */}
 
       {/* 隐藏的文件输入（用于导入 JSON） */}
       <input
