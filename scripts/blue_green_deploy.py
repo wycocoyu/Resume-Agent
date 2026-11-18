@@ -32,6 +32,16 @@ class SlotSpec:
     app_name: str
 
 
+def _detect_upstream_file() -> Path:
+    env_path = os.getenv("COCOCV_NGINX_UPSTREAM_FILE", "").strip()
+    if env_path:
+        return Path(env_path)
+    vhost_dir = Path("/www/server/panel/vhost/nginx")
+    if vhost_dir.is_dir():
+        return vhost_dir / "00-cococv-upstream.conf"
+    return Path("/etc/nginx/conf.d/cococv-upstream.conf")
+
+
 @dataclass
 class DeployConfig:
     repo_dir: Path
@@ -42,12 +52,13 @@ class DeployConfig:
     green_app: str = "cococv-backend-green"
     legacy_app: str = "resume-backend"
     bind_host: str = "127.0.0.1"
-    upstream_file: Path = Path("/etc/nginx/conf.d/cococv-upstream.conf")
+    upstream_file: Path = field(default_factory=_detect_upstream_file)
     state_file: Path | None = None
     drain_seconds: float = 15.0
     health_timeout: float = 45.0
     keep_releases: int = 5
     workers: int = 2
+    max_memory_restart: str = "1G"
     python_bin: Path | None = None
     nginx_test_cmd: list[str] = field(default_factory=lambda: ["nginx", "-t"])
     nginx_reload_cmd: list[str] = field(default_factory=lambda: ["nginx", "-s", "reload"])
@@ -371,12 +382,13 @@ def _pm2_start_slot(
     runner: Callable[..., subprocess.CompletedProcess[str]] = _run_cmd,
 ) -> None:
     runner(["pm2", "delete", slot.app_name], check=False)
+    assert config.python_bin is not None
     env = dict(os.environ)
     env["COCOCV_SLOT"] = slot.name
     env["COCOCV_GIT_SHA"] = commit
     env["PORT"] = str(slot.port)
+    env["PATH"] = f"{config.python_bin.parent}:{env.get('PATH', '')}"
 
-    assert config.python_bin is not None
     cmd = [
         "pm2",
         "start",
@@ -385,6 +397,8 @@ def _pm2_start_slot(
         slot.app_name,
         "--cwd",
         str(config.repo_dir),
+        "--max-memory-restart",
+        config.max_memory_restart,
         "--update-env",
         "--",
         "-m",
@@ -412,7 +426,7 @@ def _build_frontend_release(
     release_dir.parent.mkdir(parents=True, exist_ok=True)
     build_env = dict(os.environ)
     build_env.setdefault("NODE_OPTIONS", "--max-old-space-size=2560")
-    runner(["npm", "ci", "--no-audit", "--no-fund"], cwd=config.frontend_dir, env=build_env, check=True)
+    runner(["npm", "install", "--no-audit", "--no-fund"], cwd=config.frontend_dir, env=build_env, check=True)
     runner(
         ["npm", "run", "build", "--", "--outDir", str(release_dir)],
         cwd=config.frontend_dir,
@@ -661,7 +675,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CocoCV Host PM2 + Nginx Blue-Green Deploy CLI")
     parser.add_argument("action", choices=["status", "deploy", "rollback"])
     parser.add_argument("--repo-dir", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--upstream-file", type=Path, default=Path(os.getenv("COCOCV_NGINX_UPSTREAM_FILE", "/etc/nginx/conf.d/cococv-upstream.conf")))
+    parser.add_argument("--upstream-file", type=Path, default=_detect_upstream_file())
     parser.add_argument("--state-file", type=Path, default=None)
     parser.add_argument("--blue-port", type=int, default=_env_int("COCOCV_BLUE_PORT", 9001))
     parser.add_argument("--green-port", type=int, default=_env_int("COCOCV_GREEN_PORT", 9002))

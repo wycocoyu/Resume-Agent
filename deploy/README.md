@@ -1,6 +1,8 @@
-# CocoCV 蓝绿部署运维说明（Host PM2 + Nginx）
+# CocoCV 蓝绿部署运维说明（Host PM2 + Nginx · 仅限手动发布）
 
 本目录提供宿主机 `pm2` + `Nginx` 双槽位零中断发布与秒级回滚方案（对应 Issue #108）。
+
+> **发布边界（硬约束）**：本项目仅允许运维/开发者手动执行 `./scripts/deploy-blue-green.sh` 发布与回滚，严禁接入 GitHub Actions 自动 CD、Webhook 或重启 `auto-deploy.sh` 定时拉取。
 
 ## 架构概览
 

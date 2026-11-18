@@ -385,3 +385,24 @@ def test_shell_wrapper_status_and_dry_run(tmp_path: Path) -> None:
     assert dry_json["dry_run"] is True
     assert dry_json["target_slot"] == "blue"
     assert dry_json["target_port"] == 9001
+
+
+def test_pm2_command_includes_venv_path_and_memory_limit(tmp_path: Path) -> None:
+    captured: list[tuple[list[str], dict[str, str] | None]] = []
+
+    def rec_runner(cmd: list[str], **kwargs):
+        captured.append((cmd, kwargs.get("env")))
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    py_bin = tmp_path / "venv" / "bin" / "python"
+    cfg = bg.DeployConfig(repo_dir=tmp_path, python_bin=py_bin)
+    bg._pm2_start_slot(cfg, cfg.slot_spec("blue"), "abc12345", runner=rec_runner)
+
+    start_cmd, start_env = captured[-1]
+    assert "--max-memory-restart" in start_cmd
+    assert "1G" in start_cmd
+    assert "--update-env" in start_cmd
+    assert start_env is not None
+    assert start_env["COCOCV_SLOT"] == "blue"
+    assert start_env["COCOCV_GIT_SHA"] == "abc12345"
+    assert start_env["PATH"].startswith(str(py_bin.parent))
