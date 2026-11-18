@@ -471,7 +471,42 @@ def test_transient_data_url_photo_decode_and_no_global_cache(tmp_path: Path):
     assert (d2 / "logos" / "photo.jpg").read_bytes() == VALID_JPEG_BYTES
     assert len(latex_generator._USER_PHOTO_CACHE) == 0
 
-    # 3. 拦截缺 ;base64,、非法 base64、超 2MB、以及伪装 SVG/WebP 魔数
+    # 3. WebP data URL 内存转码为 .jpg（无透明通道）或 .png（含透明通道），绝不进入 _USER_PHOTO_CACHE
+    from io import BytesIO
+    from PIL import Image
+
+    rgb_webp_buf = BytesIO()
+    Image.new("RGB", (4, 4), color=(12, 34, 56)).save(rgb_webp_buf, format="WEBP")
+    rgb_webp_bytes = rgb_webp_buf.getvalue()
+    rgb_webp_b64 = base64.b64encode(rgb_webp_bytes).decode("ascii")
+
+    d_webp_rgb = tmp_path / "run_webp_rgb"
+    res_webp_rgb = latex_generator._download_user_photo_to_dir(
+        f"data:image/webp;base64,{rgb_webp_b64}",
+        str(d_webp_rgb),
+        offline=True,
+    )
+    assert res_webp_rgb == "photo.jpg"
+    converted_jpg = (d_webp_rgb / "logos" / "photo.jpg").read_bytes()
+    assert latex_generator._detect_xelatex_image_ext(converted_jpg) == ".jpg"
+    assert len(latex_generator._USER_PHOTO_CACHE) == 0
+
+    rgba_webp_buf = BytesIO()
+    Image.new("RGBA", (4, 4), color=(12, 34, 56, 128)).save(rgba_webp_buf, format="WEBP")
+    rgba_webp_b64 = base64.b64encode(rgba_webp_buf.getvalue()).decode("ascii")
+
+    d_webp_rgba = tmp_path / "run_webp_rgba"
+    res_webp_rgba = latex_generator._download_user_photo_to_dir(
+        f"data:image/webp;base64,{rgba_webp_b64}",
+        str(d_webp_rgba),
+        offline=True,
+    )
+    assert res_webp_rgba == "photo.png"
+    converted_png = (d_webp_rgba / "logos" / "photo.png").read_bytes()
+    assert latex_generator._detect_xelatex_image_ext(converted_png) == ".png"
+    assert len(latex_generator._USER_PHOTO_CACHE) == 0
+
+    # 4. 拦截缺 ;base64,、非法 base64、超 2MB、以及伪装 SVG/WebP 魔数
     d3 = tmp_path / "run_bad"
     assert (
         latex_generator._download_user_photo_to_dir(
@@ -492,13 +527,20 @@ def test_transient_data_url_photo_decode_and_no_global_cache(tmp_path: Path):
         )
         is None
     )
-    # 即使声明为 image/png，魔数不是 PNG/JPEG/PDF 一样拒收
+    # 即使声明为 image/png，魔数不是 PNG/JPEG/PDF（包括伪装的 WebP 或 SVG）一样拒收
     assert (
         latex_generator._download_user_photo_to_dir(
             f"data:image/png;base64,{svg_b64}", str(d3)
         )
         is None
     )
+    assert (
+        latex_generator._download_user_photo_to_dir(
+            f"data:image/png;base64,{rgb_webp_b64}", str(d3)
+        )
+        is None
+    )
+    assert latex_generator._detect_xelatex_image_ext(rgb_webp_bytes) is None
     oversized_bytes = VALID_PNG_BYTES + b"A" * (2 * 1024 * 1024 + 1 - len(VALID_PNG_BYTES))
     oversized_b64 = base64.b64encode(oversized_bytes).decode("ascii")
     assert (
@@ -843,6 +885,24 @@ def test_agent_middleware_blocks_proxy_mode_and_compile_latex_uses_transient_dat
     assert observed["photo_bytes"] == VALID_PNG_BYTES
     assert not Path(observed["temp_dir"]).exists()
     assert len(latex_generator._USER_PHOTO_CACHE) == 0
+
+    # 2b. 无效 data: URL 在编译降级告警中必须被截断，不得把完整 base64 刷入日志/warnings
+    long_bad_b64 = base64.b64encode(b"<svg>" + b"x" * 200 + b"</svg>").decode("ascii")
+    bad_data_url = f"data:image/png;base64,{long_bad_b64}"
+    warnings_out: list[str] = []
+    bad_resume_obj = {"name": "匿名用户", "photo": bad_data_url, "contact": {}}
+    bad_tex = latex_generator.json_to_latex(bad_resume_obj, section_order=[], offline=True)
+    latex_generator.compile_latex_to_pdf(
+        bad_tex,
+        template_dir,
+        resume_data=bad_resume_obj,
+        section_order=[],
+        offline=True,
+        warnings_out=warnings_out,
+    )
+    assert len(warnings_out) == 1
+    assert warnings_out[0].endswith("...")
+    assert long_bad_b64 not in warnings_out[0]
 
     # 3. 验证 resume_assembler 与 zhipu_layout.recognize_layout_from_images 命中 402/余额不足立即熔断
     class _Quota402Error(Exception):
