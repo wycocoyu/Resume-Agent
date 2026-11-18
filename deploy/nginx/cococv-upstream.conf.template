@@ -1,0 +1,5 @@
+# Managed by scripts/deploy-blue-green.sh (active_slot=${ACTIVE_SLOT})
+upstream cococv_backend {
+    server 127.0.0.1:${ACTIVE_PORT};
+    keepalive 32;
+}
