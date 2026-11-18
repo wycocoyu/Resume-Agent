@@ -1059,12 +1059,17 @@ export async function healthCheck(fields: JdOptimizeField[]): Promise<HealthChec
   )
 }
 
-export const scoreResume = async (resumeId: string, jdText: string): Promise<any> => {
+export const scoreResume = async (
+  resumeId: string | null,
+  jdText: string,
+  resumeData?: unknown,
+): Promise<any> => {
   return postAiJson(
     `${getApiBaseUrl()}/api/resume/score`,
     {
-      resume_id: resumeId,
+      ...(resumeId ? { resume_id: resumeId } : {}),
       jd_text: jdText,
+      ...(resumeData !== undefined ? { resume_data: resumeData } : {}),
     },
     '简历评分失败，请稍后重试',
     {

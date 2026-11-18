@@ -160,4 +160,184 @@ describe('localPhotoStore & LocalStorageAdapter portrait photo isolation', () =>
     expect(fakeCtx.drawImage).toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
+
+  it('readAndCompressPortraitPhoto transcodes small WebP images to PNG/JPEG when canvas & Image are available', async () => {
+    const smallWebp = new File([new Uint8Array([82, 73, 70, 70, 12, 0, 0, 0, 87, 69, 66, 80])], 'avatar.webp', {
+      type: 'image/webp',
+    })
+
+    const fakeCtx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    }
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => fakeCtx),
+      toDataURL: vi.fn((mime: string) =>
+        mime === 'image/png'
+          ? `data:image/png;base64,${SAMPLE_PNG_DATA_URL.split(';base64,')[1]}`
+          : 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
+      ),
+    }
+    const origCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName === 'canvas') return fakeCanvas as unknown as HTMLCanvasElement
+      return origCreateElement(tagName)
+    })
+
+    class MockImage {
+      naturalWidth = 400
+      naturalHeight = 400
+      width = 400
+      height = 400
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      set src(_val: string) {
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('Image', MockImage)
+
+    const result = await readAndCompressPortraitPhoto(smallWebp)
+    expect(result).toMatch(/^data:image\/(png|jpeg);base64,/)
+    expect(result).not.toMatch(/^data:image\/webp;/)
+    expect(fakeCtx.drawImage).toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('executes real openAssetsDB() and withStore() IndexedDB transaction path with LocalStorageAdapter roundtrip', async () => {
+    const dbStores = new Map<string, Map<string, unknown>>()
+    const openSpy = vi.fn((name: string, _version?: number) => {
+      expect(name).toBe('cococv_local_assets')
+      const storeNames = new Set<string>(dbStores.keys())
+      const db = {
+        objectStoreNames: {
+          contains: (storeName: string) => storeNames.has(storeName),
+        },
+        createObjectStore: (storeName: string) => {
+          storeNames.add(storeName)
+          if (!dbStores.has(storeName)) {
+            dbStores.set(storeName, new Map())
+          }
+          return {} as IDBObjectStore
+        },
+        close: vi.fn(),
+        transaction: (storeName: string, _mode: IDBTransactionMode) => {
+          const backing = dbStores.get(storeName) || new Map<string, unknown>()
+          const tx: any = {
+            oncomplete: null,
+            onerror: null,
+            onabort: null,
+            objectStore: () => ({
+              put: (val: unknown, key: string) => {
+                const req: any = { onsuccess: null, onerror: null, result: key }
+                queueMicrotask(() => {
+                  backing.set(key, val)
+                  req.onsuccess?.()
+                  tx.oncomplete?.()
+                })
+                return req
+              },
+              get: (key: string) => {
+                const req: any = { onsuccess: null, onerror: null, result: undefined }
+                queueMicrotask(() => {
+                  req.result = backing.get(key)
+                  req.onsuccess?.()
+                  tx.oncomplete?.()
+                })
+                return req
+              },
+              delete: (key: string) => {
+                const req: any = { onsuccess: null, onerror: null, result: undefined }
+                queueMicrotask(() => {
+                  backing.delete(key)
+                  req.onsuccess?.()
+                  tx.oncomplete?.()
+                })
+                return req
+              },
+              clear: () => {
+                const req: any = { onsuccess: null, onerror: null, result: undefined }
+                queueMicrotask(() => {
+                  backing.clear()
+                  req.onsuccess?.()
+                  tx.oncomplete?.()
+                })
+                return req
+              },
+            }),
+          }
+          return tx
+        },
+      } as unknown as IDBDatabase
+
+      const openReq: any = {
+        result: db,
+        error: null,
+        onupgradeneeded: null,
+        onsuccess: null,
+        onerror: null,
+      }
+      queueMicrotask(() => {
+        if (!dbStores.has('portrait_photos')) {
+          openReq.onupgradeneeded?.()
+        }
+        openReq.onsuccess?.()
+      })
+      return openReq
+    })
+
+    vi.stubGlobal('indexedDB', { open: openSpy })
+
+    try {
+      const adapter = new LocalStorageAdapter()
+      const saved = await adapter.saveResume(
+        {
+          basic: {
+            name: '李四',
+            title: '后端工程师',
+            email: 'lisi@example.com',
+            phone: '13900000000',
+            location: '北京',
+            photo: SAMPLE_PNG_DATA_URL,
+          },
+          education: [],
+          experience: [],
+          projects: [],
+          openSource: [],
+          awards: [],
+          selfEvaluation: '',
+          skillContent: '',
+          menuSections: [],
+          globalSettings: {},
+        } as any,
+        'idb_resume_1',
+      )
+
+      expect(openSpy).toHaveBeenCalled()
+      expect(dbStores.get('portrait_photos')?.get('idb_resume_1')).toBe(SAMPLE_PNG_DATA_URL)
+      expect((saved.data as any).basic.photo).toBe(SAMPLE_PNG_DATA_URL)
+
+      const raw = localStorage.getItem('resume_resumes') || ''
+      expect(raw).not.toContain('data:image/png;base64')
+
+      const loaded = await adapter.getResume('idb_resume_1')
+      expect((loaded?.data as any).basic.photo).toBe(SAMPLE_PNG_DATA_URL)
+
+      const list = await adapter.getAllResumes()
+      expect(list).toHaveLength(1)
+      expect((list[0].data as any).basic.photo).toBe(SAMPLE_PNG_DATA_URL)
+
+      const dup = await adapter.duplicateResume('idb_resume_1')
+      expect(dup).not.toBeNull()
+      expect(dbStores.get('portrait_photos')?.get(dup!.id)).toBe(SAMPLE_PNG_DATA_URL)
+
+      await adapter.deleteResume('idb_resume_1')
+      expect(dbStores.get('portrait_photos')?.has('idb_resume_1')).toBe(false)
+      expect(await getLocalPortraitPhoto(dup!.id)).toBe(SAMPLE_PNG_DATA_URL)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
