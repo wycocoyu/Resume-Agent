@@ -464,8 +464,8 @@ def register_render_command(app: typer.Typer, get_output_context: Any) -> None:
                 }
                 if "xelatex" in str(exc).lower():
                     extra["fallback_hint"] = (
-                        "Local XeLaTeX is unavailable. Use '--template asu-tech' for local HTML/Chrome rendering "
-                        "or run 'cococv handoff <file>' for Web cloud LaTeX rendering."
+                        "Run 'cococv handoff <file>' for remote Web cloud LaTeX rendering (https://cococv.cn), "
+                        "or use '--template asu-tech' for local HTML/Chrome rendering."
                     )
                 raise CLIError(
                     str(exc),

@@ -320,6 +320,20 @@ def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
     assert "asu-01" in body
     assert "cococv render" in body
     assert "Headless Chrome CDP" in body
+    assert "capabilities.local_latex_pdf" in body
+    assert "handoff" in body
+    assert "上云" in body
+    assert "cococv.cn" in body
+    assert "https://cococv.cn/templates" in body
+    assert "https://cococv.cn/create-new" in body
+    assert "网页模板中心" in body
+    assert "27 套" in body
+    assert "经典 LaTeX" in body
+    assert "HTML 版本" in body
+    assert "复制口令" in body
+    assert "没有现成简历" in body
+    assert "OCR" in body
+    assert "极客" not in body
 
 
 def test_install_and_uninstall_harness_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -443,7 +457,9 @@ def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -
     env_payload = json.loads(res_env.stdout)
     assert env_payload["ok"] is True
     assert env_payload["capabilities"]["local_html"] is True
+    assert env_payload["capabilities"]["local_latex_pdf"] is False
     assert env_payload["recommended_engine"] == "html"
+    assert env_payload["recommended_latex_route"] == "remote_handoff"
 
     # 2. init skeleton
     resume_path = work_dir / "resume.json"
@@ -485,6 +501,7 @@ def test_bundled_cococv_local_runs_zero_dependency_stdlib_only(tmp_path: Path) -
     assert res_tex.returncode == 1
     tex_payload = json.loads(res_tex.stdout)
     assert tex_payload["error"]["code"] == "xelatex_not_found"
+    assert "handoff" in tex_payload.get("fallback_hint", "")
     assert "--template asu-tech" in tex_payload.get("fallback_hint", "")
 
 
@@ -535,4 +552,80 @@ def test_cococv_local_falls_back_when_global_cli_lacks_png_flags(tmp_path: Path)
     )
     assert res.returncode == 0, res.stderr
     assert "DELEGATED: None" in res.stdout
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS Quartz/PDFKit fallback is darwin-only")
+def test_cococv_local_macos_quartz_reads_multipage_pdf_without_deps(tmp_path: Path) -> None:
+    """When pymupdf/pypdf/pdftotext are unavailable on macOS, read-source still extracts all pages and PNGs."""
+    import shutil
+
+    scripts_dst = tmp_path / "skill" / "scripts"
+    shutil.copytree(COMMITTED_SKILL / "scripts", scripts_dst)
+    local_script = scripts_dst / "cococv_local.py"
+
+    # Build a minimal valid 2-page PDF in pure Python stdlib (no pymupdf/reportlab/Chrome needed)
+    def _build_two_page_pdf(out_path: Path) -> None:
+        objects: list[bytes] = []
+        # 1: Catalog, 2: Pages, 3: Font, 4: Page1, 5: Contents1, 6: Page2, 7: Contents2
+        c1 = b"BT /F1 18 Tf 72 720 Td (PageOneMarker Alice) Tj ET"
+        c2 = b"BT /F1 18 Tf 72 720 Td (PageTwoMarker Bob) Tj ET"
+        objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+        objects.append(b"2 0 obj << /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >> endobj\n")
+        objects.append(b"3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+        objects.append(
+            b"4 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >> endobj\n"
+        )
+        objects.append(f"5 0 obj << /Length {len(c1)} >> stream\n".encode("ascii") + c1 + b"\nendstream endobj\n")
+        objects.append(
+            b"6 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >> endobj\n"
+        )
+        objects.append(f"7 0 obj << /Length {len(c2)} >> stream\n".encode("ascii") + c2 + b"\nendstream endobj\n")
+
+        header = b"%PDF-1.4\n"
+        offsets = [0]
+        body = bytearray(header)
+        for obj in objects:
+            offsets.append(len(body))
+            body.extend(obj)
+        xref_pos = len(body)
+        xref_lines = [f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii")]
+        for off in offsets[1:]:
+            xref_lines.append(f"{off:010d} 00000 n \n".encode("ascii"))
+        trailer = f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode("ascii")
+        out_path.write_bytes(bytes(body) + b"".join(xref_lines) + trailer)
+
+    pdf_path = tmp_path / "two-page-resume.pdf"
+    pages_dir = tmp_path / "pages"
+    _build_two_page_pdf(pdf_path)
+
+    probe_code = (
+        f"import json, sys; sys.path.insert(0, {str(scripts_dst)!r}); "
+        "import cococv_local; "
+        "cococv_local._has_module = lambda name: False; "
+        "orig_which = cococv_local.shutil.which; "
+        "cococv_local.shutil.which = lambda name: None if name in ('pdftotext', 'pdftoppm') else orig_which(name); "
+        f"res = cococv_local._extract_pdf_local(cococv_local.Path({str(pdf_path)!r}), cococv_local.Path({str(pages_dir)!r})); "
+        "print(json.dumps(res, ensure_ascii=False))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", probe_code],
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["method"] == "macos-quartz"
+    assert payload["page_count"] == 2
+    assert "PageOneMarker Alice" in payload["text"]
+    assert "PageTwoMarker Bob" in payload["text"]
+    assert len(payload["page_images"]) == 2
+    for img in payload["page_images"]:
+        p = Path(img)
+        assert p.is_file()
+        assert p.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
 

@@ -15,6 +15,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.13.4',
+    date: '2026-11-17',
+    added: [
+      'AI 助手开局优先引导前往免登录「模板中心」预览全部 27 套样式，并明确提供「本地解析后上云出经典 LaTeX PDF」与「纯本地生成 HTML 网页版和 PDF」两条路线',
+      '支持直接读取本地多页 PDF 简历文件以节省云端识别额度，也支持随时前往网页端 OCR 导入，没有现成简历时分轮引导补充',
+    ],
+    fixed: [
+      '优化模板广场与 AI 助手引导文案，去掉生硬内部术语，并在本机缺少排版环境时避免误报可本地直出、改为经确认后上云生成 PDF',
+    ],
+  },
+  {
     version: '3.13.3',
     date: '2026-11-16',
     added: [

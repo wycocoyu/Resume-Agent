@@ -313,7 +313,7 @@ export default function TemplatesPage() {
                       : 'border-slate-300 bg-white text-slate-700',
                 )}
               >
-                {tpl.type === 'latex' ? 'XeLaTeX 精排' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
+                {tpl.type === 'latex' ? 'XeLaTeX · 网站云端编译' : supportsCli ? 'HTML · 支持 CLI' : '网页专属 HTML'}
               </span>
               {tpl.recommended && (
                 <span className="border border-black fresh:border-blue-600 bg-[#4285F4] px-2 py-0.5 text-[10px] font-bold text-white fresh:rounded-md">
@@ -446,7 +446,7 @@ export default function TemplatesPage() {
                   所见即工作台真实排版，选好直接写或交给 AI Agent
                 </h1>
                 <p className="text-sm text-slate-600 dark:text-slate-300 max-w-3xl">
-                  与工作台抽屉 1:1 对齐：支持本地免登录直接在线编辑与 HTML 导出；带「复制口令」的模板还可直接发给 Codex / Claude Code 本地出稿。
+                  与工作台抽屉 1:1 对齐：全部模板都能免登录直接在线写；ASu 系列复制口令后可在本地 AI 助手直接出稿，Classic LaTeX 需要专门排版环境，一般人直接在我们网站用自带的云端编译环境导出 PDF 最省事。
                 </p>
               </div>
 
@@ -692,10 +692,22 @@ export default function TemplatesPage() {
 
                 {previewTemplate.supportsCli !== false ? (
                   <>
+                    {previewTemplate.type === 'latex' && (
+                      <div
+                        data-testid="latex-remote-first-banner"
+                        className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/70 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1"
+                      >
+                        <div className="font-bold">直接用我们网站的云端编译环境最省事</div>
+                        <p className="leading-relaxed">
+                          这套模板需要专门的排版软件，普通电脑一般没装。直接点上方「{importedResume ? '套用并进入编辑' : '免登录用此模板编辑'}」就能用我们网站自带的云端编译环境一键做完导出 PDF；把下面口令发给 AI 助手整理好后，也会发你网址点回来用网站云端环境导出（只有自己电脑装过排版环境的才用最下面命令行）。
+                        </p>
+                      </div>
+                    )}
+
                     <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
-                          <Sparkles className="h-3.5 w-3.5 text-[#4285F4]" />
+                          <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#4285F4]" />
                           发给 Codex / Claude Code
                         </span>
                         <button
@@ -707,7 +719,7 @@ export default function TemplatesPage() {
                               '已复制 Skill 对话口令',
                             )
                           }
-                          className="text-xs font-bold text-[#4285F4] hover:underline"
+                          className="shrink-0 whitespace-nowrap text-xs font-bold text-[#4285F4] hover:underline"
                         >
                           {copiedKey === `side-prompt:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
                         </button>
@@ -718,10 +730,12 @@ export default function TemplatesPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200">
-                          <Terminal className="h-3.5 w-3.5 text-emerald-600" />
-                          本地 CLI 命令
+                          <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                          {previewTemplate.type === 'latex'
+                            ? '本地命令行（电脑已装环境才用）'
+                            : '本地 CLI 命令'}
                         </span>
                         <button
                           type="button"
@@ -732,7 +746,7 @@ export default function TemplatesPage() {
                               '已复制本地 CLI 命令',
                             )
                           }
-                          className="text-xs font-bold text-[#4285F4] hover:underline"
+                          className="shrink-0 whitespace-nowrap text-xs font-bold text-[#4285F4] hover:underline"
                         >
                           {copiedKey === `side-cli:${previewTemplate.id}` ? '已复制 ✓' : '复制'}
                         </button>
@@ -746,7 +760,7 @@ export default function TemplatesPage() {
                   <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-3 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
                     <div className="font-bold text-slate-800 dark:text-slate-100">网页工作台专属模板</div>
                     <p>
-                      此版式仅在网页工作台提供，无需登录即可直接在线编辑并导出；如需在 Codex / Claude 本地 CLI 生成，建议选用「Classic LaTeX」或「ASu」系列模板。
+                      此版式仅在网页工作台提供，无需登录即可直接在线编辑并导出；如果想让本地 AI 助手直接在电脑里离线出稿，推荐选用「ASu」系列模板（Classic LaTeX 建议直接通过我们网站的云端编译环境导出 PDF）。
                     </p>
                   </div>
                 )}
