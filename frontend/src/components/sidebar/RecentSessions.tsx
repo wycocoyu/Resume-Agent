@@ -9,6 +9,14 @@ import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRuntimeFeatures } from '@/lib/runtimeEnv';
 import { getAuthHeaders as buildAuthHeaders } from '@/lib/authHeaders';
+import { getAgentRequestHeaders } from '@/services/agentByokConfig';
+import {
+  AGENT_SESSIONS_STORAGE_KEY,
+  AGENT_SESSIONS_UPDATED_EVENT,
+  MAX_LOCAL_AGENT_SESSIONS,
+  clearAllLocalAgentSessions,
+  listLocalAgentSessions,
+} from '@/services/agentLocalHistory';
 import {
   DEFAULT_SESSION_LIMITS,
   getSessionLimitMessage,
@@ -186,24 +194,48 @@ export function RecentSessions({
     [apiBaseUrl, getAuthHeaders, parseErrorMessage]
   );
 
+  const loadLocalSessions = useCallback(() => {
+    const local = listLocalAgentSessions();
+    setSessions(local);
+    setPagination({
+      total: local.length,
+      page: 1,
+      page_size: MAX_LOCAL_AGENT_SESSIONS,
+      total_pages: 1,
+    });
+    setSessionLimits({
+      max_sessions: MAX_LOCAL_AGENT_SESSIONS,
+      current_count: local.length,
+      can_create: local.length < MAX_LOCAL_AGENT_SESSIONS,
+    });
+    setIsLoading(false);
+    setErrorMessage(null);
+  }, []);
+
   const refreshSessions = useCallback(async () => {
+    if (!agentEnabled) return;
+    if (!isAuthenticated) {
+      loadLocalSessions();
+      return;
+    }
     setIsLoading(true);
     await fetchPage(1, 'replace');
     setIsLoading(false);
-  }, [fetchPage]);
+  }, [agentEnabled, fetchPage, isAuthenticated, loadLocalSessions]);
 
   const loadMore = useCallback(async () => {
+    if (!isAuthenticated) return;
     if (!pagination || isLoadingMore) return;
     const nextPage = pagination.page + 1;
     setIsLoadingMore(true);
     await fetchPage(nextPage, 'append');
     setIsLoadingMore(false);
-  }, [fetchPage, isLoadingMore, pagination]);
+  }, [fetchPage, isAuthenticated, isLoadingMore, pagination]);
 
   // refreshKey 变化或环境切换时刷新，避免双 effect 造成重复请求
   useEffect(() => {
     if (authLoading) return;
-    if (!agentEnabled || !isAuthenticated) {
+    if (!agentEnabled) {
       setSessions([]);
       setPagination({
         total: 0,
@@ -216,8 +248,30 @@ export function RecentSessions({
       setSessionLimits(DEFAULT_SESSION_LIMITS);
       return;
     }
+    if (!isAuthenticated) {
+      loadLocalSessions();
+      return;
+    }
     refreshSessions();
-  }, [apiBaseUrl, refreshKey, refreshSessions, agentEnabled, isAuthenticated, authLoading]);
+  }, [apiBaseUrl, refreshKey, refreshSessions, agentEnabled, isAuthenticated, authLoading, loadLocalSessions]);
+
+  useEffect(() => {
+    if (authLoading || !agentEnabled || isAuthenticated) return;
+    const handleLocalSync = () => {
+      loadLocalSessions();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === AGENT_SESSIONS_STORAGE_KEY) {
+        loadLocalSessions();
+      }
+    };
+    window.addEventListener(AGENT_SESSIONS_UPDATED_EVENT, handleLocalSync);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(AGENT_SESSIONS_UPDATED_EVENT, handleLocalSync);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [authLoading, agentEnabled, isAuthenticated, loadLocalSessions]);
 
   useEffect(() => {
     if (!loadMoreRef.current || !listContainerRef.current) return;
@@ -283,6 +337,31 @@ export function RecentSessions({
   const handleConfirmDeleteAll = async () => {
     try {
       setIsLoading(true);
+      if (!isAuthenticated) {
+        const existing = listLocalAgentSessions();
+        clearAllLocalAgentSessions();
+        existing.forEach((s) => {
+          try {
+            localStorage.removeItem(`ui_state:${s.session_id}`);
+          } catch {
+            // ignore
+          }
+        });
+        if (currentSessionId) {
+          fetch(`${apiBaseUrl}/api/agent/stream/session/${currentSessionId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: getAgentRequestHeaders(),
+          }).catch(() => undefined);
+        }
+        loadLocalSessions();
+        setDeleteAllConfirmOpen(false);
+        if (currentSessionId) {
+          onSelectSession('');
+        }
+        return;
+      }
+
       const response = await fetch(`${apiBaseUrl}/api/agent/history/sessions/all`, {
         method: 'DELETE',
         credentials: 'include',
@@ -303,7 +382,7 @@ export function RecentSessions({
         fetch(`${apiBaseUrl}/api/agent/stream/session/${currentSessionId}`, {
           method: 'DELETE',
           credentials: 'include',
-          headers: getAuthHeaders(),
+          headers: getAgentRequestHeaders(),
         }).catch(() => undefined);
       }
 
