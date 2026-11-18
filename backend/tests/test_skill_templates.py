@@ -328,8 +328,11 @@ def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
     assert "网页模板中心" in body
     assert "27 套" in body
     assert "经典 LaTeX" in body
-    assert "极客单栏" in body
+    assert "HTML 版本" in body
     assert "复制口令" in body
+    assert "没有现成简历" in body
+    assert "OCR" in body
+    assert "极客" not in body
 
 
 def test_install_and_uninstall_harness_all(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
