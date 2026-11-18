@@ -15,9 +15,10 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '3.14.1',
+    version: '3.14.2',
     date: '2026-11-18',
     fixed: [
+      '移除首次访问时的 Beta 测试版提示弹窗，进入页面即可直接浏览',
       '精简工作台编辑区与顶部工具栏，移除「岗位匹配」入口以聚焦简历编辑与导出',
     ],
   },
