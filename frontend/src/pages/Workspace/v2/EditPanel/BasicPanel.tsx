@@ -205,8 +205,9 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
         className="space-y-4"
+        style={{ containerType: 'inline-size' }}
       >
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_168px]">
+        <div className="basic-info-layout-grid">
           <div className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
             <BasicInfoInput
               label="姓名"

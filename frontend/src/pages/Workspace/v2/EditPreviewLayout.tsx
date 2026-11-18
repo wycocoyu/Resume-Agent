@@ -4,7 +4,7 @@
  * 第二列：详细编辑面板
  * 第三列：预览面板（可拖拽调整宽度）
  */
-import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useState, useCallback, useRef, useLayoutEffect, type ReactNode } from "react";
 import { cn } from "../../../lib/utils";
 import EditPanel from "./EditPanel";
 import PreviewPanel from "./PreviewPanel";
@@ -75,6 +75,51 @@ interface EditPreviewLayoutProps {
   toolbarActions?: ReactNode;
   settingsDrawerTab?: SettingsDrawerTab | null;
   onToggleSettingsDrawerTab?: (tab: SettingsDrawerTab) => void;
+}
+
+export const SIDE_PANEL_WIDTH = 280;
+export const LAYOUT_DIVIDERS_WIDTH = 5;
+export const MIN_EDIT_PANEL_WIDTH = 400;
+export const DEFAULT_EDIT_PANEL_WIDTH = 700;
+export const MAX_EDIT_PANEL_WIDTH = 1400;
+export const RESERVED_PREVIEW_WIDTH = 420;
+export const MIN_DRAG_PREVIEW_WIDTH = 260;
+
+export function getMaxEditPanelWidth(
+  containerWidth: number,
+  sidePanelWidth = SIDE_PANEL_WIDTH,
+): number {
+  if (containerWidth <= 0) return MAX_EDIT_PANEL_WIDTH;
+  const maxByContainer =
+    containerWidth - sidePanelWidth - LAYOUT_DIVIDERS_WIDTH - MIN_DRAG_PREVIEW_WIDTH;
+  return Math.max(MIN_EDIT_PANEL_WIDTH, Math.min(MAX_EDIT_PANEL_WIDTH, maxByContainer));
+}
+
+export function getDefaultEditPanelWidth(
+  containerWidth: number,
+  sidePanelWidth = SIDE_PANEL_WIDTH,
+): number {
+  if (containerWidth <= 0) return DEFAULT_EDIT_PANEL_WIDTH;
+  const available =
+    containerWidth - sidePanelWidth - LAYOUT_DIVIDERS_WIDTH - RESERVED_PREVIEW_WIDTH;
+  return Math.max(MIN_EDIT_PANEL_WIDTH, Math.min(DEFAULT_EDIT_PANEL_WIDTH, available));
+}
+
+export function resolveEditPanelWidth({
+  containerWidth,
+  sidePanelWidth = SIDE_PANEL_WIDTH,
+  customWidth,
+}: {
+  containerWidth: number;
+  sidePanelWidth?: number;
+  customWidth: number | null;
+}): number {
+  const maxAllowed = getMaxEditPanelWidth(containerWidth, sidePanelWidth);
+  const raw =
+    customWidth !== null
+      ? customWidth
+      : getDefaultEditPanelWidth(containerWidth, sidePanelWidth);
+  return Math.max(MIN_EDIT_PANEL_WIDTH, Math.min(maxAllowed, raw));
 }
 
 // 拖拽分隔线组件（用 RAF 节流，避免高频 setState 导致抖动）
@@ -187,10 +232,39 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
     [setResumeData],
   );
 
-  // 列宽状态
-  const [sidePanelWidth] = useState(280); // 模块选择列宽度（固定；抽屉方案下轨道收窄 300→280）
-  const [editPanelWidth, setEditPanelWidth] = useState(700); // 编辑面板宽度（可拖动调整，范围 400-1400px）
+  // 列宽状态：未手动拖拽时随可用容器宽度自适应，保证右侧预览工具栏与预览区不溢出
+  const [sidePanelWidth] = useState(SIDE_PANEL_WIDTH); // 模块选择列宽度（固定；抽屉方案下轨道收窄 300→280）
+  const [customEditPanelWidth, setCustomEditPanelWidth] = useState<number | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+
+  const layoutContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = layoutContainerRef.current;
+    if (!el) return;
+    const syncWidth = () => {
+      const next = Math.round(el.clientWidth);
+      if (next > 0) {
+        setContainerWidth((prev) => (prev === next ? prev : next));
+      }
+    };
+    syncWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", syncWidth);
+      return () => window.removeEventListener("resize", syncWidth);
+    }
+    const ro = new ResizeObserver(syncWidth);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const maxEditPanelWidth = getMaxEditPanelWidth(containerWidth, sidePanelWidth);
+  const editPanelWidth = resolveEditPanelWidth({
+    containerWidth,
+    sidePanelWidth,
+    customWidth: customEditPanelWidth,
+  });
 
   // 设置抽屉：null=收起；'template'/'format' 展开对应 tab。点同 tab 收起、异 tab 切换
   const [internalSettingsDrawer, setInternalSettingsDrawer] = useState<SettingsDrawerTab | null>(null);
@@ -216,9 +290,12 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
   const clickEditPanelRef = useRef<HTMLDivElement | null>(null);
 
   // 拖拽处理 - 调整编辑面板宽度
-  const clampEditPanelWidth = useCallback((width: number) => {
-    return Math.max(400, Math.min(1400, width));
-  }, []);
+  const clampEditPanelWidth = useCallback(
+    (width: number) => {
+      return Math.max(MIN_EDIT_PANEL_WIDTH, Math.min(maxEditPanelWidth, width));
+    },
+    [maxEditPanelWidth],
+  );
 
   const applyEditPanelWidth = useCallback((width: number) => {
     if (clickEditPanelRef.current) {
@@ -248,7 +325,7 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
   const handleDragEnd = useCallback(() => {
     const dragState = dragStateRef.current;
     if (dragState) {
-      setEditPanelWidth(dragState.currentWidth);
+      setCustomEditPanelWidth(dragState.currentWidth);
     }
     setIsDragging(false);
     dragStateRef.current = null;
@@ -272,8 +349,8 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
   return (
     <div className="flex-1 min-h-0 flex relative z-10 overflow-hidden min-w-0">
       {/* 内容区域 */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex">
+      <div ref={layoutContainerRef} className="flex-1 flex overflow-hidden min-w-0">
+        <div className="flex shrink-0">
               {/* 编辑区：三列布局 */}
               {/* 第一列：模块选择（窄） */}
               <div
@@ -306,7 +383,7 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
               <div
                 ref={clickEditPanelRef}
                 className={cn(
-                  "h-full overflow-y-auto shrink-0",
+                  "h-full overflow-y-auto overflow-x-hidden shrink-0",
                   "bg-white/80 fresh:bg-white dark:bg-slate-900/80",
                   "backdrop-blur-sm fresh:backdrop-blur-none border-r border-slate-200 dark:border-slate-800",
                 )}
@@ -361,7 +438,7 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
         {/* 预览面板（始终显示；拖拽时禁用指针避免 iframe 抢占事件） */}
         <div
           className={cn(
-            "h-full overflow-hidden flex-1",
+            "h-full overflow-hidden flex-1 min-w-0",
             "bg-[#F6F3EC] fresh:bg-slate-100",
           )}
           style={{ pointerEvents: isDragging ? "none" : "auto" }}

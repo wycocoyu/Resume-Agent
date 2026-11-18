@@ -50,7 +50,7 @@ export function HeaderActions({
   }, [importMenuOpen])
 
   return (
-    <div className="flex items-center gap-2 flex-wrap justify-end">
+    <div className="flex items-center gap-2 flex-wrap justify-start min-w-0 max-w-full">
       {/* 自动保存常驻状态 */}
       {saveStatus !== undefined && <SaveStatusIndicator status={saveStatus} error={saveError} />}
 
@@ -60,7 +60,7 @@ export function HeaderActions({
         title="切换界面皮肤(Neo / 清新)"
         aria-label="界面皮肤"
         className={cn(
-          'px-2.5 py-2 rounded-none fresh:rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-1.5',
+          'px-2.5 py-2 whitespace-nowrap rounded-none fresh:rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-1.5',
           'bg-white dark:bg-[#1C1C1C] border border-black fresh:border-slate-200 dark:border-white',
           'text-slate-700 dark:text-slate-300 hover:bg-[#F1F2F5] fresh:hover:bg-slate-50 dark:hover:bg-slate-700',
           'active:scale-95 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[2px_2px_0px_0px_#ffffff]'
@@ -82,7 +82,7 @@ export function HeaderActions({
           <button
             onClick={() => setImportMenuOpen((v) => !v)}
             className={cn(
-              "px-3.5 py-2 rounded-none fresh:rounded-md text-sm font-bold transition-all duration-300 flex items-center gap-1.5",
+              "px-3.5 py-2 whitespace-nowrap rounded-none fresh:rounded-md text-sm font-bold transition-all duration-300 flex items-center gap-1.5",
               "bg-white dark:bg-[#1C1C1C] border border-black fresh:border-slate-200 dark:border-white",
               "text-slate-700 dark:text-slate-300 hover:bg-[#F1F2F5] hover:border-black fresh:hover:border-slate-300 dark:hover:bg-slate-700",
               "active:scale-95 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[2px_2px_0px_0px_#ffffff]"
