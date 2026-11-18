@@ -549,6 +549,7 @@ class ToolExecutionRuntime(BaseModel):
             user_id=getattr(tool_obj, "user_id", None),
             tool_name=name,
             args=args,
+            owner_key=getattr(self, "owner_key", None),
         )
         payload = {
             "approval_id": approval_id,

@@ -21,6 +21,7 @@ async def execute_resume_tool_native(
     *,
     session_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    owner_key: Optional[str] = None,
     store_structured: Optional[Callable[[str, str, Any], None]] = None,
     mark_pending_approval: Optional[Callable[[], None]] = None,
     progress_sink: Optional[Callable[[Any], None]] = None,
@@ -62,6 +63,7 @@ async def execute_resume_tool_native(
             user_id=getattr(tool, "user_id", None) or user_id,
             tool_name=name,
             args=args,
+            owner_key=owner_key,
         )
         payload = {
             "approval_id": approval_id,
@@ -182,6 +184,7 @@ def inject_resume_tool_context(
     session_id: Optional[str],
     user_id: Optional[str],
     shared_state: Optional[AgentSharedState],
+    llm: Optional[Any] = None,
 ) -> None:
     """Attach session-scoped context to tools that declare the matching fields."""
 
@@ -192,3 +195,5 @@ def inject_resume_tool_context(
             tool.shared_state = shared_state
         if hasattr(tool, "user_id"):
             tool.user_id = user_id
+        if llm is not None and hasattr(tool, "llm"):
+            tool.llm = llm

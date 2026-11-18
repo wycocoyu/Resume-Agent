@@ -9,6 +9,7 @@ from typing import Optional, Any, Dict
 import json
 import re
 import uuid
+from pydantic import Field
 from backend.agent.tool.base import BaseTool, ToolResult
 from backend.agent.tool.resume_data_store import ResumeDataStore
 from backend.agent.utils.experience_entry import (
@@ -95,6 +96,7 @@ add 教育经历示例 value(path=education):
         },
         "required": ["path", "action"]
     }
+    user_id: Optional[str] = Field(default=None, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
@@ -303,8 +305,10 @@ add 教育经历示例 value(path=education):
 
                 # 同步更新 ResumeDataStore（因为 CVEditor 直接修改了传入的字典引用）
                 ResumeDataStore.set_data(resume_data, session_id=self.session_id)
-                # 尝试写回 AI 简历存储（如有 resume_id/user_id）
-                persisted = ResumeDataStore.persist_data(self.session_id)
+                meta = ResumeDataStore._meta_by_session.get(self.session_id, {})
+                is_anonymous_session = self.user_id is None and not meta.get("user_id")
+                # 匿名会话不落盘服务端 DB；仅登录会话写回数据库
+                persisted = True if is_anonymous_session else ResumeDataStore.persist_data(self.session_id)
 
                 # 格式化成功消息
                 output = f"✅ {result.get('message', 'Edit completed')}"

@@ -26,6 +26,10 @@ class StreamRequest(BaseModel):
     run_id: Optional[str] = Field(None, description="客户端为本轮分配的唯一运行 ID")
     cursor: Optional[str] = Field(None, description="Cursor for resume/reconnect")
     resume: Optional[bool] = Field(False, description="Whether this is a resume request")
+    history_messages: Optional[list[dict[str, Any]]] = Field(
+        None,
+        description="Optional client-side history messages for anonymous/evicted session rehydration",
+    )
 
 
 class SSEEvent(BaseModel):

@@ -30,6 +30,7 @@ def create(
     user_id: Optional[str],
     tool_name: str,
     args: Dict[str, Any],
+    owner_key: Optional[str] = None,
 ) -> str:
     """登记一条挂起;同 session 旧 pending 被顶替。返回 approval_id。"""
     _evict_expired()
@@ -39,6 +40,7 @@ def create(
     _pending[approval_id] = {
         "session_id": session_id,
         "user_id": user_id,
+        "owner_key": owner_key,
         "tool_name": tool_name,
         "args": dict(args),
         "created_at": time.time(),
