@@ -2,9 +2,35 @@ import type { Resume } from '@/types/resume'
 import type { ResumeData } from '@/pages/Workspace/v2/types'
 import type { SavedResume, StorageAdapter, StorageOperationContext } from './StorageAdapter'
 import { stripPhotoFromResumeData, stripPhotoFromSavedResume } from './sanitizeResume'
+import {
+  clearLocalPortraitPhotos,
+  deleteLocalPortraitPhoto,
+  duplicateLocalPortraitPhoto,
+  getLocalPortraitPhoto,
+  saveLocalPortraitPhoto,
+} from './localPhotoStore'
 
 const STORAGE_KEY = 'resume_resumes'
 const CURRENT_KEY = 'resume_current'
+
+function withPhoto(item: SavedResume, photo: string | null): SavedResume {
+  if (!photo) return item
+  const data = item.data as any
+  if (!data || typeof data !== 'object') return item
+  const basic = data.basic && typeof data.basic === 'object' ? { ...data.basic, photo } : { photo }
+  return {
+    ...item,
+    data: {
+      ...data,
+      basic,
+    },
+  }
+}
+
+async function hydrateSavedResumePhoto(item: SavedResume): Promise<SavedResume> {
+  const photo = await getLocalPortraitPhoto(item.id)
+  return withPhoto(item, photo)
+}
 
 export class LocalStorageAdapter implements StorageAdapter {
   private readAllResumes(): SavedResume[] {
@@ -22,7 +48,8 @@ export class LocalStorageAdapter implements StorageAdapter {
   }
 
   async getAllResumes(_context?: StorageOperationContext): Promise<SavedResume[]> {
-    return this.readAllResumes()
+    const resumes = this.readAllResumes()
+    return Promise.all(resumes.map((item) => hydrateSavedResumePhoto(item)))
   }
 
   getCurrentResumeId(): string | null {
@@ -39,7 +66,8 @@ export class LocalStorageAdapter implements StorageAdapter {
 
   async getResume(id: string, _context?: StorageOperationContext): Promise<SavedResume | null> {
     const resumes = this.readAllResumes()
-    return resumes.find(r => r.id === id) || null
+    const found = resumes.find(r => r.id === id)
+    return found ? hydrateSavedResumePhoto(found) : null
   }
 
   async saveResume(
@@ -52,20 +80,27 @@ export class LocalStorageAdapter implements StorageAdapter {
     const resumeName = (resume as any).basic?.name || (resume as any).name || '未命名简历'
     // 从 ResumeData 中提取 templateType，默认为 'latex'
     const templateType = (resume as ResumeData).templateType || 'latex'
+    const rawPhoto = typeof (resume as any)?.basic?.photo === 'string' ? (resume as any).basic.photo : ''
     const sanitizedResume = stripPhotoFromResumeData(resume)
 
     if (id) {
       const index = resumes.findIndex(r => r.id === id)
       if (index >= 0) {
-        resumes[index] = {
+        const updated: SavedResume = {
           ...resumes[index],
           name: resumeName,
           templateType,
           data: sanitizedResume,
           updatedAt: now
         }
+        resumes[index] = updated
         localStorage.setItem(STORAGE_KEY, JSON.stringify(resumes))
-        return resumes[index]
+        if (rawPhoto) {
+          await saveLocalPortraitPhoto(id, rawPhoto)
+        } else {
+          await deleteLocalPortraitPhoto(id)
+        }
+        return withPhoto(updated, rawPhoto || null)
       }
     }
 
@@ -79,8 +114,13 @@ export class LocalStorageAdapter implements StorageAdapter {
     }
     resumes.push(newResume)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(resumes))
+    if (rawPhoto) {
+      await saveLocalPortraitPhoto(newResume.id, rawPhoto)
+    } else {
+      await deleteLocalPortraitPhoto(newResume.id)
+    }
     this.setCurrentResumeId(newResume.id)
-    return newResume
+    return withPhoto(newResume, rawPhoto || null)
   }
 
   async deleteResume(id: string, _context?: StorageOperationContext): Promise<boolean> {
@@ -88,6 +128,7 @@ export class LocalStorageAdapter implements StorageAdapter {
     const filtered = resumes.filter(r => r.id !== id)
     if (filtered.length !== resumes.length) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered))
+      await deleteLocalPortraitPhoto(id)
       if (this.getCurrentResumeId() === id) {
         this.setCurrentResumeId(filtered.length > 0 ? filtered[0].id : null)
       }
@@ -113,13 +154,15 @@ export class LocalStorageAdapter implements StorageAdapter {
   }
 
   async duplicateResume(id: string, context?: StorageOperationContext): Promise<SavedResume | null> {
-    const original = this.readAllResumes().find(r => r.id === id) || null
+    const original = await this.getResume(id, context)
     if (original) {
       const copied = JSON.parse(JSON.stringify(original.data)) as Resume | ResumeData
       const copiedName = `${original.name} (副本)`
       if ('basic' in copied && copied.basic) copied.basic.name = copiedName
       else (copied as Resume).name = copiedName
-      return this.saveResume(copied, undefined, context)
+      const duplicated = await this.saveResume(copied, undefined, context)
+      await duplicateLocalPortraitPhoto(id, duplicated.id)
+      return duplicated
     }
     return null
   }
@@ -158,5 +201,6 @@ export class LocalStorageAdapter implements StorageAdapter {
   clearAllResumes(): void {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(CURRENT_KEY)
+    void clearLocalPortraitPhotos()
   }
 }

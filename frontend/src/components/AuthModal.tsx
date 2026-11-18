@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, LogIn } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { buildAuthWebUrl, isAuthWebEnabled } from '@/lib/runtimeEnv'
+import { buildAuthWebUrl, isAuthWebEnabled, useRuntimeFeatures } from '@/lib/runtimeEnv'
 
 /**
  * 认证 Modal —— 统一认证入口。
@@ -16,7 +16,8 @@ import { buildAuthWebUrl, isAuthWebEnabled } from '@/lib/runtimeEnv'
  */
 export const AuthModal: React.FC = () => {
   const { isModalOpen, closeModal } = useAuth()
-  const authWebEnabled = isAuthWebEnabled()
+  const { authEnabled } = useRuntimeFeatures()
+  const authWebEnabled = authEnabled && isAuthWebEnabled()
 
   useEffect(() => {
     if (isModalOpen && authWebEnabled) {

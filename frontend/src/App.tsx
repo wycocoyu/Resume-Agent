@@ -9,7 +9,7 @@ import ErrorBoundary from './ErrorBoundary'
 import { Toaster } from './lib/toast'
 import { ConfirmHost } from './lib/confirm'
 import { lazyWithRetry } from './lib/lazyWithRetry'
-import { canUseAdminFeature, isAgentEnabled } from './lib/runtimeEnv'
+import { canUseAdminFeature, useRuntimeFeatures } from './lib/runtimeEnv'
 import { useAuth } from './contexts/AuthContext'
 import ResumeDashboard from './pages/ResumeDashboard'
 import { ResumeProvider } from './contexts/ResumeContext'
@@ -50,7 +50,7 @@ function RouteFallback() {
 function App() {
   // 订阅 AuthContext，确保登录/登出后路由权限会更新
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const agentPageEnabled = isAgentEnabled()
+  const { agentEnabled: agentPageEnabled, authEnabled } = useRuntimeFeatures()
   const canUseAdmin = !authLoading && isAuthenticated && canUseAdminFeature()
   try {
     if (authLoading) {
@@ -94,7 +94,7 @@ function App() {
                 </>
               )}
               {/* 其他路由 */}
-              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login" element={authEnabled ? <LoginPage /> : <Navigate to="/workspace" replace />} />
               <Route path="/my-resumes" element={<ResumeDashboard />} />
               <Route path="/settings" element={<SettingsPage />} />
               {canUseAdmin ? (
@@ -110,7 +110,7 @@ function App() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/refund" element={<RefundPage />} />
               <Route path="/changelog" element={<ChangelogPage />} />
-              <Route path="/account" element={<AccountPage />} />
+              <Route path="/account" element={authEnabled ? <AccountPage /> : <Navigate to="/workspace" replace />} />
               <Route path="/pricing" element={<PricingPage />} />
             </Routes>
           </Suspense>

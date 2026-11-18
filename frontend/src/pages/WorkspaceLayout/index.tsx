@@ -28,7 +28,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getCurrentResumeId } from "@/services/resumeStorage";
 import { RecentSessions } from "@/components/sidebar/RecentSessions";
 import SkinPickerModal from "@/pages/Workspace/v2/components/SkinPickerModal";
-import { canUseAdminFeature, canUseAgentFeature, getApiBaseUrl, isAgentEnabled } from "@/lib/runtimeEnv";
+import { canUseAdminFeature, getApiBaseUrl, useRuntimeFeatures } from "@/lib/runtimeEnv";
 import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
 
 // 工作区类型
@@ -142,8 +142,8 @@ export default function WorkspaceLayout({
   };
 
   const currentWorkspace = getCurrentWorkspace();
-  const agentEnabled = isAgentEnabled();
-  const canUseAgent = isAuthenticated && canUseAgentFeature();
+  const { agentEnabled, authEnabled } = useRuntimeFeatures();
+  const canUseAgent = isAuthenticated && agentEnabled;
   const canUseAdmin = isAuthenticated && canUseAdminFeature();
 
   const sidebarWidthPx = sidebarCollapsed ? 96 : 200;
@@ -616,7 +616,7 @@ export default function WorkspaceLayout({
                   )}
                 </AnimatePresence>
               </div>
-            ) : (
+            ) : authEnabled ? (
                       <button
                         type="button"
                         onClick={() => openModal("login")}
@@ -635,7 +635,7 @@ export default function WorkspaceLayout({
                           <span className="text-sm font-medium">登录 / 注册</span>
                         )}
                       </button>
-            )}
+            ) : null}
           </div>
           {!sidebarCollapsed && (
             <div className="flex items-center justify-center gap-2 mt-2.5 px-2">

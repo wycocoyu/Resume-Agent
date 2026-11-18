@@ -30,7 +30,7 @@ import { Avatar } from '@/components/Avatar'
 import { BetaBadge } from '@/components/BetaBadge'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/hooks/useTheme'
-import { canUseAdminFeature, isAgentEnabled } from '@/lib/runtimeEnv'
+import { canUseAdminFeature, useRuntimeFeatures } from '@/lib/runtimeEnv'
 import { setHeroHandoffImages } from '@/lib/heroHandoff'
 import { SkinPickerModal } from '@/pages/Workspace/v2/components/SkinPickerModal'
 
@@ -279,7 +279,7 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const { isAuthenticated, user, logout, openModal } = useAuth()
   const { isDark, setTheme } = useTheme()
-  const agentEnabled = isAgentEnabled()
+  const { agentEnabled, authEnabled } = useRuntimeFeatures()
   // 深色模式功能仅管理员可见/可用，其余用户不展示切换入口
   const canUseDarkMode = isAuthenticated && canUseAdminFeature()
   // 皮肤选择框开关(「网站皮肤」按钮点击弹出,复用工作台 SkinPickerModal)
@@ -948,69 +948,71 @@ export default function LandingPage() {
       </footer>
 
       {/* 左下角登录按钮 */}
-      <motion.div
-        ref={logoutMenuRef}
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.5 }}
-        className="fixed bottom-6 left-6 z-50"
-      >
-        {isAuthenticated ? (
-          <div className="relative">
-            <div
-              className="flex items-center gap-2.5 pl-2 pr-4 py-2 border-2 fresh:border border-black fresh:border-slate-200 bg-white cursor-pointer hover:bg-slate-100 active:translate-x-[1px] fresh:active:translate-x-0 active:translate-y-[1px] fresh:active:translate-y-0 active:shadow-none transition-all shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm"
-              onClick={() => setShowLogoutMenu(!showLogoutMenu)}
-            >
-              <Avatar
-                src={user?.image}
-                name={user?.username}
-                email={user?.email}
-                className="w-8 h-8"
-                textClassName="text-sm"
-              />
-              <span className="text-sm font-mono fresh:font-sans font-bold text-black max-w-[150px] truncate">
-                {user?.username || user?.email}
-              </span>
-            </div>
+      {(isAuthenticated || authEnabled) && (
+        <motion.div
+          ref={logoutMenuRef}
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.5 }}
+          className="fixed bottom-6 left-6 z-50"
+        >
+          {isAuthenticated ? (
+            <div className="relative">
+              <div
+                className="flex items-center gap-2.5 pl-2 pr-4 py-2 border-2 fresh:border border-black fresh:border-slate-200 bg-white cursor-pointer hover:bg-slate-100 active:translate-x-[1px] fresh:active:translate-x-0 active:translate-y-[1px] fresh:active:translate-y-0 active:shadow-none transition-all shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm"
+                onClick={() => setShowLogoutMenu(!showLogoutMenu)}
+              >
+                <Avatar
+                  src={user?.image}
+                  name={user?.username}
+                  email={user?.email}
+                  className="w-8 h-8"
+                  textClassName="text-sm"
+                />
+                <span className="text-sm font-mono fresh:font-sans font-bold text-black max-w-[150px] truncate">
+                  {user?.username || user?.email}
+                </span>
+              </div>
 
-            {/* 退出按钮下拉菜单 */}
-            <AnimatePresence>
-              {showLogoutMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute bottom-full left-0 mb-2 min-w-[140px] border-2 fresh:border border-black fresh:border-slate-200 bg-white shadow-[4px_4px_0px_0px_#000000] fresh:shadow-md"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowLogoutMenu(false)
-                      logout()
-                    }}
-                    className="w-full flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+              {/* 退出按钮下拉菜单 */}
+              <AnimatePresence>
+                {showLogoutMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full left-0 mb-2 min-w-[140px] border-2 fresh:border border-black fresh:border-slate-200 bg-white shadow-[4px_4px_0px_0px_#000000] fresh:shadow-md"
                   >
-                    <LogOut className="w-4 h-4" />
-                    退出登录
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => openModal('login')}
-            className="flex items-center gap-2.5 pl-2 pr-5 py-2 border-2 fresh:border border-black fresh:border-slate-200 bg-white hover:bg-slate-100 active:translate-x-[1px] fresh:active:translate-x-0 active:translate-y-[1px] fresh:active:translate-y-0 active:shadow-none transition-all shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm"
-          >
-            <span className="w-8 h-8 border-2 fresh:border border-black fresh:border-slate-200 bg-[#4285F4] flex items-center justify-center shrink-0">
-              <LogIn className="w-4 h-4 text-white" strokeWidth={2.5} />
-            </span>
-            <span className="text-sm font-mono fresh:font-sans font-bold text-black">登录 / 注册</span>
-          </button>
-        )}
-      </motion.div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLogoutMenu(false)
+                        logout()
+                      }}
+                      className="w-full flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      退出登录
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openModal('login')}
+              className="flex items-center gap-2.5 pl-2 pr-5 py-2 border-2 fresh:border border-black fresh:border-slate-200 bg-white hover:bg-slate-100 active:translate-x-[1px] fresh:active:translate-x-0 active:translate-y-[1px] fresh:active:translate-y-0 active:shadow-none transition-all shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm"
+            >
+              <span className="w-8 h-8 border-2 fresh:border border-black fresh:border-slate-200 bg-[#4285F4] flex items-center justify-center shrink-0">
+                <LogIn className="w-4 h-4 text-white" strokeWidth={2.5} />
+              </span>
+              <span className="text-sm font-mono fresh:font-sans font-bold text-black">登录 / 注册</span>
+            </button>
+          )}
+        </motion.div>
+      )}
     </div>
   )
 }

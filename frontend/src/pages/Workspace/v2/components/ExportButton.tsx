@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, FileJson, FileText, Globe, X } from "lucide-react";
 import { cn } from "../../../../lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchPdfDownloadQuota,
   recordPdfDownload,
@@ -31,6 +32,7 @@ export function ExportButton({
   pdfBlob,
   onDownloadPDF,
 }: ExportButtonProps) {
+  const { isAuthenticated } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [quota, setQuota] = useState<PdfDownloadQuota | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(false);
@@ -60,6 +62,12 @@ export function ExportButton({
   };
 
   const refreshQuota = async () => {
+    if (!isAuthenticated) {
+      setQuotaLoading(false);
+      setQuotaError(null);
+      setQuota({ unlimited: true, limit: null, used: 0, remaining: null });
+      return;
+    }
     setQuotaLoading(true);
     setQuotaError(null);
     try {
@@ -95,10 +103,12 @@ export function ExportButton({
       if (onDownloadPDF) {
         await onDownloadPDF();
       } else if (pdfBlob) {
-        await recordPdfDownload();
+        if (isAuthenticated) {
+          await recordPdfDownload();
+        }
         downloadBlob(pdfBlob, getPdfFileName());
       }
-      if (!isHtmlTemplate) void refreshQuota();
+      if (!isHtmlTemplate && isAuthenticated) void refreshQuota();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "PDF 下载失败，请重试");
     }
@@ -159,7 +169,7 @@ export function ExportButton({
       setFormat("pdf");
       if (!isHtmlTemplate) void refreshQuota();
     }
-  }, [isOpen, isHtmlTemplate]);
+  }, [isOpen, isHtmlTemplate, isAuthenticated]);
 
   const formatCardClass = (active: boolean) =>
     cn(

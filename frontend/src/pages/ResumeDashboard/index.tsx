@@ -11,6 +11,7 @@ import { AlertCircle, Settings } from './components/Icons'
 import { Button } from './components/ui/button'
 import WorkspaceLayout from '@/pages/WorkspaceLayout'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRuntimeFeatures } from '@/lib/runtimeEnv'
 import AIImportModal from '@/pages/Workspace/v2/shared/AIImportModal'
 import { saveResume, setCurrentResumeId } from '@/services/resumeStorage'
 import type { ResumeData } from '@/pages/Workspace/v2/types'
@@ -50,6 +51,7 @@ const ResumeDashboard = () => {
     ? 0
     : FIRST_PAGE_RESUME_COUNT + (currentPage - 2) * RESUMES_PER_PAGE
   const { isAuthenticated, user, logout, openModal } = useAuth()
+  const { authEnabled } = useRuntimeFeatures()
   const {
     resumes,
     totalCount,
@@ -267,10 +269,12 @@ const ResumeDashboard = () => {
                     <span className="text-sm font-mono fresh:font-sans font-bold fresh:font-medium uppercase fresh:normal-case tracking-wide fresh:tracking-normal text-black fresh:text-slate-600">
                       {isAuthenticated
                         ? '数据已同步至云端'
-                        : '数据保存在本地'}
+                        : authEnabled
+                          ? '数据保存在本地'
+                          : '数据保存在本机浏览器'}
                     </span>
                   </div>
-                  {!isAuthenticated && (
+                  {!isAuthenticated && authEnabled && (
                     <button
                       className="text-sm font-mono fresh:font-sans font-bold fresh:font-medium uppercase fresh:normal-case tracking-wide fresh:tracking-normal text-[#3367D6] hover:underline underline-offset-4"
                       onClick={() => openModal('login')}

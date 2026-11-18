@@ -7,7 +7,7 @@ import { recordPdfDownload, renderPDFStream } from '../services/api'
 import { convertToBackendFormat } from './Workspace/v2/utils/convertToBackend'
 import { saveAs } from 'file-saver'
 import type { ResumeData } from './Workspace/v2/types'
-import { getApiBaseUrl } from '@/lib/runtimeEnv'
+import { getApiBaseUrl, useRuntimeFeatures } from '@/lib/runtimeEnv'
 import { useAuth } from '@/contexts/AuthContext'
 import { saveResume, setCurrentResumeId } from '@/services/resumeStorage'
 import { toast } from '@/lib/toast'
@@ -24,6 +24,7 @@ export default function SharePage() {
   const { shareId } = useParams<{ shareId: string }>()
   const navigate = useNavigate()
   const { isAuthenticated, loading: authLoading, openModal } = useAuth()
+  const { authEnabled } = useRuntimeFeatures()
   const [resume, setResume] = useState<SharedResume | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +67,7 @@ export default function SharePage() {
   // 使用正确的 API 渲染 PDF
   const handleRenderPDF = useCallback(async () => {
     if (!resume?.data) return
-    if (!isAuthenticated) {
+    if (authEnabled && !isAuthenticated) {
       setPdfProgress('登录后可预览和下载 PDF')
       openModal('login')
       return
@@ -97,12 +98,12 @@ export default function SharePage() {
     } finally {
       setPdfLoading(false)
     }
-  }, [isAuthenticated, openModal, resume?.data])
+  }, [authEnabled, isAuthenticated, openModal, resume?.data])
 
-  // 页面加载时自动渲染 PDF（需登录，受下载次数限制）
+  // 页面加载时自动渲染 PDF（关闭登录限制时直接匿名预览）
   useEffect(() => {
     if (authLoading) return
-    if (!isAuthenticated) {
+    if (authEnabled && !isAuthenticated) {
       setPdfProgress('登录后可预览和下载 PDF')
       return
     }
@@ -112,7 +113,7 @@ export default function SharePage() {
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [authLoading, handleRenderPDF, isAuthenticated, pdfBlob, pdfLoading, resume?.data])
+  }, [authEnabled, authLoading, handleRenderPDF, isAuthenticated, pdfBlob, pdfLoading, resume?.data])
 
   // 清理文件名：去除首尾空格，将多个连续空格替换为单个空格
   const cleanFileName = (name: string | undefined): string => {
@@ -128,13 +129,15 @@ export default function SharePage() {
     const filename = `${name}_简历_${date}.pdf`
     
     try {
-      await recordPdfDownload()
+      if (isAuthenticated) {
+        await recordPdfDownload()
+      }
       const file = new File([pdfBlob], filename, { type: 'application/pdf' })
       saveAs(file, filename)
     } catch (error) {
       setPdfProgress(`下载失败: ${(error as Error).message}`)
     }
-  }, [pdfBlob, resume])
+  }, [isAuthenticated, pdfBlob, resume])
 
   const handleImportToWorkspace = useCallback(async () => {
     if (!resume?.data || importing) return
@@ -275,7 +278,7 @@ export default function SharePage() {
             {importing ? '导入中...' : isAuthenticated ? '导入工作台编辑' : '免登录存本机编辑'}
           </button>
 
-          {!isAuthenticated ? (
+          {authEnabled && !isAuthenticated ? (
             <button
               onClick={() => openModal('login')}
               className={cn(

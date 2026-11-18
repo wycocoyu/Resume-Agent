@@ -5,7 +5,7 @@ import { toast } from '@/lib/toast'
 import { saveAs } from 'file-saver'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { recordPdfDownload, renderPDFStream, renderPDF } from '../../../../services/api'
-import { getStoredAuthRole } from '@/lib/runtimeEnv'
+import { getStoredAuthRole, isAuthEnabled } from '@/lib/runtimeEnv'
 import { getStoredPDFRenderMode, setStoredPDFRenderMode, type PDFRenderMode } from '@/services/pdfRenderMode'
 import { saveResume, setCurrentResumeId } from '../../../../services/resumeStorage'
 import type { ResumeData } from '../types'
@@ -35,7 +35,7 @@ export function usePDFOperations({ resumeData, currentResumeId, setCurrentId }: 
   const activeAbortControllerRef = useRef<AbortController | null>(null)
   resumeDataRef.current = resumeData
   renderModeRef.current = renderMode
-  const isAdmin = getStoredAuthRole() === 'admin'
+  const isAdmin = isAuthenticated && getStoredAuthRole() === 'admin'
 
   useEffect(() => {
     if (!isAdmin && renderMode !== 'local') {
@@ -161,8 +161,8 @@ export function usePDFOperations({ resumeData, currentResumeId, setCurrentId }: 
   const handleDownload = useCallback(async () => {
     if (!pdfBlob) return
 
-    // 导出/下载需要登录（预览渲染对所有人开放）
-    if (!isAuthenticated) {
+    // 仅在开启登录限制时拦截未登录导出（本地优先模式下免登录直接下载）
+    if (isAuthEnabled() && !isAuthenticated) {
       openModal('login')
       toast.error('请先登录后再导出 PDF')
       return
@@ -172,12 +172,14 @@ export function usePDFOperations({ resumeData, currentResumeId, setCurrentId }: 
     const date = new Date().toISOString().split('T')[0]
     const filename = `${name}_简历_${date}.pdf`
 
-    try {
-      await recordPdfDownload()
-    } catch (error) {
-      const message = getErrorMessage(error)
-      toast.error(`下载失败：${message}`)
-      return
+    if (isAuthenticated) {
+      try {
+        await recordPdfDownload()
+      } catch (error) {
+        const message = getErrorMessage(error)
+        toast.error(`下载失败：${message}`)
+        return
+      }
     }
 
     const file = new File([pdfBlob], filename, { type: 'application/pdf' })
