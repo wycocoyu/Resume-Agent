@@ -270,6 +270,44 @@ def clear_user_photo_cache() -> None:
         _USER_PHOTO_CACHE.clear()
 
 
+def _convert_webp_to_xelatex_bytes(raw_bytes: bytes) -> tuple[str, bytes] | None:
+    """将 WebP 魔数图片在内存中转码为 XeLaTeX 支持的 PNG（含透明通道）或 JPEG。"""
+    if (
+        not isinstance(raw_bytes, (bytes, bytearray))
+        or len(raw_bytes) < 12
+        or raw_bytes[:4] != b"RIFF"
+        or raw_bytes[8:12] != b"WEBP"
+    ):
+        return None
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(raw_bytes)) as img:
+            if (img.format or "").upper() != "WEBP":
+                return None
+            img = ImageOps.exif_transpose(img)
+            has_alpha = img.mode in ("RGBA", "LA", "PA") or (
+                img.mode == "P" and "transparency" in img.info
+            )
+            out_buf = BytesIO()
+            if has_alpha:
+                img.convert("RGBA").save(out_buf, format="PNG")
+                target_ext = ".png"
+            else:
+                img.convert("RGB").save(out_buf, format="JPEG", quality=92)
+                target_ext = ".jpg"
+        converted = out_buf.getvalue()
+        if (
+            not converted
+            or len(converted) > _USER_PHOTO_CACHE_MAX_BYTES
+            or _detect_xelatex_image_ext(converted) != target_ext
+        ):
+            return None
+        return target_ext, converted
+    except Exception:
+        return None
+
+
 def _decode_data_url_photo_to_dir(photo_url: str, temp_dir: str) -> str | None:
     """将 data:image/...;base64,... 瞬时解码到当前请求 temp_dir/logos/photo.<ext>，绝不写入全局缓存。"""
     header, sep, b64_payload = photo_url.partition(",")
@@ -289,7 +327,13 @@ def _decode_data_url_photo_to_dir(photo_url: str, temp_dir: str) -> str | None:
         return None
     detected_ext = _detect_xelatex_image_ext(raw_bytes)
     if not detected_ext:
-        return None
+        if header.lower() == "data:image/webp;base64":
+            converted = _convert_webp_to_xelatex_bytes(raw_bytes)
+            if converted is None:
+                return None
+            detected_ext, raw_bytes = converted
+        else:
+            return None
     logos_dir = Path(temp_dir) / "logos"
     logos_dir.mkdir(parents=True, exist_ok=True)
     local_name = f"photo{detected_ext}"
@@ -836,9 +880,14 @@ def compile_latex_to_pdf(
                     photo_url, temp_dir, offline=offline
                 )
                 if not local_photo:
+                    display_photo = (
+                        f"{photo_url[:64]}..."
+                        if isinstance(photo_url, str) and photo_url.startswith("data:") and len(photo_url) > 64
+                        else photo_url
+                    )
                     _append_warning(
                         warnings_out,
-                        f"头像资源不可用或格式不支持，已降级为无照片渲染: {photo_url}",
+                        f"头像资源不可用或格式不支持，已降级为无照片渲染: {display_photo}",
                     )
             if not local_photo:
                 print("[Photo] 下载失败，已自动降级为无照片渲染")
