@@ -51,9 +51,26 @@ import {
   Sparkles,
   MessageSquare,
   Bot,
+  KeyRound,
 } from "lucide-react";
 import ChatEmptyState from "@/components/agent-chat/ChatEmptyState";
 import ModelSelector, { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/components/agent-chat/ModelSelector";
+import ByokConfigModal from "@/components/agent-chat/ByokConfigModal";
+import {
+  BYOK_STORAGE_KEY,
+  BYOK_UPDATED_EVENT,
+  getAgentRequestHeaders,
+  isByokActive,
+  loadByokConfig,
+  type ByokConfig,
+} from "@/services/agentByokConfig";
+import {
+  appendLocalAgentMessages,
+  deleteLocalAgentSession,
+  getLocalAgentSession,
+  renameLocalAgentSession,
+  saveLocalAgentSession,
+} from "@/services/agentLocalHistory";
 import React, {
   useCallback,
   useEffect,
@@ -580,9 +597,26 @@ function CocoChatContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { resumeId } = useParams();
-  const { user, isAuthenticated, openModal } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { apiBaseUrl } = useEnvironment();
-  const loginPromptedRef = useRef(false);
+  const [byokConfig, setByokConfig] = useState<ByokConfig>(() => loadByokConfig());
+  const [byokModalOpen, setByokModalOpen] = useState(false);
+  const byokActive = isByokActive(byokConfig);
+
+  useEffect(() => {
+    const syncByok = () => setByokConfig(loadByokConfig());
+    const handleStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === BYOK_STORAGE_KEY) {
+        syncByok();
+      }
+    };
+    window.addEventListener(BYOK_UPDATED_EVENT, syncByok);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(BYOK_UPDATED_EVENT, syncByok);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   // 本地↔数据库简历兜底同步:agent 的 list_resumes 只能看见数据库,而
   // 产品级 fallback(DB 写失败保留本地缓存)/后端宕机窗口会造成"Dashboard
@@ -594,15 +628,6 @@ function CocoChatContent() {
     void syncLocalResumesToCurrentAccount().catch(() => {});
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loginPromptedRef.current = false;
-      return;
-    }
-    if (loginPromptedRef.current) return;
-    loginPromptedRef.current = true;
-    openModal("login");
-  }, [isAuthenticated, openModal]);
   const getAuthHeaders = useCallback((extra: Record<string, string> = {}) => {
     return buildAuthHeaders(extra);
   }, []);
@@ -1556,6 +1581,7 @@ function CocoChatContent() {
     currentRunState,
     isProcessing,
     lastError,
+    lastErrorCode,
     answerCompleteCount,
     sendMessage,
     finalizeStream,
@@ -1567,6 +1593,7 @@ function CocoChatContent() {
     meaningfulTimeout: SSE_MEANINGFUL_TIMEOUT,
     resumeData: normalizedResume,
     model: selectedModel,
+    isAuthenticated,
     onSSEEvent: useCallback((event: SSEEvent) => {
       // Intercept resume_patch and resume_generated events before routing
       if ((event as any).type === 'resume_patch') {
@@ -1673,11 +1700,11 @@ function CocoChatContent() {
     if (sid) {
       void fetch(`${apiBaseUrl}/api/agent/stream/stop/${sid}`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers: getAgentRequestHeaders(),
       }).catch(() => {});
     }
     cancelStream("user_stop", "已停止生成。");
-  }, [apiBaseUrl, getAuthHeaders, currentSessionId, conversationId, cancelStream]);
+  }, [apiBaseUrl, currentSessionId, conversationId, cancelStream]);
 
   // 保存会话ID到 localStorage
   useEffect(() => {
@@ -1892,35 +1919,54 @@ function CocoChatContent() {
           );
           return;
         }
-        const resp = await fetch(
-          `${apiBaseUrl}/api/agent/history/sessions/${conversationId}`,
-          {
-            headers: getAuthHeaders(),
-          },
-        );
-        if (!mounted) return;
-        if (!resp.ok) {
-          let detail = `HTTP ${resp.status} ${resp.statusText}`;
-          try {
-            const errData = await resp.clone().json();
-            if (errData?.detail?.message) {
-              detail = errData.detail.message;
-            } else if (typeof errData?.detail === "string") {
-              detail = errData.detail;
-            } else if (errData?.error_message) {
-              detail = errData.error_message;
+        let data: { messages?: any[]; total?: number } | null = null;
+        if (!isAuthenticated) {
+          const localSession = getLocalAgentSession(conversationId);
+          if (!localSession) {
+            if (conversationId.startsWith("conv-")) {
+              setCurrentSessionId(conversationId);
+              setResumeError(null);
+            } else {
+              setResumeError("会话加载失败：未找到本地会话记录");
             }
-          } catch {
-            // ignore json parse errors
+            return;
           }
-          // 会话不存在，使用新的会话ID
-          console.log(
-            `[AgentChat] Session ${conversationId} load failed: ${detail}`,
+          data = {
+            messages: localSession.messages,
+            total: localSession.messages.length,
+          };
+        } else {
+          const resp = await fetch(
+            `${apiBaseUrl}/api/agent/history/sessions/${conversationId}`,
+            {
+              headers: getAuthHeaders(),
+            },
           );
-          setResumeError(`会话加载失败：${detail}`);
-          return;
+          if (!mounted) return;
+          if (!resp.ok) {
+            let detail = `HTTP ${resp.status} ${resp.statusText}`;
+            try {
+              const errData = await resp.clone().json();
+              if (errData?.detail?.message) {
+                detail = errData.detail.message;
+              } else if (typeof errData?.detail === "string") {
+                detail = errData.detail;
+              } else if (errData?.error_message) {
+                detail = errData.error_message;
+              }
+            } catch {
+              // ignore json parse errors
+            }
+            // 会话不存在，使用新的会话ID
+            console.log(
+              `[AgentChat] Session ${conversationId} load failed: ${detail}`,
+            );
+            setResumeError(`会话加载失败：${detail}`);
+            return;
+          }
+          data = await resp.json();
         }
-        const data = await resp.json();
+        if (!mounted || !data) return;
         setResumeError(null);
 
         // 🔧 恢复 UI 数据（包含右侧选中态），避免“展示简历后又自动消失”。
@@ -2038,7 +2084,7 @@ function CocoChatContent() {
     return () => {
       mounted = false;
     };
-  }, [conversationId, currentSessionId, initialSessionResolved, apiBaseUrl, getAuthHeaders, location.search]); // 仅在会话确定后加载
+  }, [conversationId, currentSessionId, initialSessionResolved, apiBaseUrl, getAuthHeaders, isAuthenticated, location.search]); // 仅在会话确定后加载
 
   useEffect(() => {
     if (resumeData) {
@@ -2586,6 +2632,35 @@ function CocoChatContent() {
       const clientSaveSeq = ++saveClientSeqRef.current;
       const lastMessageHash = computeLastMessageHash(messagesToSave);
 
+      if (!isAuthenticated) {
+        const knownPersistedCount =
+          lastPersistedCountBySessionRef.current[validSessionId] ?? 0;
+        const canTryAppend =
+          HISTORY_APPEND_MODE &&
+          knownPersistedCount > 0 &&
+          knownPersistedCount <= messagesToSave.length &&
+          Boolean(getLocalAgentSession(validSessionId));
+
+        if (canTryAppend) {
+          const deltaMessages = messagesToSave.slice(knownPersistedCount);
+          if (deltaMessages.length > 0) {
+            appendLocalAgentMessages(
+              validSessionId,
+              buildSavePayload(deltaMessages),
+            );
+          }
+        } else {
+          saveLocalAgentSession(validSessionId, payload);
+        }
+        lastPersistedCountBySessionRef.current[validSessionId] =
+          messagesToSave.length;
+        lastSavedKeyRef.current = payloadKey;
+        if (shouldRefresh) {
+          refreshSessions();
+        }
+        return;
+      }
+
       if (saveInFlightRef.current) {
         queuedSaveRef.current = {
           sessionId: validSessionId,
@@ -2780,6 +2855,7 @@ function CocoChatContent() {
       buildSavePayload,
       computeLastMessageHash,
       getAuthHeaders,
+      isAuthenticated,
       refreshSessions,
     ],
   );
@@ -2787,6 +2863,16 @@ function CocoChatContent() {
   const schedulePersistSessionSnapshot = useCallback(
     (sessionId: string, messagesToSave: Message[], shouldRefresh = false) => {
       if (!sessionId || sessionId.trim() === "" || messagesToSave.length === 0) {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        if (saveDebounceTimerRef.current) {
+          clearTimeout(saveDebounceTimerRef.current);
+          saveDebounceTimerRef.current = null;
+        }
+        scheduledSaveRef.current = null;
+        void persistSessionSnapshot(sessionId, messagesToSave, shouldRefresh);
         return;
       }
 
@@ -2812,7 +2898,7 @@ function CocoChatContent() {
         );
       }, 1800);
     },
-    [persistSessionSnapshot],
+    [isAuthenticated, persistSessionSnapshot],
   );
 
   const flushScheduledSave = useCallback(async () => {
@@ -2955,18 +3041,22 @@ function CocoChatContent() {
     }
 
     try {
-      const resp = await fetch(
-        `${apiBaseUrl}/api/agent/history/${sessionId}`,
-        {
-          method: "DELETE",
-          headers: getAuthHeaders(),
-        },
-      );
-      if (!resp.ok) throw new Error(`Failed to delete session: ${resp.status}`);
+      if (!isAuthenticated) {
+        deleteLocalAgentSession(sessionId);
+      } else {
+        const resp = await fetch(
+          `${apiBaseUrl}/api/agent/history/${sessionId}`,
+          {
+            method: "DELETE",
+            headers: getAuthHeaders(),
+          },
+        );
+        if (!resp.ok) throw new Error(`Failed to delete session: ${resp.status}`);
+      }
 
       fetch(`${apiBaseUrl}/api/agent/stream/session/${sessionId}`, {
         method: "DELETE",
-        headers: getAuthHeaders(),
+        headers: getAgentRequestHeaders(),
       }).catch(() => undefined);
 
       try {
@@ -3068,6 +3158,11 @@ function CocoChatContent() {
   const renameSession = async (sessionId: string, title: string) => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
+    if (!isAuthenticated) {
+      renameLocalAgentSession(sessionId, trimmedTitle);
+      refreshSessions();
+      return;
+    }
     try {
       await fetch(
         `${apiBaseUrl}/api/agent/history/sessions/${sessionId}/title`,
@@ -3110,42 +3205,59 @@ function CocoChatContent() {
     restorePatches([]); // 清掉上一会话的 diff 卡，避免残留错挂
 
     try {
-      const resp = await fetch(
-        `${apiBaseUrl}/api/agent/history/sessions/${sessionId}`,
-        {
-          headers: getAuthHeaders(),
-        },
-      );
-
-      if (!resp.ok) {
-        let detail = `HTTP ${resp.status} ${resp.statusText}`;
-        try {
-          const errData = await resp.clone().json();
-          if (errData?.detail?.message) {
-            detail = errData.detail.message;
-          } else if (typeof errData?.detail === "string") {
-            detail = errData.detail;
-          } else if (errData?.error_message) {
-            detail = errData.error_message;
+      let data: { messages?: any[]; total?: number } | null = null;
+      if (!isAuthenticated) {
+        const localSession = getLocalAgentSession(sessionId);
+        if (!localSession) {
+          if (!sessionId.startsWith("conv-")) {
+            setResumeError("会话加载失败：未找到本地会话记录");
           }
-        } catch {
-          // ignore json parse errors
+          setCurrentSessionId(sessionId);
+          setConversationId(sessionId);
+          return;
         }
-        console.error(
-          `[AgentChat] Failed to load session: ${detail}`,
+        data = {
+          messages: localSession.messages,
+          total: localSession.messages.length,
+        };
+      } else {
+        const resp = await fetch(
+          `${apiBaseUrl}/api/agent/history/sessions/${sessionId}`,
+          {
+            headers: getAuthHeaders(),
+          },
         );
-        // For brand-new local sessions (conv-*) that haven't been persisted yet,
-        // a 404 is expected — don't show an error to the user.
-        if (!(resp.status === 404 && sessionId.startsWith('conv-'))) {
-          setResumeError(`会话加载失败：${detail}`);
-        }
-        // Mark sessionId as "seen" so the URL effect doesn't retry infinitely
-        setCurrentSessionId(sessionId);
-        // 如果加载失败，不清空当前消息，保持原状态
-        return;
-      }
 
-      const data = await resp.json();
+        if (!resp.ok) {
+          let detail = `HTTP ${resp.status} ${resp.statusText}`;
+          try {
+            const errData = await resp.clone().json();
+            if (errData?.detail?.message) {
+              detail = errData.detail.message;
+            } else if (typeof errData?.detail === "string") {
+              detail = errData.detail;
+            } else if (errData?.error_message) {
+              detail = errData.error_message;
+            }
+          } catch {
+            // ignore json parse errors
+          }
+          console.error(
+            `[AgentChat] Failed to load session: ${detail}`,
+          );
+          // For brand-new local sessions (conv-*) that haven't been persisted yet,
+          // a 404 is expected — don't show an error to the user.
+          if (!(resp.status === 404 && sessionId.startsWith('conv-'))) {
+            setResumeError(`会话加载失败：${detail}`);
+          }
+          // Mark sessionId as "seen" so the URL effect doesn't retry infinitely
+          setCurrentSessionId(sessionId);
+          // 如果加载失败，不清空当前消息，保持原状态
+          return;
+        }
+
+        data = await resp.json();
+      }
       setResumeError(null);
 
       // 检查返回的数据格式
@@ -5072,6 +5184,14 @@ function CocoChatContent() {
     />
   );
 
+  const showByokErrorAction = Boolean(
+    resumeError &&
+      (/AI_RATE_LIMITED|AI_QUOTA_EXHAUSTED|上限|额度|余额不足|配额/.test(resumeError) ||
+        (resumeError === lastError &&
+          (lastErrorCode === "AI_RATE_LIMITED" ||
+            lastErrorCode === "AI_QUOTA_EXHAUSTED"))),
+  );
+
   return (
     <WorkspaceLayout
       agentSession={{
@@ -5087,13 +5207,34 @@ function CocoChatContent() {
         <div className="flex-1 flex overflow-hidden relative">
           {/* Left: Chat */}
           <section className="flex-1 min-w-0 flex flex-col h-full">
-            {AGENT_MODELS.length > 1 && (
-              <div className="shrink-0 border-b-2 border-black bg-chat-canvas/80 px-4 py-2 dark:border-slate-800 dark:bg-slate-950/80 fresh:border-slate-200">
-                <div className="mx-auto flex w-full max-w-3xl items-center">
-                  <ModelSelector value={selectedModel} onChange={handleModelChange} />
+            <div className="shrink-0 border-b-2 border-black bg-chat-canvas/80 px-4 py-2 dark:border-slate-800 dark:bg-slate-950/80 fresh:border-slate-200">
+              <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-none border px-2.5 py-1 text-xs font-medium fresh:rounded-full ${
+                      byokActive
+                        ? "border-[#3367D6] bg-blue-50 text-[#1a73e8] dark:border-blue-500/60 dark:bg-blue-950/50 dark:text-blue-300"
+                        : "border-black/20 bg-white/80 text-slate-700 fresh:border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    }`}
+                  >
+                    {byokActive
+                      ? `自带 Key · ${byokConfig.provider}/${byokConfig.model || "自定义"}`
+                      : "免费体验"}
+                  </span>
+                  {!byokActive && (
+                    <ModelSelector value={selectedModel} onChange={handleModelChange} />
+                  )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setByokModalOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-none border border-black bg-white px-2.5 py-1 text-xs font-medium text-slate-800 shadow-[2px_2px_0px_0px_#000000] transition-all hover:bg-slate-50 fresh:rounded-lg fresh:border-slate-200 fresh:shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  <KeyRound className="h-3.5 w-3.5 text-[#3367D6] dark:text-blue-400" />
+                  <span>自带 API Key</span>
+                </button>
               </div>
-            )}
+            </div>
             <CustomScrollbar as="main" className="flex-1 px-4 py-8 flex flex-col">
               <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col">
                 {loadingResume && (
@@ -5104,6 +5245,15 @@ function CocoChatContent() {
                 {resumeError && (
                   <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/30 border-2 fresh:border border-black fresh:border-slate-200 fresh:border-slate-200 dark:border-red-900/50 rounded-none fresh:rounded-lg mb-4">
                     <span className="text-sm text-red-600 dark:text-red-400 flex-1">{resumeError}</span>
+                    {showByokErrorAction && (
+                      <button
+                        type="button"
+                        onClick={() => setByokModalOpen(true)}
+                        className="text-xs font-semibold text-[#1a73e8] dark:text-blue-300 bg-white dark:bg-slate-900 border border-[#3367D6] dark:border-blue-500 rounded-none fresh:rounded-lg px-2.5 py-1 hover:bg-blue-50 dark:hover:bg-blue-950/40 shrink-0"
+                      >
+                        配置自带 API Key
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setResumeError(null);
@@ -5332,6 +5482,11 @@ function CocoChatContent() {
           sectionTitle="导入简历"
           onClose={() => setAiImportModalOpen(false)}
           onSave={handleAIImportSave}
+        />
+        <ByokConfigModal
+          open={byokModalOpen}
+          onClose={() => setByokModalOpen(false)}
+          onConfigChange={setByokConfig}
         />
       </div>
     </WorkspaceLayout>

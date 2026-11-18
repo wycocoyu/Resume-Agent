@@ -8,7 +8,7 @@
  * - Heartbeat detection
  */
 import { getApiBaseUrl, isAgentEnabled } from '@/lib/runtimeEnv';
-import { getAuthHeaders } from '@/lib/authHeaders';
+import { getAgentRequestHeaders } from '@/services/agentByokConfig';
 
 export interface SSEEvent {
   id: string;
@@ -101,7 +101,7 @@ export class SSETransport {
 
     // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie（fetch 已被
     // configureAuthWebRequests patch 自动带 credentials），不再注入 Bearer。
-    const authHeaders = getAuthHeaders();
+    const authHeaders = getAgentRequestHeaders();
 
     try {
       const response = await fetch(url, {

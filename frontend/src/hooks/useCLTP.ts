@@ -7,9 +7,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SSEEvent } from "@/transports/SSETransport";
+import { extractApiErrorMessage } from "@/lib/apiError";
 import { getApiBaseUrl, isAgentEnabled } from "@/lib/runtimeEnv";
-import { getAuthHeaders } from "@/lib/authHeaders";
-import { streamAgent, type AgentStreamEvent } from "@/services/agentStream";
+import { getAgentRequestHeaders } from "@/services/agentByokConfig";
+import { getRecentHistoryPayload } from "@/services/agentLocalHistory";
+import {
+  AgentStreamHttpError,
+  streamAgent,
+  type AgentStreamEvent,
+} from "@/services/agentStream";
 import { createAgentEventAdapter } from "@/agent-presentation/AgentEventAdapter";
 import {
   createConversationRunState,
@@ -29,7 +35,9 @@ function extractStreamErrorMessage(event: AgentStreamEvent): string {
     normalizeText(event.data?.content) ||
     normalizeText(event.data?.error_details) ||
     normalizeText(event.data?.error_message) ||
-    normalizeText(event.data?.message);
+    normalizeText(event.data?.message) ||
+    extractApiErrorMessage(event.data?.detail, "") ||
+    extractApiErrorMessage(event.data, "");
   if (direct) return direct;
 
   return "流式请求失败，请稍后重试。";
@@ -40,6 +48,7 @@ export interface UseCLTPResult {
   isProcessing: boolean;
   isConnected: boolean;
   lastError: string | null;
+  lastErrorCode: string | null;
   answerCompleteCount: number;
   sendMessage: (message: string, resumeDataOverride?: any) => Promise<void>;
   finalizeStream: () => void;
@@ -58,6 +67,8 @@ export interface UseCLTPOptions {
   onSSEEvent?: (event: SSEEvent) => void;
   /** 本次会话使用的 LLM 模型（前端模型选择器），随请求透传给后端覆盖 */
   model?: string;
+  /** 是否已登录；未登录时随请求附带本地最近 20 条消息供无状态重放 */
+  isAuthenticated?: boolean;
 }
 
 export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
@@ -70,6 +81,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
     heartbeatTimeout = 0,
     meaningfulTimeout = 0,
     model,
+    isAuthenticated = false,
   } = options;
 
   const [currentRunState, setCurrentRunState] = useState(() =>
@@ -78,6 +90,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [lastErrorCode, setLastErrorCode] = useState<string | null>(null);
   const [answerCompleteCount, setAnswerCompleteCount] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -157,6 +170,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
 
       disconnect();
       setLastError(null);
+      setLastErrorCode(null);
       setIsProcessing(true);
       setIsConnected(true);
 
@@ -167,8 +181,20 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
       const eventAdapter = createAgentEventAdapter();
       setCurrentRunState(createConversationRunState(runId));
 
-      // 2026-07-17 身份统一：JWT 下架，认证走 BetterAuth cookie，不再注入 Bearer。
-      const authHeaders = getAuthHeaders();
+      const requestHeaders = getAgentRequestHeaders();
+      let historyMessages: Array<{ role: "user" | "assistant"; content: string }> | undefined;
+      if (!isAuthenticated && conversationId) {
+        const recent = getRecentHistoryPayload(conversationId, 20);
+        const deduped =
+          recent.length > 0 &&
+          recent[recent.length - 1].role === "user" &&
+          recent[recent.length - 1].content.trim() === content
+            ? recent.slice(0, -1)
+            : recent;
+        if (deduped.length > 0) {
+          historyMessages = deduped;
+        }
+      }
 
       let completed = false;
       let failed = false;
@@ -206,11 +232,12 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
                 : (resumeDataRef.current ?? null),
             model: modelRef.current || undefined,
             run_id: runId,
+            ...(historyMessages ? { history_messages: historyMessages } : {}),
           },
           {
             baseUrl,
             signal: controller.signal,
-            headers: authHeaders,
+            headers: requestHeaders,
             idleTimeoutMs: heartbeatTimeout,
             meaningfulIdleTimeoutMs: meaningfulTimeout,
             onEvent: (event) => {
@@ -255,6 +282,11 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
 
               if (type === "error" || type === "agent_error") {
                 const message = extractStreamErrorMessage(event);
+                const errCode =
+                  normalizeText(event.data?.error_code) ||
+                  normalizeText(event.data?.code) ||
+                  null;
+                if (errCode) setLastErrorCode(errCode);
                 if (message === "Execution stopped due to session switch") {
                   setLastError("任务被中断（来源：会话切换/新请求触发）");
                 } else if (message === "Execution stopped by user") {
@@ -266,6 +298,9 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
             },
             onError: (error) => {
               const message = error.message || "流式请求失败，请稍后重试。";
+              if (error instanceof AgentStreamHttpError && error.code) {
+                setLastErrorCode(error.code);
+              }
               recordFailure(message);
               setLastError(message);
             },
@@ -280,6 +315,9 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
       } catch (error) {
         if (!(error instanceof Error && error.name === "AbortError")) {
           const msg = error instanceof Error ? error.message : "流式请求失败";
+          if (error instanceof AgentStreamHttpError && error.code) {
+            setLastErrorCode(error.code);
+          }
           recordFailure(msg);
           setLastError(msg);
         }
@@ -300,6 +338,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
       baseUrl,
       heartbeatTimeout,
       meaningfulTimeout,
+      isAuthenticated,
     ],
   );
 
@@ -317,6 +356,7 @@ export function useCLTP(options: UseCLTPOptions = {}): UseCLTPResult {
     isProcessing,
     isConnected,
     lastError,
+    lastErrorCode,
     answerCompleteCount,
     sendMessage,
     finalizeStream,

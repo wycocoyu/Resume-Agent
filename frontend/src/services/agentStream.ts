@@ -1,4 +1,100 @@
+import { extractApiErrorMessage } from "@/lib/apiError";
 import { getApiBaseUrl } from "@/lib/runtimeEnv";
+import { getAgentRequestHeaders } from "@/services/agentByokConfig";
+
+export class AgentStreamHttpError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "AgentStreamHttpError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function parseAgentStreamHttpError(
+  status: number,
+  statusText: string,
+  rawBody: string,
+): AgentStreamHttpError {
+  const trimmed = rawBody.trim();
+  let parsed: Record<string, unknown> | null = null;
+  if (trimmed) {
+    try {
+      const candidate = JSON.parse(trimmed);
+      if (candidate && typeof candidate === "object") {
+        parsed = candidate as Record<string, unknown>;
+      }
+    } catch {
+      // non-JSON response body
+    }
+  }
+
+  const detailObj =
+    parsed?.detail && typeof parsed.detail === "object"
+      ? (parsed.detail as Record<string, unknown>)
+      : null;
+  const code =
+    (typeof parsed?.code === "string" && parsed.code.trim()) ||
+    (typeof detailObj?.code === "string" && detailObj.code.trim()) ||
+    undefined;
+
+  const extracted = parsed ? extractApiErrorMessage(parsed, "") : "";
+  if (extracted) {
+    return new AgentStreamHttpError(extracted, status, code);
+  }
+
+  if (code === "AI_RATE_LIMITED" || status === 429) {
+    return new AgentStreamHttpError(
+      "当前免费体验次数已达上限，请稍后再试，或配置自带 API Key 继续使用。",
+      status,
+      code || "AI_RATE_LIMITED",
+    );
+  }
+  if (code === "AI_QUOTA_EXHAUSTED") {
+    return new AgentStreamHttpError(
+      "免费 AI 额度暂已用完，您可以配置自带 API Key 继续使用。",
+      status,
+      code,
+    );
+  }
+  if (code === "AGENT_DISABLED") {
+    return new AgentStreamHttpError(
+      "AI 助手功能已暂时关闭。",
+      status,
+      code,
+    );
+  }
+  if (code === "INVALID_BYOK_BASE_URL") {
+    return new AgentStreamHttpError(
+      "自带 API Key 的 Base URL 或模型配置无效，请检查后重试。",
+      status,
+      code,
+    );
+  }
+  if (status === 503) {
+    return new AgentStreamHttpError(
+      "AI 服务暂时不可用，请稍后再试。",
+      status,
+      code,
+    );
+  }
+  if (status === 403) {
+    return new AgentStreamHttpError(
+      "无权访问当前会话，请新建会话重试。",
+      status,
+      code,
+    );
+  }
+
+  return new AgentStreamHttpError(
+    `SSE request failed: ${status} ${statusText}${trimmed ? ` - ${trimmed.slice(0, 300)}` : ""}`,
+    status,
+    code,
+  );
+}
 
 export interface AgentStreamEvent {
   id: string;
@@ -15,6 +111,7 @@ export interface AgentStreamPayload {
   resume_data?: any;
   model?: string;
   run_id?: string;
+  history_messages?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface AgentStreamHandlers {
@@ -153,6 +250,7 @@ export async function streamAgent(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        ...getAgentRequestHeaders(),
         ...headers,
       },
       credentials: "include",
@@ -162,9 +260,7 @@ export async function streamAgent(
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(
-        `SSE request failed: ${response.status} ${response.statusText}${body ? ` - ${body.slice(0, 300)}` : ""}`,
-      );
+      throw parseAgentStreamHttpError(response.status, response.statusText, body);
     }
 
     if (!response.body) {

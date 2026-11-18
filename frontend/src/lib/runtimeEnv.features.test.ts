@@ -53,9 +53,9 @@ describe('runtimeEnv feature flags & hydration', () => {
     vi.unstubAllGlobals()
   })
 
-  it('defaults auth=false, agent=false, editor_ai=true before /api/features loads (no flash)', () => {
+  it('defaults auth=false, agent=true, editor_ai=true before /api/features loads', () => {
     expect(isAuthEnabled()).toBe(false)
-    expect(isAgentEnabled()).toBe(false)
+    expect(isAgentEnabled()).toBe(true)
     expect(isEditorAiEnabled()).toBe(true)
   })
 
@@ -76,7 +76,7 @@ describe('runtimeEnv feature flags & hydration', () => {
     })
 
     expect(latest.current?.authEnabled).toBe(false)
-    expect(latest.current?.agentEnabled).toBe(false)
+    expect(latest.current?.agentEnabled).toBe(true)
     expect(latest.current?.editorAiEnabled).toBe(true)
     expect(latest.current?.loaded).toBe(false)
 
@@ -150,7 +150,7 @@ describe('runtimeEnv feature flags & hydration', () => {
     const res = await hydrateRuntimeFeatures()
     expect(res).toBeNull()
     expect(isAuthEnabled()).toBe(false)
-    expect(isAgentEnabled()).toBe(false)
+    expect(isAgentEnabled()).toBe(true)
     expect(isEditorAiEnabled()).toBe(true)
   })
 

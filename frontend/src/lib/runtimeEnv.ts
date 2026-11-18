@@ -205,8 +205,9 @@ export function isAgentEnabled(): boolean {
   if (_runtimeFeatures !== null) {
     return Boolean(_runtimeFeatures.agent_enabled)
   }
-  // 首屏默认关闭，避免加载 /api/features 前出现侧边栏 Agent 闪烁
-  const raw = String(import.meta.env.VITE_AGENT_ENABLED ?? 'false').trim().toLowerCase()
+  // 默认开启 AI 助手，仅当构建环境变量或运行时开关显式设 false 时关闭
+  const configured = String(import.meta.env.VITE_AGENT_ENABLED ?? '').trim().toLowerCase()
+  const raw = configured || 'true'
   return TRUE_ENV_VALUES.has(raw)
 }
 
@@ -256,7 +257,7 @@ export async function hydrateRuntimeFeatures(force = false): Promise<RuntimeFeat
       if (!data || typeof data !== 'object') return null
       _runtimeFeatures = {
         auth_enabled: Boolean(data.auth_enabled),
-        agent_enabled: Boolean(data.agent_enabled),
+        agent_enabled: data.agent_enabled === undefined ? true : Boolean(data.agent_enabled),
         editor_ai_enabled: data.editor_ai_enabled === undefined ? true : Boolean(data.editor_ai_enabled),
       }
       notifyFeatureListeners()
@@ -318,7 +319,7 @@ export function setRuntimeFeaturesForTest(features: Partial<RuntimeFeatures> | n
   } else {
     _runtimeFeatures = {
       auth_enabled: Boolean(features.auth_enabled),
-      agent_enabled: Boolean(features.agent_enabled),
+      agent_enabled: features.agent_enabled === undefined ? true : Boolean(features.agent_enabled),
       editor_ai_enabled: features.editor_ai_enabled === undefined ? true : Boolean(features.editor_ai_enabled),
     }
   }
@@ -348,9 +349,7 @@ export function getStoredAuthRole(): string {
 }
 
 export function canUseAgentFeature(): boolean {
-  // 仅判定 Agent 功能开关；登录态由唯一调用方 WorkspaceLayout 的 isAuthenticated 统一把关。
-  // 不在此重新从 localStorage 推导登录态——BetterAuth 用 cookie 鉴权、不写 legacy auth_token，
-  // 旧的 token 存在性判断会在 BetterAuth 登录态下把历史会话等 Agent 入口整体隐藏。
+  // 仅判定 Agent 功能开关；匿名用户与登录用户均可进入 Agent 工作区。
   return isAgentEnabled()
 }
 
