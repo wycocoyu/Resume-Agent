@@ -62,6 +62,8 @@ from backend.api_docs import (
     OPENAPI_TAGS_METADATA,
     register_api_docs,
 )
+from backend.services.ai_guard import AiGuardError, ai_guard_error_payload
+from backend.services.runtime_features import get_runtime_features
 
 def import_module_candidates(candidates):
     """按候选列表依次尝试导入模块，避免多层嵌套 try/except。"""
@@ -107,7 +109,39 @@ app = FastAPI(
 )
 register_api_docs(app)
 
-# 配置 CORS
+AGENT_DISABLED_MESSAGE = "AI 助手当前已暂时关闭，请直接使用简历工作台编辑与导出。"
+
+
+class AgentFeatureGuardMiddleware:
+    """纯 ASGI /api/agent/* 运行时守卫（不包裹 TaskGroup，兼容 SSE 长连接）。"""
+
+    def __init__(self, asgi_app) -> None:
+        self.app = asgi_app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") == "http":
+            path = scope.get("path") or ""
+            method = (scope.get("method") or "").upper()
+            if (
+                method != "OPTIONS"
+                and (path == "/api/agent" or path.startswith("/api/agent/"))
+                and not get_runtime_features()["agent_enabled"]
+            ):
+                response = JSONResponse(
+                    status_code=503,
+                    content={
+                        "code": "AGENT_DISABLED",
+                        "message": AGENT_DISABLED_MESSAGE,
+                        "detail": AGENT_DISABLED_MESSAGE,
+                    },
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# 配置 CORS（外层包裹 AgentFeatureGuardMiddleware，确保 503 也携带 CORS 头）
+app.add_middleware(AgentFeatureGuardMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -117,6 +151,14 @@ app.add_middleware(
     expose_headers=["X-LeetCode-ProgramRun"],
 )
 register_observability_handlers(app)
+
+
+@app.exception_handler(AiGuardError)
+async def ai_guard_exception_handler(_request: Request, exc: AiGuardError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ai_guard_error_payload(exc),
+    )
 
 # 注册路由
 app.include_router(health_router)

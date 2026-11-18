@@ -18,6 +18,11 @@ from backend.services.jd_matcher import (
     StarRewriteResponse,
 )
 
+try:
+    from backend.services.ai_guard import require_ai_rewrite
+except ImportError:
+    from services.ai_guard import require_ai_rewrite
+
 router = APIRouter(prefix="/api/jd", tags=["Job JD Matching & Analysis"])
 
 
@@ -42,15 +47,15 @@ class StarRewriteRequest(BaseModel):
     provider: Optional[str] = "deepseek"
 
 
-@router.post("/parse", response_model=ParsedJd)
+@router.post("/parse", response_model=ParsedJd, dependencies=[Depends(require_ai_rewrite)])
 def parse_jd(payload: JdParseRequest):
     """Parse raw job description text into a structured JD profile."""
     engine = JdMatchingEngine()
     return engine.parse_jd(payload.jd_text)
 
 
-@router.post("/match", response_model=JdMatchResponse)
-@router.post("/analyze", response_model=JdMatchResponse)
+@router.post("/match", response_model=JdMatchResponse, dependencies=[Depends(require_ai_rewrite)])
+@router.post("/analyze", response_model=JdMatchResponse, dependencies=[Depends(require_ai_rewrite)])
 def match_jd(
     payload: JdMatchRequest,
     db: Session = Depends(get_db),
@@ -81,7 +86,7 @@ def match_jd(
     return engine.calculate_3d_match(resume_data, parsed_jd)
 
 
-@router.post("/star-rewrite", response_model=StarRewriteResponse)
+@router.post("/star-rewrite", response_model=StarRewriteResponse, dependencies=[Depends(require_ai_rewrite)])
 async def star_rewrite(payload: StarRewriteRequest):
     """Generate deterministic STAR rewrite suggestions for candidate experience/projects."""
     engine = JdMatchingEngine()

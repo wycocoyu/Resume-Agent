@@ -1,11 +1,15 @@
 """
 配置管理路由（统一管理 DeepSeek 官方 API Key 与 智谱 GLM-OCR API Key）
 """
+import hmac
+import inspect
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 try:
     from dotenv import load_dotenv
@@ -16,6 +20,26 @@ try:
     from backend.api_docs import is_production_env
 except ImportError:
     from api_docs import is_production_env
+
+try:
+    from backend.database import get_db
+except ImportError:
+    from database import get_db
+
+try:
+    from backend.services.runtime_features import (
+        get_admin_switch_token,
+        get_runtime_features,
+        update_runtime_features,
+    )
+    from backend.services.ai_guard import reset_ai_circuit
+except ImportError:
+    from services.runtime_features import (
+        get_admin_switch_token,
+        get_runtime_features,
+        update_runtime_features,
+    )
+    from services.ai_guard import reset_ai_circuit
 
 # 统一优先使用顶层模块，避免 models 被重复加载为两个模块名
 try:
@@ -53,6 +77,12 @@ class SavePromptsRequest(BaseModel):
     rewrite_default_instruction: str | None = None  # backward compatible
 
 
+class RuntimeFeaturesUpdateRequest(BaseModel):
+    auth_enabled: Optional[bool] = None
+    agent_enabled: Optional[bool] = None
+    editor_ai_enabled: Optional[bool] = None
+
+
 def _is_local_unauthenticated_dev(request: Request) -> bool:
     """判断是否为本地自托管开发环境请求（允许开源本地启动免登配置 .env 密钥）。
     线上生产环境（LOG_MODE=production 或经过反向代理 X-Forwarded-For）一律返回 False。
@@ -78,6 +108,74 @@ async def require_config_access(
         if current_user.role != "admin":
             raise HTTPException(status_code=403, detail="仅管理员可访问密钥配置")
         return current_user
+    if _is_local_unauthenticated_dev(request):
+        return None
+    raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+
+
+async def _resolve_optional_user_for_features(
+    request: Request,
+    db: Session,
+) -> Optional[AppUser]:
+    overrides = getattr(request.app, "dependency_overrides", None) or {}
+    candidate_deps = [get_current_user_optional]
+    for mod_name in ("middleware.auth", "backend.middleware.auth"):
+        mod = sys.modules.get(mod_name)
+        dep = getattr(mod, "get_current_user_optional", None) if mod else None
+        if dep is not None and dep not in candidate_deps:
+            candidate_deps.append(dep)
+
+    for dep in candidate_deps:
+        if dep in overrides:
+            res = overrides[dep]()
+            if inspect.isawaitable(res):
+                res = await res
+            return res
+
+    return await get_current_user_optional(
+        request=request,
+        authorization=request.headers.get("authorization"),
+        x_internal_auth_secret=request.headers.get("x-internal-auth-secret"),
+        x_better_auth_user_id=request.headers.get("x-better-auth-user-id"),
+        x_better_auth_user_email=request.headers.get("x-better-auth-user-email"),
+        x_better_auth_user_name=request.headers.get("x-better-auth-user-name"),
+        x_better_auth_user_image=request.headers.get("x-better-auth-user-image"),
+        db=db,
+    )
+
+
+async def require_features_admin_access(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Optional[AppUser]:
+    """功能开关写权限守卫：
+    (a) 匹配非空 ADMIN_SWITCH_TOKEN（X-Admin-Switch-Token 或 Authorization: Bearer）；
+    (b) 已登录管理员（role == 'admin'）；
+    (c) 本地未登录开发环境；
+    其余：已登录非管理员返回 403，未登录返回 401。
+    """
+    expected_token = get_admin_switch_token(env_path=ROOT_DIR / ".env")
+    if expected_token:
+        expected_bytes = expected_token.encode("utf-8")
+        header_token = (request.headers.get("x-admin-switch-token") or "").strip()
+        if header_token and hmac.compare_digest(
+            header_token.encode("utf-8"), expected_bytes
+        ):
+            return None
+        auth_header = (request.headers.get("authorization") or "").strip()
+        if auth_header.lower().startswith("bearer "):
+            bearer_token = auth_header[7:].strip()
+            if bearer_token and hmac.compare_digest(
+                bearer_token.encode("utf-8"), expected_bytes
+            ):
+                return None
+
+    current_user = await _resolve_optional_user_for_features(request, db)
+    if current_user is not None:
+        if current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="仅管理员可修改功能开关")
+        return current_user
+
     if _is_local_unauthenticated_dev(request):
         return None
     raise HTTPException(status_code=401, detail="未提供有效的认证信息")
@@ -174,6 +272,35 @@ def _sync_runtime_keys(deepseek_key: Optional[str] = None, zhipu_key: Optional[s
             refresh_zhipu_api_key(zhipu_key)
         except Exception as e:
             print(f"[警告] 同步 zhipu_layout.ZHIPU_API_KEY 失败: {e}")
+
+    if deepseek_key is not None or zhipu_key is not None:
+        try:
+            reset_ai_circuit()
+        except Exception:
+            pass
+
+
+@router.get("/features")
+async def get_features():
+    """获取当前运行时功能开关（公开只读，无需认证）。"""
+    return get_runtime_features(env_path=ROOT_DIR / ".env")
+
+
+@router.put("/admin/features")
+async def update_features(
+    body: RuntimeFeaturesUpdateRequest,
+    _access=Depends(require_features_admin_access),
+):
+    """动态更新运行时功能开关并持久化到 .env 与当前进程环境变量。"""
+    features = update_runtime_features(
+        {
+            "auth_enabled": body.auth_enabled,
+            "agent_enabled": body.agent_enabled,
+            "editor_ai_enabled": body.editor_ai_enabled,
+        },
+        env_path=ROOT_DIR / ".env",
+    )
+    return {"ok": True, "features": features}
 
 
 @router.get("/ai/config")

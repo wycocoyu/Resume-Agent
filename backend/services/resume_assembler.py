@@ -23,6 +23,19 @@ from typing import Dict, Any, Optional
 
 from openai import OpenAI
 
+try:
+    from backend.services.ai_guard import (
+        AiGuardError,
+        ensure_ai_circuit_open,
+        handle_upstream_quota_exception,
+    )
+except ImportError:
+    from services.ai_guard import (
+        AiGuardError,
+        ensure_ai_circuit_open,
+        handle_upstream_quota_exception,
+    )
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -448,17 +461,22 @@ def assemble_resume_data(
     system_msg = SYSTEM_PROMPT.format()
     model_name = resolve_assembler_model(model)
 
+    ensure_ai_circuit_open()
     client = _get_client(model_name)
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.1,
-        max_tokens=8000,
-        extra_body=_thinking_off(model_name),
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+            max_tokens=8000,
+            extra_body=_thinking_off(model_name),
+        )
+    except Exception as exc:
+        handle_upstream_quota_exception(exc, provider="deepseek")
+        raise
     content = response.choices[0].message.content
     if not content:
         raise ValueError("DeepSeek 未返回简历 JSON")
@@ -521,22 +539,27 @@ def _extract_sections(
         f"输出格式：\n{schema}\n\n"
         f"简历原文：\n{ocr_text}"
     )
+    ensure_ai_circuit_open()
     client = _get_client(model_name)
     for attempt in range(2):
         user = base_user if attempt == 0 else (
             base_user + "\n\n【重要】请严格输出**合法** JSON：字符串内双引号转义、无多余逗号、不要截断。"
         )
-        resp = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user},
-            ],
-            temperature=0.1,
-            max_tokens=4000,
-            response_format={"type": "json_object"},  # 约束解码，杜绝非法 JSON
-            extra_body=_thinking_off(model_name),
-        )
+        try:
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.1,
+                max_tokens=4000,
+                response_format={"type": "json_object"},  # 约束解码，杜绝非法 JSON
+                extra_body=_thinking_off(model_name),
+            )
+        except Exception as exc:
+            handle_upstream_quota_exception(exc, provider="deepseek")
+            raise
         try:
             parsed = _parse_json(resp.choices[0].message.content or "")
             return parsed if isinstance(parsed, dict) else {}
@@ -577,6 +600,11 @@ async def assemble_resume_data_fast(
         asyncio.to_thread(_extract_sections, ocr_text, _EXP_INSTRUCT, _EXP_SCHEMA, resolved),
         return_exceptions=True,
     )
+
+    if isinstance(exp_r, AiGuardError):
+        raise exp_r
+    if isinstance(easy_r, AiGuardError):
+        raise easy_r
 
     # EXP（实习+项目）是核心且不可从 EASY 补，失败/全空 → 整体回退单次
     exp_ok = isinstance(exp_r, dict) and (exp_r.get("internships") or exp_r.get("projects"))

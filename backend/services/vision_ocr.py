@@ -11,6 +11,17 @@ import os
 
 import httpx
 
+try:
+    from backend.services.ai_guard import (
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+    )
+except ImportError:
+    from services.ai_guard import (
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+    )
+
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 # 2026-09-16 解耦：原先复用 DEEPSEEK_BASE_URL，而文本链路已切到 DeepSeek 官方，
 # 再共用会把 qwen-vl 指到一个没有该模型的域名上。这里只认自己的变量。
@@ -42,6 +53,7 @@ def _qwen_vl_ocr(image_bytes: bytes, content_type: str, model: str) -> str:
     """用 DashScope qwen-vl 把图片识别成文本。"""
     if not DASHSCOPE_API_KEY:
         raise ValueError("DASHSCOPE_API_KEY 未配置")
+    ensure_ai_circuit_open()
     data_uri = f"data:{content_type};base64,{base64.b64encode(image_bytes).decode()}"
     headers = {
         "Content-Type": "application/json",
@@ -64,6 +76,11 @@ def _qwen_vl_ocr(image_bytes: bytes, content_type: str, model: str) -> str:
             f"{DASHSCOPE_BASE_URL}/chat/completions", json=payload, headers=headers
         )
     if resp.status_code != 200:
+        handle_upstream_quota_error(
+            status_code=resp.status_code,
+            error_text=resp.text,
+            provider="qwen",
+        )
         raise ValueError(f"qwen-vl 识别失败 (HTTP {resp.status_code}): {resp.text}")
     return resp.json()["choices"][0]["message"]["content"]
 

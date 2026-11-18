@@ -7,6 +7,11 @@ import time
 from typing import Callable, Any
 from functools import wraps
 
+try:
+    from backend.services.ai_guard import is_non_retryable_ai_error
+except ImportError:
+    from services.ai_guard import is_non_retryable_ai_error
+
 
 def retry_with_backoff(
     max_retries: int = 3,
@@ -37,6 +42,8 @@ def retry_with_backoff(
                 try:
                     return func(*args, **kwargs)
                 except (TimeoutError, ConnectionError, Exception) as e:
+                    if is_non_retryable_ai_error(e):
+                        raise
                     last_exception = e
                     
                     if attempt < max_retries - 1:

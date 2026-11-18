@@ -37,6 +37,7 @@ try:
     from backend.core.logger import get_logger, write_llm_debug
     from backend.resume_text_preprocessor import normalize_pasted_resume_text
     from backend.resume_parse_rules import RESUME_PARSE_EXTRA_RULES
+    from backend.services.ai_guard import AiGuardError
 except ImportError:
     try:
         # 方式2：作为顶层模块导入（适用于 backend 目录已在 sys.path）
@@ -46,6 +47,7 @@ except ImportError:
         from core.logger import get_logger, write_llm_debug
         from resume_text_preprocessor import normalize_pasted_resume_text
         from resume_parse_rules import RESUME_PARSE_EXTRA_RULES
+        from services.ai_guard import AiGuardError
     except ImportError as e:
         # 如果都失败，抛出错误
         raise ImportError(f"无法导入必要的模块：{e}")
@@ -215,6 +217,8 @@ class ParallelChunkProcessor:
                 "error": error_msg,
                 "elapsed": elapsed
             }
+        except AiGuardError:
+            raise
         except Exception as e:
             elapsed = time.time() - start_time
             error_msg = str(e) if str(e) else f"未知错误: {type(e).__name__}"
@@ -271,6 +275,10 @@ class ParallelChunkProcessor:
         # 执行所有任务
         controlled_tasks = [controlled_task(task) for task in tasks]
         results = await asyncio.gather(*controlled_tasks, return_exceptions=True)
+
+        for r in results:
+            if isinstance(r, AiGuardError):
+                raise r
 
         # 统计结果（处理异常情况）
         total_time = time.time() - start_time

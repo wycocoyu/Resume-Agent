@@ -2,6 +2,8 @@
 LaTeX 简历生成模块
 将简历 JSON 转换为 LaTeX 代码，并编译为 PDF
 """
+import base64
+import binascii
 import os
 import re
 import struct
@@ -268,6 +270,33 @@ def clear_user_photo_cache() -> None:
         _USER_PHOTO_CACHE.clear()
 
 
+def _decode_data_url_photo_to_dir(photo_url: str, temp_dir: str) -> str | None:
+    """将 data:image/...;base64,... 瞬时解码到当前请求 temp_dir/logos/photo.<ext>，绝不写入全局缓存。"""
+    header, sep, b64_payload = photo_url.partition(",")
+    if not sep or not header.lower().endswith(";base64"):
+        return None
+    compact_b64 = "".join(b64_payload.split())
+    if not compact_b64:
+        return None
+    max_b64_len = ((_USER_PHOTO_CACHE_MAX_BYTES * 4) // 3) + 16
+    if len(compact_b64) > max_b64_len:
+        return None
+    try:
+        raw_bytes = base64.b64decode(compact_b64, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if not raw_bytes or len(raw_bytes) > _USER_PHOTO_CACHE_MAX_BYTES:
+        return None
+    detected_ext = _detect_xelatex_image_ext(raw_bytes)
+    if not detected_ext:
+        return None
+    logos_dir = Path(temp_dir) / "logos"
+    logos_dir.mkdir(parents=True, exist_ok=True)
+    local_name = f"photo{detected_ext}"
+    (logos_dir / local_name).write_bytes(raw_bytes)
+    return local_name
+
+
 def _download_user_photo_to_dir(
     photo_url: str,
     temp_dir: str,
@@ -276,11 +305,14 @@ def _download_user_photo_to_dir(
 ) -> str | None:
     """
     下载用户照片到临时目录，固定命名为 photo.<ext>
-    仅接受 http(s)://（严禁读取服务器本地路径），offline=True 或非支持魔数返回 None。
+    支持 data:image/...;base64,... 瞬时解码与 http(s)://（严禁读取服务器本地路径），
+    offline=True 时仍允许 data:image/... 解码但跳过远程下载。
     """
-    if offline:
-        return None
     if not photo_url or not isinstance(photo_url, str):
+        return None
+    if photo_url.startswith("data:image/"):
+        return _decode_data_url_photo_to_dir(photo_url, temp_dir)
+    if offline:
         return None
     if not (photo_url.startswith("http://") or photo_url.startswith("https://")):
         return None

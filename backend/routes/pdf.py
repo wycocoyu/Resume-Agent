@@ -27,6 +27,7 @@ try:
         build_quota_payload,
         record_successful_pdf_download,
     )
+    from services.runtime_features import is_auth_enabled
 except ImportError:
     from backend.models import RenderPDFRequest
     from backend.database import get_db
@@ -36,6 +37,7 @@ except ImportError:
         build_quota_payload,
         record_successful_pdf_download,
     )
+    from backend.services.runtime_features import is_auth_enabled
 
 router = APIRouter(prefix="/api", tags=["PDF"])
 logger = logging.getLogger("backend")
@@ -196,20 +198,33 @@ class CompileLatexRequest(BaseModel):
     latex_content: str
 
 
+def _anonymous_unlimited_quota_payload() -> dict:
+    return {"unlimited": True, "limit": None, "used": 0, "remaining": None}
+
+
 @router.get("/pdf/quota")
 async def get_pdf_download_quota(
-    current_user: AppUser = Depends(get_current_user),
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
 ):
     """查询当前用户 PDF 下载配额。"""
+    if current_user is None:
+        if is_auth_enabled():
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        return _anonymous_unlimited_quota_payload()
     return build_quota_payload(current_user)
 
 
 @router.post("/pdf/downloads/record")
 async def record_pdf_download(
-    current_user: AppUser = Depends(get_current_user),
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     """记录一次真实 PDF 下载。预览/渲染不消耗下载次数。"""
+    if current_user is None:
+        if is_auth_enabled():
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        return _anonymous_unlimited_quota_payload()
+
     before_quota = build_quota_payload(current_user)
     logger.info(
         "[PDF DOWNLOAD][record_request] user_id=%s username=%s role=%s used=%s limit=%s remaining=%s",

@@ -11,7 +11,7 @@ import asyncio
 import threading
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -47,7 +47,14 @@ try:
     from services.vision_ocr import image_to_text, SUPPORTED_IMAGE_TYPES
     from json_normalizer import normalize_resume_json
     from database import get_db
-    from middleware.auth import AppUser, get_current_user
+    from middleware.auth import AppUser, get_current_user, get_current_user_optional
+    from backend.services.ai_guard import (
+        AiGuardError,
+        check_ai_guard,
+        require_ai_import,
+        require_ai_rewrite,
+    )
+    from backend.services.runtime_features import is_auth_enabled
     from sqlalchemy.orm import Session
 except ImportError:
     # 确保 backend 目录在 sys.path 中
@@ -84,7 +91,14 @@ except ImportError:
     from backend.services.vision_ocr import image_to_text, SUPPORTED_IMAGE_TYPES
     from backend.json_normalizer import normalize_resume_json
     from backend.database import get_db
-    from backend.middleware.auth import AppUser, get_current_user
+    from backend.middleware.auth import AppUser, get_current_user, get_current_user_optional
+    from backend.services.ai_guard import (
+        AiGuardError,
+        check_ai_guard,
+        require_ai_import,
+        require_ai_rewrite,
+    )
+    from backend.services.runtime_features import is_auth_enabled
     from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
@@ -243,12 +257,14 @@ def _llm_detect_rewrite_intent(
                 normalized.append(intent)
         if normalized:
             return normalized, max(0.0, min(1.0, confidence))
+    except AiGuardError:
+        raise
     except Exception:
         return None, 0.0
     return None, 0.0
 
 
-@router.post("/resume/rewrite-text/intent")
+@router.post("/resume/rewrite-text/intent", dependencies=[Depends(require_ai_rewrite)])
 async def detect_rewrite_text_intent(body: RewriteIntentRequest):
     instruction = (body.instruction or "").strip()
     if not instruction:
@@ -359,7 +375,7 @@ def _build_grammar_check_prompt(*, text: str, path_hint: str, locale: str) -> st
 """
 
 
-@router.post("/resume/grammar-check")
+@router.post("/resume/grammar-check", dependencies=[Depends(require_ai_rewrite)])
 async def grammar_check(body: GrammarCheckRequest):
     """单字段语法/表达体检：返回结构化 issues + 评分，供前端弹窗展示与一键修复。"""
     raw_text = (body.text or "").strip()
@@ -375,6 +391,8 @@ async def grammar_check(body: GrammarCheckRequest):
 
     try:
         raw = await asyncio.to_thread(call_llm, provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -565,7 +583,7 @@ def _build_jd_optimize_prompt(*, jd_text: str, fields: list[JdOptimizeField], lo
 """
 
 
-@router.post("/resume/jd-optimize")
+@router.post("/resume/jd-optimize", dependencies=[Depends(require_ai_rewrite)])
 async def jd_optimize(body: JdOptimizeRequest):
     """针对 JD 给出多字段优化建议（结构化），供前端弹窗展示与逐条/一键应用。"""
     jd = (body.jd_text or "").strip()
@@ -580,6 +598,8 @@ async def jd_optimize(body: JdOptimizeRequest):
 
     try:
         raw = await asyncio.to_thread(call_llm, provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -668,7 +688,7 @@ def _build_jd_keyword_integrate_prompt(*, keyword: str, jd_text: str, fields: li
 """
 
 
-@router.post("/resume/jd-keyword-integrate")
+@router.post("/resume/jd-keyword-integrate", dependencies=[Depends(require_ai_rewrite)])
 async def jd_keyword_integrate(body: JdKeywordIntegrateRequest):
     """把某个 JD 缺失关键词自然融入最相关的字段，返回可确定性替换的 original/suggested。"""
     keyword = (body.keyword or "").strip()
@@ -683,6 +703,8 @@ async def jd_keyword_integrate(body: JdKeywordIntegrateRequest):
 
     try:
         raw = await asyncio.to_thread(call_llm, provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -715,7 +737,7 @@ async def jd_keyword_integrate(body: JdKeywordIntegrateRequest):
     }
 
 
-@router.post("/resume/translate")
+@router.post("/resume/translate", dependencies=[Depends(require_ai_rewrite)])
 async def translate_resume_fields(body: TranslateRequest):
     """简历多字段翻译：逐字段返回 original/translated，供前端预览并写回。"""
     target = (body.target_lang or "").strip()
@@ -737,6 +759,8 @@ async def translate_resume_fields(body: TranslateRequest):
             try:
                 raw = await asyncio.to_thread(call_llm, provider, prompt)
                 data = parse_json_response(clean_llm_response(raw))
+            except AiGuardError:
+                raise
             except Exception:
                 return None
             for item in (data.get("translations") or []):
@@ -756,7 +780,7 @@ async def translate_resume_fields(body: TranslateRequest):
     return {"translations": translations}
 
 
-@router.post("/resume/health-check")
+@router.post("/resume/health-check", dependencies=[Depends(require_ai_rewrite)])
 async def resume_health_check(body: HealthCheckRequest):
     """通用简历体检（无需 JD）：维度评分 + 逐条可应用建议。"""
     fields = [f for f in (body.fields or []) if (f.content or "").strip()]
@@ -827,12 +851,14 @@ async def resume_health_check(body: HealthCheckRequest):
     }
 
 
-@router.post("/resume/generate", response_model=ResumeGenerateResponse)
+@router.post("/resume/generate", response_model=ResumeGenerateResponse, dependencies=[Depends(require_ai_import)])
 async def generate_resume(body: ResumeGenerateRequest):
     """一句话 → 结构化简历 JSON"""
     prompt = build_resume_prompt(body.instruction, body.locale)
     try:
         raw = await asyncio.to_thread(call_llm, body.provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -854,7 +880,7 @@ async def generate_resume(body: ResumeGenerateRequest):
     return ResumeGenerateResponse(resume=data, provider=body.provider)
 
 
-@router.post("/resume/generate/stream")
+@router.post("/resume/generate/stream", dependencies=[Depends(require_ai_import)])
 async def generate_resume_stream(body: ResumeGenerateRequest):
     """流式生成简历 - 输出 Markdown 格式，最后返回 JSON"""
     import asyncio
@@ -900,6 +926,8 @@ async def generate_resume_stream(body: ResumeGenerateRequest):
             yield f"data: {_json.dumps({'type': 'json', 'content': resume_data}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
+        except AiGuardError as e:
+            yield f"data: {_json.dumps({'type': 'error', 'code': e.code, 'status': e.status_code, 'content': e.message}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -914,7 +942,7 @@ async def generate_resume_stream(body: ResumeGenerateRequest):
     )
 
 
-@router.post("/resume/parse")
+@router.post("/resume/parse", dependencies=[Depends(require_ai_import)])
 async def parse_resume_text(body: ResumeParseRequest):
     """AI 解析简历文本 → 结构化简历 JSON（支持并行分块处理）"""
     body_text = normalize_pasted_resume_text(body.text)
@@ -975,6 +1003,8 @@ async def parse_resume_text(body: ResumeParseRequest):
             parallel_elapsed = time.time() - parallel_start
             logger.info(f"✅ 并行处理成功！总耗时: {parallel_elapsed:.2f}秒")
             logger.info("========== 并行处理结束 ==========")
+        except HTTPException:
+            raise
         except Exception as e:
             import traceback
 
@@ -1051,7 +1081,7 @@ async def parse_resume_text(body: ResumeParseRequest):
     return {"resume": data, "provider": provider}
 
 
-@router.post("/resume/upload-pdf")
+@router.post("/resume/upload-pdf", dependencies=[Depends(require_ai_import)])
 async def upload_resume_pdf(
     file: UploadFile = File(...),
     model: Optional[str] = Form(default=None),
@@ -1087,6 +1117,8 @@ async def upload_resume_pdf(
     step1_start = time.time()
     try:
         ocr_text = await asyncio.to_thread(recognize_with_ocr, pdf_bytes)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning(f"[PDF解析] glm-ocr 失败: {e}")
         raise HTTPException(status_code=502, detail=f"PDF 识别失败，请稍后重试: {e}")
@@ -1099,6 +1131,8 @@ async def upload_resume_pdf(
     step2_start = time.time()
     try:
         resume_data = await assemble_resume_data_fast(ocr_text, model=model)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"简历结构化失败: {e}")
     step2_time = time.time() - step2_start
@@ -1160,7 +1194,7 @@ def _normalize_uploaded_resume(resume_data: dict, label: str = "图片解析") -
         return resume_data
 
 
-@router.post("/resume/upload-image")
+@router.post("/resume/upload-image", dependencies=[Depends(require_ai_import)])
 async def upload_resume_image(
     files: List[UploadFile] = File(...),
     model: str = Form(default="glm-ocr"),
@@ -1181,6 +1215,8 @@ async def upload_resume_image(
                 image_to_text, image_bytes, content_type, model
             )
             texts.append(text_piece)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"图片识别失败: {e}")
 
@@ -1191,6 +1227,8 @@ async def upload_resume_image(
     # 步骤2：文本 → 结构化简历（复用 PDF 同款：分段并行 + qwen-plus-latest，失败回退单次）
     try:
         resume_data = await assemble_resume_data_fast(ocr_text, model=None)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"简历结构化失败: {e}")
 
@@ -1198,7 +1236,7 @@ async def upload_resume_image(
     return {"resume": normalized, "provider": model}
 
 
-@router.post("/resume/upload-image/stream")
+@router.post("/resume/upload-image/stream", dependencies=[Depends(require_ai_import)])
 async def upload_resume_image_stream(
     files: List[UploadFile] = File(...),
     model: str = Form(default="glm-ocr"),
@@ -1236,6 +1274,11 @@ async def upload_resume_image_stream(
                         text_piece = await run_in_threadpool(
                             image_to_text, image_bytes, content_type, model
                         )
+                    except AiGuardError as e:
+                        await event_queue.put(
+                            _sse({"type": "error", "status": e.status_code, "code": e.code, "content": e.message})
+                        )
+                        return
                     except Exception as e:
                         await event_queue.put(
                             _sse({"type": "error", "status": 502, "content": f"图片识别失败: {e}"})
@@ -1268,6 +1311,18 @@ async def upload_resume_image_stream(
                 )
                 try:
                     resume_data = await assemble_resume_data_fast(ocr_text, model=None)
+                except AiGuardError as e:
+                    await event_queue.put(
+                        _sse(
+                            {
+                                "type": "error",
+                                "status": e.status_code,
+                                "code": e.code,
+                                "content": e.message,
+                            }
+                        )
+                    )
+                    return
                 except Exception as e:
                     await event_queue.put(
                         _sse(
@@ -1292,6 +1347,10 @@ async def upload_resume_image_stream(
                 await event_queue.put(_sse("[DONE]"))
             except asyncio.CancelledError:
                 raise
+            except AiGuardError as e:
+                await event_queue.put(
+                    _sse({"type": "error", "status": e.status_code, "code": e.code, "content": e.message})
+                )
             except Exception as e:
                 await event_queue.put(
                     _sse({"type": "error", "status": 500, "content": str(e)})
@@ -1404,6 +1463,8 @@ async def _parse_resume_serial(body: ResumeParseRequest):
 {schema_desc}"""
             try:
                 raw = await asyncio.to_thread(call_llm, provider, chunk_prompt, model=model)
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.warning(f"分块 {i+1} 解析失败: {e}")
                 write_llm_debug(f"Chunk {i+1} Error: {e}")
@@ -1468,6 +1529,8 @@ async def _parse_resume_serial(body: ResumeParseRequest):
 
         try:
             raw = await asyncio.to_thread(call_llm, provider, prompt, model=model)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -1523,7 +1586,7 @@ def _build_stream_parse_prompt(text: str) -> str:
 {_STREAM_PARSE_SCHEMA}"""
 
 
-@router.post("/resume/parse/stream")
+@router.post("/resume/parse/stream", dependencies=[Depends(require_ai_import)])
 async def parse_resume_text_stream(body: ResumeParseRequest):
     """流式解析简历文本：单次 LLM 流式输出 token 进度，结束时返回标准化 JSON。
     与非流式 /resume/parse（含并行分块）并存，仅用于需要实时进度反馈的导入场景。"""
@@ -1583,6 +1646,8 @@ async def parse_resume_text_stream(body: ResumeParseRequest):
 
             yield f"data: {_json.dumps({'type': 'json', 'content': data}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
+        except AiGuardError as e:
+            yield f"data: {_json.dumps({'type': 'error', 'code': e.code, 'status': e.status_code, 'content': e.message}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
         finally:
@@ -1599,7 +1664,7 @@ async def parse_resume_text_stream(body: ResumeParseRequest):
     )
 
 
-@router.post("/resume/parse-section")
+@router.post("/resume/parse-section", dependencies=[Depends(require_ai_import)])
 async def parse_section_text(body: SectionParseRequest):
     """AI 解析单个模块文本 → 结构化数据"""
     provider = body.provider or DEFAULT_AI_PROVIDER
@@ -1615,6 +1680,8 @@ async def parse_section_text(body: SectionParseRequest):
 
     try:
         raw = await asyncio.to_thread(call_llm, provider, prompt, model=model)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
@@ -1638,7 +1705,7 @@ async def parse_section_text(body: SectionParseRequest):
     }
 
 
-@router.post("/resume/rewrite")
+@router.post("/resume/rewrite", dependencies=[Depends(require_ai_rewrite)])
 async def rewrite_resume(body: RewriteRequest):
     """对简历 JSON 的某个路径进行 AI 改写"""
     try:
@@ -1650,6 +1717,8 @@ async def rewrite_resume(body: RewriteRequest):
     prompt = build_rewrite_prompt(body.path, cur_value, body.instruction, body.locale, body.history)
     try:
         raw = await asyncio.to_thread(call_llm, body.provider, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败：{e}")
 
@@ -1686,7 +1755,7 @@ async def rewrite_resume(body: RewriteRequest):
     return {"resume": updated}
 
 
-@router.post("/resume/rewrite/stream")
+@router.post("/resume/rewrite/stream", dependencies=[Depends(require_ai_rewrite)])
 async def rewrite_resume_stream(body: RewriteRequest):
     """流式对简历 JSON 的某个路径进行 AI 改写"""
     try:
@@ -1707,6 +1776,8 @@ async def rewrite_resume_stream(body: RewriteRequest):
                 """发送 SSE 格式数据"""
                 yield f"data: {_json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
+        except AiGuardError as e:
+            yield f"data: {_json.dumps({'error': e.message, 'code': e.code, 'status': e.status_code}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -1721,7 +1792,7 @@ async def rewrite_resume_stream(body: RewriteRequest):
     )
 
 
-@router.post("/resume/rewrite-text/stream")
+@router.post("/resume/rewrite-text/stream", dependencies=[Depends(require_ai_rewrite)])
 async def rewrite_text_stream(body: RewriteTextStreamRequest):
     """流式改写文本片段（兼容前端划词改写入口）"""
     source_text = (body.text or "").strip()
@@ -1747,6 +1818,8 @@ async def rewrite_text_stream(body: RewriteTextStreamRequest):
             for chunk in call_llm_stream(provider, prompt):
                 yield f"data: {_json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
+        except AiGuardError as e:
+            yield f"data: {_json.dumps({'error': e.message, 'code': e.code, 'status': e.status_code}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -1761,7 +1834,7 @@ async def rewrite_text_stream(body: RewriteTextStreamRequest):
     )
 
 
-@router.post("/resume/chat/stream")
+@router.post("/resume/chat/stream", dependencies=[Depends(require_ai_rewrite)])
 async def resume_chat_stream(body: ChatStreamRequest):
     """轻量简历问答（流式）：供右下角悬浮 AI 助手对话窗口使用"""
     messages = [m for m in body.messages if (m.content or "").strip()]
@@ -1780,6 +1853,8 @@ async def resume_chat_stream(body: ChatStreamRequest):
             for chunk in call_llm_stream(provider, prompt):
                 yield f"data: {_json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
+        except AiGuardError as e:
+            yield f"data: {_json.dumps({'error': e.message, 'code': e.code, 'status': e.status_code}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {_json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -1797,15 +1872,21 @@ async def resume_chat_stream(body: ChatStreamRequest):
 @router.post("/resume/score", response_model=ScoreResponse)
 async def score_resume(
     request: ScoreRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
-    current_user: AppUser = Depends(get_current_user),
+    current_user: Optional[AppUser] = Depends(get_current_user_optional),
 ):
     """
     对简历进行JD匹配评分
 
-    输入：简历ID + JD文本
+    输入：简历ID（或匿名内联 resume_data）+ JD文本
     输出：3维度评分 + 总体匹配度
     """
+    if current_user is None and is_auth_enabled():
+        raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+
+    check_ai_guard(http_request, current_user, bucket="rewrite")
+
     if not request.jd_text or not request.jd_text.strip():
         raise HTTPException(status_code=400, detail="JD文本不能为空")
 
@@ -1813,12 +1894,36 @@ async def score_resume(
         from services.scoring_service import ScoringService
 
         service = ScoringService(db)
-        result = service.score_resume(
-            resume_id=request.resume_id,
+        if current_user is None:
+            if request.resume_data is not None:
+                return await asyncio.to_thread(
+                    service.score_resume_data,
+                    request.resume_data,
+                    request.jd_text,
+                    request.resume_id or "anonymous",
+                )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Resume {request.resume_id} not found",
+            )
+
+        if request.resume_data is not None and not request.resume_id:
+            return await asyncio.to_thread(
+                service.score_resume_data,
+                request.resume_data,
+                request.jd_text,
+                "inline",
+            )
+
+        result = await asyncio.to_thread(
+            service.score_resume,
+            resume_id=request.resume_id or "",
             user_id=current_user.id,
             jd_text=request.jd_text,
         )
         return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
