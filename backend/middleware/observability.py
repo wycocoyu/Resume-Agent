@@ -174,7 +174,7 @@ def _persist_observability(
             )
 
         # 管理端接口已迁移到 ops-portal，保留业务 API 的链路采样（排除健康检查）。
-        if request.url.path.startswith("/api/") and request.url.path not in {"/api/health"}:
+        if request.url.path.startswith("/api/") and request.url.path not in {"/api/health", "/api/health/ready"}:
             db.add(
                 APITraceSpan(
                     trace_id=trace_id,

@@ -85,6 +85,11 @@ test_api.sh
 !scripts/migrate-better-auth-db.sh
 !scripts/dev-auth-web.sh
 !scripts/smoke-auth-stack.sh
+!scripts/deploy-blue-green.sh
+
+# Blue-green deployment runtime state & staging frontend releases
+.deploy/
+frontend/dist_releases/
 
 # browser-fast 脚本(依赖已移除的 DOMShell,本地保留)
 scripts/browser-fast*.sh
