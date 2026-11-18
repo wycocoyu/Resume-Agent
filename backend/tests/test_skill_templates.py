@@ -325,6 +325,7 @@ def test_skill_body_contains_template_matrix_and_gap_guardrails() -> None:
     assert "上云" in body
     assert "cococv.cn" in body
     assert "https://cococv.cn/templates" in body
+    assert "https://cococv.cn/create-new" in body
     assert "网页模板中心" in body
     assert "27 套" in body
     assert "经典 LaTeX" in body
