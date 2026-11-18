@@ -15,6 +15,8 @@ import {
   useRuntimeFeatures,
 } from './runtimeEnv'
 import { extractApiErrorMessage } from './apiError'
+import axios from 'axios'
+import { scoreResume } from '@/services/api'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -172,5 +174,37 @@ describe('runtimeEnv feature flags & hydration', () => {
         detail: { message: '当前 AI 辅助功能已暂时关闭' },
       }),
     ).toBe('当前 AI 辅助功能已暂时关闭')
+  })
+
+  it('scoreResume supports anonymous inline resume_data and unwraps 503/429 error detail', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
+      data: { resume_id: 'anonymous', overall_score: 88, dimensions: [] },
+    })
+
+    const res = await scoreResume(null, '需要熟悉 TypeScript 与 React 18 开发', {
+      basic: { name: '张三' },
+      experience: [],
+    })
+    expect(res.overall_score).toBe(88)
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/resume\/score$/),
+      {
+        jd_text: '需要熟悉 TypeScript 与 React 18 开发',
+        resume_data: { basic: { name: '张三' }, experience: [] },
+      },
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+
+    postSpy.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          code: 'AI_QUOTA_EXHAUSTED',
+          message: '当前免费 AI 额度暂已用完',
+          detail: '当前免费 AI 额度暂已用完，您仍可正常手动编辑简历并免费导出 LaTeX / HTML PDF。',
+        },
+      },
+    })
+    await expect(scoreResume('r1', 'JD text here')).rejects.toThrow('当前免费 AI 额度暂已用完')
   })
 })

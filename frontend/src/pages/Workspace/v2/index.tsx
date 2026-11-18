@@ -25,6 +25,8 @@ import type { SettingsDrawerTab } from './SidePanel/SettingsDrawer'
 // AI 助手悬浮气泡暂不开放（2026-07-17），恢复时连同下方渲染处一起取消注释
 // import AiAssistantChat from './shared/AiAssistantChat'
 import { scoreResume, type JdOptimizeField } from '@/services/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { stripPhotoFromResumeData } from '@/services/storage/sanitizeResume'
 import { stripHtmlTags } from './utils/textUtils'
 import { withSettingsDefaults } from '../../Builder/settings'
 
@@ -34,6 +36,7 @@ const PDF_RENDER_INITIAL_DELAY_MS = 300
 
 export default function WorkspaceV2() {
   const { resumeId } = useParams<{ resumeId?: string }>()
+  const { isAuthenticated } = useAuth()
 
   // 跟踪编辑状态和保存状态
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -261,16 +264,23 @@ export default function WorkspaceV2() {
     }
   }, [])
 
-  // JD 文本变化时自动触发评分
+  const resumeDataRef = useRef(resumeData)
+  resumeDataRef.current = resumeData
+
+  // JD 文本变化时自动触发评分（匿名/未入库简历随请求附带脱敏后的 resume_data，避免 404）
   useEffect(() => {
-    if (currentResumeId && jdText && jdText.trim().length > 10) {
+    if (isDataLoaded && jdText && jdText.trim().length > 10) {
+      const inlineResumeData =
+        !isAuthenticated || !currentResumeId
+          ? stripPhotoFromResumeData(resumeDataRef.current)
+          : undefined
       setScoring(true)
-      scoreResume(currentResumeId, jdText)
+      scoreResume(currentResumeId, jdText, inlineResumeData)
         .then(setScoreData)
         .catch(console.error)
         .finally(() => setScoring(false))
     }
-  }, [currentResumeId, jdText])
+  }, [currentResumeId, isAuthenticated, isDataLoaded, jdText])
 
   // HTML 模板：前端 html2pdf 导出预览容器（TODO: 换 window.print 真文字方案，见设计文档）
   const handleDownloadHtmlPDF = useCallback(() => {

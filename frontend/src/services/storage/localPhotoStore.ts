@@ -247,9 +247,14 @@ export async function readAndCompressPortraitPhoto(file: File): Promise<string> 
 
   const rawDataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file), file)
   const rawBytes = estimateDataUrlDecodedBytes(rawDataUrl)
+  const effectiveMime =
+    mime || inferImageMimeFromName(file.name || '') || ''
+  const mustTranscodeWebp = effectiveMime === 'image/webp'
 
   const canvasContext =
-    rawBytes > COMPRESS_TARGET_BYTES && typeof Image !== 'undefined' ? get2DCanvas() : null
+    (mustTranscodeWebp || rawBytes > COMPRESS_TARGET_BYTES) && typeof Image !== 'undefined'
+      ? get2DCanvas()
+      : null
 
   if (!canvasContext) {
     if (rawBytes > MAX_PORTRAIT_PHOTO_BYTES || file.size > MAX_PORTRAIT_PHOTO_BYTES) {
@@ -263,11 +268,12 @@ export async function readAndCompressPortraitPhoto(file: File): Promise<string> 
     const srcWidth = img.naturalWidth || img.width
     const srcHeight = img.naturalHeight || img.height
     if (!srcWidth || !srcHeight) {
-      if (rawBytes <= MAX_PORTRAIT_PHOTO_BYTES) return rawDataUrl
+      if (!mustTranscodeWebp && rawBytes <= MAX_PORTRAIT_PHOTO_BYTES) return rawDataUrl
       throw new Error('图片过大，最大支持 2MB')
     }
 
     if (
+      !mustTranscodeWebp &&
       srcWidth <= MAX_PORTRAIT_DIMENSION &&
       srcHeight <= MAX_PORTRAIT_DIMENSION &&
       rawBytes <= COMPRESS_TARGET_BYTES
@@ -277,7 +283,6 @@ export async function readAndCompressPortraitPhoto(file: File): Promise<string> 
 
     const { canvas, ctx } = canvasContext
     let scale = Math.min(1, MAX_PORTRAIT_DIMENSION / Math.max(srcWidth, srcHeight))
-    const outputMime = mime === 'image/webp' ? 'image/webp' : 'image/jpeg'
     const qualities = [0.86, 0.72, 0.58, 0.44]
 
     for (let round = 0; round < 3; round++) {
@@ -286,8 +291,18 @@ export async function readAndCompressPortraitPhoto(file: File): Promise<string> 
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
+      if (mustTranscodeWebp && round === 0 && rawBytes <= COMPRESS_TARGET_BYTES) {
+        const pngCandidate = canvas.toDataURL('image/png')
+        if (
+          pngCandidate.startsWith('data:image/png;base64,') &&
+          estimateDataUrlDecodedBytes(pngCandidate) <= MAX_PORTRAIT_PHOTO_BYTES
+        ) {
+          return pngCandidate
+        }
+      }
+
       for (const quality of qualities) {
-        const candidate = canvas.toDataURL(outputMime, quality)
+        const candidate = canvas.toDataURL('image/jpeg', quality)
         if (
           candidate.startsWith('data:image/') &&
           candidate.includes(';base64,') &&
