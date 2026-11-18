@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "../../../../lib/utils";
 import FileUploadZone from "./FileUploadZone";
 import { getApiBaseUrl } from "@/lib/runtimeEnv";
+import { extractApiErrorMessage } from "@/lib/apiError";
 import { FetchTimeoutError, fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { uploadResumeImageStream } from "@/lib/uploadResumeImageStream";
 
@@ -200,7 +201,7 @@ export function AIImportModal({
           let errMsg = `HTTP ${resp.status}`;
           try {
             const err = await resp.json();
-            errMsg = (err as { detail?: string }).detail || errMsg;
+            errMsg = extractApiErrorMessage(err, errMsg) || errMsg;
           } catch {
             // 非 JSON 错误体保持 HTTP 状态码
           }
@@ -249,7 +250,7 @@ export function AIImportModal({
           let errMsg = "解析失败";
           try {
             const err = await response.json();
-            errMsg = err.detail || errMsg;
+            errMsg = extractApiErrorMessage(err, errMsg) || errMsg;
           } catch {
             errMsg = `HTTP ${response.status}`;
           }
@@ -286,7 +287,7 @@ export function AIImportModal({
         let errMsg = "解析失败";
         try {
           const err = await response.json();
-          errMsg = err.detail || errMsg;
+          errMsg = extractApiErrorMessage(err, errMsg) || errMsg;
         } catch {
           errMsg = `HTTP ${response.status}`;
         }

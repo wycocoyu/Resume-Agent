@@ -1,5 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { buildAuthWebUrl, isAuthWebEnabled, isLocalDevAuthEnabled } from '@/lib/runtimeEnv'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  buildAuthWebUrl,
+  hydrateRuntimeFeatures,
+  isAuthEnabled,
+  isAuthWebEnabled,
+  isLocalDevAuthEnabled,
+  useRuntimeFeatures,
+} from '@/lib/runtimeEnv'
 import { fetchUserEntitlement } from '@/services/api'
 import {
   fetchBetterAuthSession,
@@ -68,11 +75,13 @@ function resumeStorageIdentity(user: User | null): string | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { authEnabled, loaded: featuresLoaded } = useRuntimeFeatures()
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<'login' | 'register'>('login')
+  const hasInitializedRef = useRef(false)
 
   const applyAuthState = useCallback((nextUser: User | null, nextToken: string | null) => {
     setResumeStorageSession(resumeStorageIdentity(nextUser))
@@ -81,6 +90,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    void hydrateRuntimeFeatures()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
     const init = async () => {
       applyAuthState(null, null)
       try {
@@ -95,11 +109,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             betterAuthUserId: 'codex-local-user',
             role: 'user',
           }
-          applyAuthState(localUser, null)
+          if (!cancelled) applyAuthState(localUser, null)
           try {
             localStorage.setItem(USER_KEY, JSON.stringify(localUser))
           } catch {
             // 本地身份仅用于开发，不影响页面继续运行
+          }
+          return
+        }
+
+        if (!authEnabled) {
+          if (featuresLoaded) {
+            localStorage.removeItem(USER_KEY)
           }
           return
         }
@@ -112,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const sessionUser = await fetchBetterAuthSession()
+        if (cancelled) return
         if (!sessionUser) {
           localStorage.removeItem(USER_KEY)
           return
@@ -120,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyAuthState(mapBetterAuthUser(sessionUser), BETTER_AUTH_TOKEN)
         // 异步回填 role（经 proxy + trusted headers 从 entitlements 实时读），不阻塞首屏。
         void fetchLegacyUserInfo().then(({ id, role }) => {
+          if (cancelled) return
           setUser((prev) => {
             if (!prev) return prev
             const next: User = { ...prev }
@@ -136,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         // 异步拉取额度，不阻塞首屏
         void fetchUserEntitlement().then((ent) => {
+          if (cancelled) return
           setUser((prev) =>
             prev ? { ...prev, credits: ent.credits, plan: ent.plan } : prev,
           )
@@ -144,17 +168,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 登录态就绪后延迟同步本地匿名简历到账号（原 JWT 登录后的同步时机平移到这里）
         const storageIdentity = resumeStorageIdentity(mapBetterAuthUser(sessionUser))
         window.setTimeout(() => {
+          if (cancelled) return
           void syncLocalResumesToCurrentAccount(storageIdentity).catch(() => {
             // 同步失败不影响登录流程
           })
         }, LOGIN_SYNC_DELAY_MS)
       } finally {
-        setLoading(false)
+        hasInitializedRef.current = true
+        if (!cancelled) setLoading(false)
       }
     }
 
     void init()
-  }, [applyAuthState])
+    return () => {
+      cancelled = true
+    }
+  }, [applyAuthState, authEnabled, featuresLoaded])
 
   const refreshEntitlement = useCallback(async () => {
     try {
@@ -176,6 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [applyAuthState])
 
   const openModal = useCallback((_mode: 'login' | 'register' = 'login') => {
+    if (!isAuthEnabled() && !isLocalDevAuthEnabled()) {
+      return
+    }
     // 统一登录入口：重定向到 Next.js(BetterAuth) 认证页
     const url = buildAuthWebUrl('/account', `${window.location.origin}${window.location.pathname}${window.location.search}`)
     if (url) {

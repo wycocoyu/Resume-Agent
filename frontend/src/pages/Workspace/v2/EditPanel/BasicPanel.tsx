@@ -8,6 +8,7 @@ import { Upload, Loader2, X } from 'lucide-react'
 import { cn } from '../../../../lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { uploadUserPhoto, listUserPhotos, type UserPhoto } from '@/services/photoService'
+import { readAndCompressPortraitPhoto } from '@/services/storage/localPhotoStore'
 import { InlineDatePicker } from '@/components/InlineDatePicker'
 import type { BasicInfo, GlobalSettings, FieldLabelMode } from '../types'
 import FieldStyleToggle from './FieldStyleToggle'
@@ -84,7 +85,8 @@ function PhotoSlider({
 }
 
 const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: BasicPanelProps) => {
-  const { isAuthenticated, token, openModal } = useAuth()
+  const { isAuthenticated, token } = useAuth()
+  const useCloudPhoto = isAuthenticated && Boolean(token)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -105,7 +107,6 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
 
   const handleToggleGallery = async () => {
     if (!isAuthenticated || !token) {
-      openModal('login')
       return
     }
     const next = !galleryOpen
@@ -124,10 +125,6 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
   }
 
   const handleSelectPhoto = () => {
-    if (!isAuthenticated) {
-      openModal('login')
-      return
-    }
     fileInputRef.current?.click()
   }
 
@@ -136,29 +133,29 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
     if (!file) return
     e.target.value = ''
 
-    if (!token) {
-      toast.error('请先登录后再上传照片')
-      return
-    }
-
-    // 前端预校验：与后端 2MB / 图片类型限制一致，避免上传后才失败
-    if (!file.type.startsWith('image/')) {
-      toast.error('仅支持图片文件')
-      return
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('图片过大，最大支持 2MB')
-      return
-    }
-
     setUploading(true)
     try {
-      const result = await uploadUserPhoto(file, token)
-      applyPhoto(result.url)
-      // 若"已上传照片"面板开着，把新照片插到最前，避免列表停留在上传前的旧状态
-      setGalleryPhotos((prev) =>
-        prev.some((p) => p.url === result.url) ? prev : [{ url: result.url, key: result.key }, ...prev]
-      )
+      if (useCloudPhoto && token) {
+        // 前端预校验：与后端 2MB / 图片类型限制一致，避免上传后才失败
+        if (!file.type.startsWith('image/')) {
+          toast.error('仅支持图片文件')
+          return
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          toast.error('图片过大，最大支持 2MB')
+          return
+        }
+        const result = await uploadUserPhoto(file, token)
+        applyPhoto(result.url)
+        // 若"已上传照片"面板开着，把新照片插到最前，避免列表停留在上传前的旧状态
+        setGalleryPhotos((prev) =>
+          prev.some((p) => p.url === result.url) ? prev : [{ url: result.url, key: result.key }, ...prev]
+        )
+      } else {
+        const dataUrl = await readAndCompressPortraitPhoto(file)
+        applyPhoto(dataUrl)
+        toast.success('照片已保存到本机浏览器')
+      }
     } catch (err: any) {
       toast.error(err?.message || '上传失败')
     } finally {
@@ -410,12 +407,10 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
                 disabled={uploading}
                 className={cn(
                   'w-full h-40 rounded-none fresh:rounded-md border-2 fresh:border border-dashed flex flex-col items-center justify-center gap-2 transition-[border-color,color,background-color,opacity]',
-                  isAuthenticated
-                    ? 'border-black fresh:border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600 hover:bg-slate-50/60'
-                    : 'border-black fresh:border-slate-200 text-slate-300',
+                  'border-black fresh:border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600 hover:bg-slate-50/60',
                   uploading && 'opacity-60'
                 )}
-                title={isAuthenticated ? '上传照片' : '登录后可上传'}
+                title={useCloudPhoto ? '上传照片' : '上传照片（保存在本机）'}
               >
                 {hasPhoto ? (
                   <img
@@ -430,13 +425,15 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
                     ) : (
                       <Upload className="w-6 h-6" />
                     )}
-                    <span className="text-xs font-medium">{isAuthenticated ? '上传照片' : '登录后上传'}</span>
+                    <span className="text-xs font-medium">
+                      {useCloudPhoto ? '上传照片' : '上传照片（保存在本机）'}
+                    </span>
                   </>
                 )}
               </button>
 
               {/* 从已上传照片里复用（避免重复上传） */}
-              {isAuthenticated && (
+              {useCloudPhoto && (
                 <button
                   type="button"
                   onClick={handleToggleGallery}
@@ -525,9 +522,9 @@ const BasicPanel = ({ basic, onUpdate, globalSettings, updateGlobalSettings }: B
                 </div>
               )}
 
-              {!isAuthenticated && (
+              {!useCloudPhoto && (
                 <div className="mt-3 text-xs text-slate-400">
-                  登录后可上传
+                  照片仅保存在当前浏览器本地，不会上传云端图库
                 </div>
               )}
             </div>

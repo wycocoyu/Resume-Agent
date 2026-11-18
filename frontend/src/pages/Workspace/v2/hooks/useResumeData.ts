@@ -159,7 +159,12 @@ export function useResumeData() {
           : undefined
         setResumeData(prev => ({
           ...prev,
-          basic: { ...prev.basic, ...(data.basic || {}), name: saved.name },
+          basic: {
+            ...prev.basic,
+            ...(data.basic || {}),
+            name: saved.name,
+            photo: data.basic?.photo || undefined,
+          },
           education: data.education || prev.education,
           workExperience: data.workExperience || prev.workExperience,
           experience: data.experience || prev.experience,

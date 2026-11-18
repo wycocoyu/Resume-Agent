@@ -1,3 +1,5 @@
+import { extractApiErrorMessage } from "@/lib/apiError";
+
 /**
  * 调用后端 AI 解析接口，将粘贴/上传的纯文本转为结构化简历 JSON。
  */
@@ -21,7 +23,7 @@ export async function parseResumeText(
     let errMsg = "解析失败";
     try {
       const err = await response.json();
-      errMsg = (err as { detail?: string }).detail || errMsg;
+      errMsg = extractApiErrorMessage(err, errMsg) || errMsg;
     } catch {
       errMsg = `HTTP ${response.status}`;
     }

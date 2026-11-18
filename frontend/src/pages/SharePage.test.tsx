@@ -10,7 +10,11 @@ const mockSaveResume = vi.fn()
 const mockSetCurrentResumeId = vi.fn()
 const mockToastSuccess = vi.fn()
 const mockToastError = vi.fn()
+const mockRecordPdfDownload = vi.fn()
+const mockRenderPDFStream = vi.fn()
+const mockSaveAs = vi.fn()
 let mockIsAuthenticated = false
+let mockAuthEnabled = false
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -27,6 +31,15 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 vi.mock('@/lib/runtimeEnv', () => ({
   getApiBaseUrl: () => 'http://localhost:9000',
+  useRuntimeFeatures: () => ({
+    authEnabled: mockAuthEnabled,
+    agentEnabled: false,
+    editorAiEnabled: true,
+    auth_enabled: mockAuthEnabled,
+    agent_enabled: false,
+    editor_ai_enabled: true,
+    loaded: true,
+  }),
 }))
 
 vi.mock('@/services/resumeStorage', () => ({
@@ -45,9 +58,13 @@ vi.mock('../components/PDFEditor', () => ({
   PDFViewerSelector: () => <div data-testid="pdf-viewer" />,
 }))
 
+vi.mock('file-saver', () => ({
+  saveAs: (...args: unknown[]) => mockSaveAs(...args),
+}))
+
 vi.mock('../services/api', () => ({
-  recordPdfDownload: vi.fn(),
-  renderPDFStream: vi.fn(() => new Promise(() => {})),
+  recordPdfDownload: (...args: unknown[]) => mockRecordPdfDownload(...args),
+  renderPDFStream: (...args: unknown[]) => mockRenderPDFStream(...args),
 }))
 
 import SharePage from './SharePage'
@@ -74,20 +91,27 @@ const SHARED_PAYLOAD = {
   },
 }
 
-describe('SharePage workspace continuation buttons', () => {
+describe('SharePage auth toggle & workspace continuation', () => {
   let container: HTMLDivElement
   let root: Root
 
   beforeEach(() => {
+    vi.useFakeTimers()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    mockIsAuthenticated = false
+    mockAuthEnabled = false
     mockNavigate.mockReset()
     mockOpenModal.mockReset()
     mockSaveResume.mockReset()
     mockSetCurrentResumeId.mockReset()
     mockToastSuccess.mockReset()
     mockToastError.mockReset()
+    mockRecordPdfDownload.mockReset()
+    mockSaveAs.mockReset()
+    mockRenderPDFStream.mockReset()
+    mockRenderPDFStream.mockImplementation(() => new Promise(() => {}))
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -103,12 +127,15 @@ describe('SharePage workspace continuation buttons', () => {
       root.unmount()
     })
     container.remove()
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
-  it('allows anonymous users to import into local browser workspace without login', async () => {
+  it('when authEnabled=false, renders PDF preview & downloads directly without login or recordPdfDownload()', async () => {
     mockIsAuthenticated = false
+    mockAuthEnabled = false
     mockSaveResume.mockResolvedValue({ id: 'resume_local_123' })
+    mockRenderPDFStream.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }))
 
     await act(async () => {
       root.render(<SharePage />)
@@ -117,11 +144,32 @@ describe('SharePage workspace continuation buttons', () => {
       await Promise.resolve()
     })
 
-    const buttons = Array.from(container.querySelectorAll('button'))
-    const localEditBtn = buttons.find((b) => b.textContent?.includes('免登录存本机编辑'))
-    const loginBtn = buttons.find((b) => b.textContent?.includes('登录后下载'))
+    const buttonsBeforeTimer = Array.from(container.querySelectorAll('button'))
+    expect(buttonsBeforeTimer.find((b) => b.textContent?.includes('登录后下载'))).toBeUndefined()
+    const localEditBtn = buttonsBeforeTimer.find((b) => b.textContent?.includes('免登录存本机编辑'))
     expect(localEditBtn).toBeDefined()
-    expect(loginBtn).toBeDefined()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350)
+    })
+
+    expect(mockRenderPDFStream).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[data-testid="pdf-viewer"]')).not.toBeNull()
+
+    const downloadBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('下载 PDF'),
+    )
+    expect(downloadBtn).toBeDefined()
+    expect(downloadBtn!.disabled).toBe(false)
+
+    await act(async () => {
+      downloadBtn!.click()
+      await Promise.resolve()
+    })
+
+    expect(mockRecordPdfDownload).not.toHaveBeenCalled()
+    expect(mockOpenModal).not.toHaveBeenCalled()
+    expect(mockSaveAs).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       localEditBtn!.click()
@@ -134,20 +182,58 @@ describe('SharePage workspace continuation buttons', () => {
     expect(mockToastSuccess).toHaveBeenCalled()
   })
 
-  it('allows authenticated users to import into cloud workspace', async () => {
-    mockIsAuthenticated = true
-    mockSaveResume.mockResolvedValue({ id: 'resume_cloud_456' })
+  it('when authEnabled=true and unauthenticated, shows login button and gates PDF preview/download', async () => {
+    mockIsAuthenticated = false
+    mockAuthEnabled = true
 
     await act(async () => {
       root.render(<SharePage />)
     })
     await act(async () => {
       await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(350)
+    })
+
+    expect(mockRenderPDFStream).not.toHaveBeenCalled()
+    const buttons = Array.from(container.querySelectorAll('button'))
+    const loginBtn = buttons.find((b) => b.textContent?.includes('登录后下载'))
+    const downloadBtn = buttons.find((b) => b.textContent?.includes('下载 PDF'))
+    expect(loginBtn).toBeDefined()
+    expect(downloadBtn?.disabled).toBe(true)
+
+    await act(async () => {
+      loginBtn!.click()
+    })
+    expect(mockOpenModal).toHaveBeenCalledWith('login')
+  })
+
+  it('allows authenticated users to import into cloud workspace and records PDF download', async () => {
+    mockIsAuthenticated = true
+    mockAuthEnabled = true
+    mockSaveResume.mockResolvedValue({ id: 'resume_cloud_456' })
+    mockRecordPdfDownload.mockResolvedValue({ unlimited: false, limit: 10, used: 1, remaining: 9 })
+    mockRenderPDFStream.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }))
+
+    await act(async () => {
+      root.render(<SharePage />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(350)
     })
 
     const buttons = Array.from(container.querySelectorAll('button'))
     const cloudEditBtn = buttons.find((b) => b.textContent?.includes('导入工作台编辑'))
+    const downloadBtn = buttons.find((b) => b.textContent?.includes('下载 PDF'))
     expect(cloudEditBtn).toBeDefined()
+    expect(downloadBtn?.disabled).toBe(false)
+
+    await act(async () => {
+      downloadBtn!.click()
+      await Promise.resolve()
+    })
+    expect(mockRecordPdfDownload).toHaveBeenCalledTimes(1)
+    expect(mockSaveAs).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       cloudEditBtn!.click()

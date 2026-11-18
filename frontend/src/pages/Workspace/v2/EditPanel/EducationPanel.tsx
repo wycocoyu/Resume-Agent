@@ -141,7 +141,8 @@ function SchoolLogoSelector({
     }
   }, [activeGroupKey, onSelect])
 
-  const canDeleteLogo = getStoredAuthRole() === 'admin'
+  const { isAuthenticated } = useAuth()
+  const canDeleteLogo = isAuthenticated && getStoredAuthRole() === 'admin'
   const [deleting, setDeleting] = useState(false)
 
   // 删除校徽（仅管理员，全局不可逆）
@@ -385,8 +386,8 @@ const EducationItem = ({
   onDelete: (id: string) => void
   resumeData?: ResumeData
 }) => {
-  const { user } = useAuth()
-  const canUploadLogo = !!user && canUseAdminFeature()
+  const { isAuthenticated, user } = useAuth()
+  const canUploadLogo = isAuthenticated && !!user && canUseAdminFeature()
   const [expanded, setExpanded] = useState(false)
   const [degreeOpen, setDegreeOpen] = useState(false)
   const [schoolLogosLoaded, setSchoolLogosLoaded] = useState(getCachedSchoolLogos().length > 0)

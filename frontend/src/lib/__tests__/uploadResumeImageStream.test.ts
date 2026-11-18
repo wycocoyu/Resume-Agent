@@ -75,4 +75,27 @@ describe('uploadResumeImageStream', () => {
     });
     expect(result).toEqual({ name: '李四' });
   });
+
+  it('extracts friendly message on 503/429 JSON error responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 'AI_RATE_LIMITED',
+          message: '当前 IP 短时间内 AI 调用次数已达上限',
+          detail: '当前 IP 短时间内 AI 调用次数已达上限，请稍后再试。',
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+
+    await expect(
+      uploadResumeImageStream({
+        apiBaseUrl: 'http://127.0.0.1:9000',
+        formData: new FormData(),
+      }),
+    ).rejects.toThrow('当前 IP 短时间内 AI 调用次数已达上限');
+  });
 });
