@@ -20,7 +20,6 @@ interface HeaderActionsProps {
   resumeName?: string
   pdfBlob?: Blob | null
   onDownloadPDF?: () => void | Promise<void>
-  onOpenJdMatch?: () => void
 }
 
 export function HeaderActions({
@@ -33,7 +32,6 @@ export function HeaderActions({
   resumeName,
   pdfBlob,
   onDownloadPDF,
-  onOpenJdMatch,
 }: HeaderActionsProps) {
   const [importMenuOpen, setImportMenuOpen] = useState(false)
   const importMenuRef = useRef<HTMLDivElement>(null)
@@ -55,24 +53,6 @@ export function HeaderActions({
     <div className="flex items-center gap-2 flex-wrap justify-end">
       {/* 自动保存常驻状态 */}
       {saveStatus !== undefined && <SaveStatusIndicator status={saveStatus} error={saveError} />}
-
-      {/* 目标岗位匹配入口 */}
-      {onOpenJdMatch && (
-        <button
-          type="button"
-          onClick={onOpenJdMatch}
-          title="岗位匹配与 3D 雷达诊断"
-          className={cn(
-            'px-2.5 py-2 rounded-none fresh:rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-1.5',
-            'bg-white dark:bg-[#1C1C1C] border border-black fresh:border-slate-200 dark:border-white',
-            'text-slate-700 dark:text-slate-300 hover:bg-[#F1F2F5] fresh:hover:bg-slate-50 dark:hover:bg-slate-700',
-            'active:scale-95 shadow-[2px_2px_0px_0px_#000000] fresh:shadow-sm dark:shadow-[2px_2px_0px_0px_#ffffff]'
-          )}
-        >
-          <span>🎯</span>
-          岗位匹配
-        </button>
-      )}
 
       {/* 界面皮肤:点击弹出选择框,选 Neo / 清新 */}
       <button

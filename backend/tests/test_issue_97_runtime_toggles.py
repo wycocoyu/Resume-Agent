@@ -570,7 +570,6 @@ def test_ai_feature_disabled_returns_503_with_plain_detail_while_pdf_render_stay
         ("POST", "/api/resume/health-check", {"fields": [{"key": "s", "content": "5年Python"}]}),
         ("POST", "/api/resume/rewrite/stream", {"provider": "deepseek", "resume": {"summary": "hi"}, "path": "summary", "instruction": "优化"}),
         ("POST", "/api/resume/score", {"resume_data": {"skills": ["Go"]}, "jd_text": "Go 后端"}),
-        ("POST", "/api/jd/match", {"resume_data": {"skills": ["Go"]}, "jd_text": "Go 后端"}),
     ):
         resp = client.request(method, url, json=payload)
         assert resp.status_code == 503, f"Expected 503 for {url}, got {resp.status_code}: {resp.text}"
@@ -769,8 +768,8 @@ def test_anonymous_per_ip_sliding_window_rate_limiter(
     # 1. 默认 testclient 无代理头且未开 FORCE_ANON_RATE_LIMIT_IN_TESTS 时跳过限流，不误伤单测
     for _ in range(5):
         ok_skip = client.post(
-            "/api/jd/parse",
-            json={"jd_text": "招聘 Python FastAPI 后端工程师"},
+            "/api/resume/health-check",
+            json={"fields": [{"key": "s", "content": "Python 开发"}]},
         )
         assert ok_skip.status_code == 200
 
@@ -788,11 +787,11 @@ def test_anonymous_per_ip_sliding_window_rate_limiter(
     # 同一 IP 的 rewrite 桶与 import 桶相互隔离；不同 IP 也相互隔离
     assert client.post("/api/resume/parse", json={"text": "张三 后端"}, headers=ip2_headers).status_code == 200
 
-    # 3. rewrite 桶上限 3（覆盖 /api/jd/*、/api/resume/health-check、/api/resume/score 等）
+    # 3. rewrite 桶上限 3（覆盖 /api/resume/health-check、/api/resume/score 等）
     for _ in range(3):
         r = client.post(
-            "/api/jd/parse",
-            json={"jd_text": "招聘 Python FastAPI 后端工程师"},
+            "/api/resume/health-check",
+            json={"fields": [{"key": "s", "content": "Python 开发"}]},
             headers=ip1_headers,
         )
         assert r.status_code == 200
@@ -812,17 +811,17 @@ def test_anonymous_per_ip_sliding_window_rate_limiter(
     monkeypatch.setenv("FORCE_ANON_RATE_LIMIT_IN_TESTS", "1")
     monkeypatch.setenv("ANON_AI_REWRITE_HOURLY_LIMIT", "1")
 
-    assert client.post("/api/jd/parse", json={"jd_text": "招聘 Go 后端工程师"}).status_code == 200
-    assert client.post("/api/jd/parse", json={"jd_text": "招聘 Go 后端工程师"}).status_code == 429
+    assert client.post("/api/resume/health-check", json={"fields": [{"key": "s", "content": "Go 开发"}]}).status_code == 200
+    assert client.post("/api/resume/health-check", json={"fields": [{"key": "s", "content": "Go 开发"}]}).status_code == 429
     now_holder["t"] += 3601.0
-    assert client.post("/api/jd/parse", json={"jd_text": "招聘 Go 后端工程师"}).status_code == 200
+    assert client.post("/api/resume/health-check", json={"fields": [{"key": "s", "content": "Go 开发"}]}).status_code == 200
 
     # 5. 已登录用户不受匿名 IP 限流约束
     _override_optional_user(
         AppUser(id="u_auth", email="a@test.com", name="Auth", role="user", pdf_download_count=0)
     )
     for _ in range(3):
-        assert client.post("/api/jd/parse", json={"jd_text": "招聘 Go 后端工程师"}).status_code == 200
+        assert client.post("/api/resume/health-check", json={"fields": [{"key": "s", "content": "Go 开发"}]}).status_code == 200
 
 
 def test_agent_middleware_blocks_proxy_mode_and_compile_latex_uses_transient_data_url(

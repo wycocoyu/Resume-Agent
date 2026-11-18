@@ -39,7 +39,6 @@ OPENAPI_TAGS_METADATA: list[dict[str, str]] = [
     {"name": "Resumes", "description": "云端简历列表、保存、删除与增量同步接口。"},
     {"name": "Resume Share", "description": "公开只读简历分享链接创建与读取。"},
     {"name": "PDF", "description": "XeLaTeX PDF 编译、流式进度推送与下载限额。"},
-    {"name": "Job JD Matching & Analysis", "description": "目标岗位 JD 解析、三维匹配度评分与简历衍生分支。"},
     {"name": "Agent", "description": "Pi-Core 对话流式 SSE、历史会话、工具审批与工作区状态。"},
     {"name": "Config", "description": "AI / OCR 密钥配置、连通性检测与系统运行统计。"},
     {"name": "Logos", "description": "企业 Logo 检索、本地缓存与 COS 上传。"},

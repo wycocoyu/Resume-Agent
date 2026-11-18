@@ -364,7 +364,7 @@ def main():
     """CLI entrypoint for official CocoCV MCP Server."""
     parser = argparse.ArgumentParser(
         prog="cococv-mcp",
-        description="Official CocoCV MCP Server (Job JD Matching, Resume Validation, PDF Rendering, Patching)",
+        description="Official CocoCV MCP Server (Resume Reading, Validation, Patching, PDF Rendering, Sync)",
     )
     parser.add_argument(
         "--transport",

@@ -73,10 +73,6 @@ interface EditPreviewLayoutProps {
   handleDownload: () => void;
   /** 顶栏操作按钮群(保存/皮肤/导入/导出),转发进预览工具栏右侧 */
   toolbarActions?: ReactNode;
-  currentResumeId?: string | null;
-  jdFields?: { key: string; label: string; content: string }[];
-  applyTextReplacement?: (key: string, original: string, suggested: string) => void;
-  applyTextReplacements?: (items: { key: string; original: string; suggested: string }[]) => void;
   settingsDrawerTab?: SettingsDrawerTab | null;
   onToggleSettingsDrawerTab?: (tab: SettingsDrawerTab) => void;
 }
@@ -196,7 +192,7 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
   const [editPanelWidth, setEditPanelWidth] = useState(700); // 编辑面板宽度（可拖动调整，范围 400-1400px）
   const [isDragging, setIsDragging] = useState(false);
 
-  // 设置抽屉：null=收起；'template'/'format'/'jd' 展开对应 tab。点同 tab 收起、异 tab 切换
+  // 设置抽屉：null=收起；'template'/'format' 展开对应 tab。点同 tab 收起、异 tab 切换
   const [internalSettingsDrawer, setInternalSettingsDrawer] = useState<SettingsDrawerTab | null>(null);
   const settingsDrawer = props.settingsDrawerTab !== undefined ? props.settingsDrawerTab : internalSettingsDrawer;
   const toggleSettingsDrawer = useCallback(
@@ -399,11 +395,6 @@ export default function EditPreviewLayout(props: EditPreviewLayoutProps) {
         globalSettings={resumeData.globalSettings}
         onSelectTemplate={handleSelectTemplate}
         updateGlobalSettings={updateGlobalSettings}
-        resumeData={resumeData}
-        currentResumeId={props.currentResumeId}
-        jdFields={props.jdFields}
-        onApplyTextReplacement={props.applyTextReplacement}
-        onApplyTextReplacements={props.applyTextReplacements}
       />
 
       {/* 拖拽遮罩层：拖动时拦截全屏鼠标事件，避免预览 iframe 抢事件导致宽度回弹 */}

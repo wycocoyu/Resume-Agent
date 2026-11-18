@@ -15,6 +15,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.14.1',
+    date: '2026-11-18',
+    fixed: [
+      '精简工作台编辑区与顶部工具栏，移除「岗位匹配」入口以聚焦简历编辑与导出',
+    ],
+  },
+  {
     version: '3.14.0',
     date: '2026-11-17',
     added: [
