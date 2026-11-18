@@ -17,7 +17,7 @@ import { RecentSessions } from "@/components/sidebar/RecentSessions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEnvironment } from "@/contexts/EnvironmentContext";
 import { useCLTP } from "@/hooks/useCLTP";
-import { isAgentEnabled } from "@/lib/runtimeEnv";
+import { useRuntimeFeatures } from "@/lib/runtimeEnv";
 import { uploadResumeImageStream } from "@/lib/uploadResumeImageStream";
 import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
 import { hasHeroHandoffImages, takeHeroHandoffImages } from "@/lib/heroHandoff";
@@ -569,7 +569,8 @@ function deriveThoughtText(process: ConversationRunState["process"]): string {
 // ============================================================================
 
 export default function CocoChat() {
-  if (!isAgentEnabled()) {
+  const { agentEnabled } = useRuntimeFeatures();
+  if (!agentEnabled) {
     return null;
   }
   return <CocoChatContent />;

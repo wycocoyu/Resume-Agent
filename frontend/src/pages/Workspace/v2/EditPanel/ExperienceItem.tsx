@@ -120,7 +120,8 @@ function LogoSelector({
     }
   }, [onSelect])
 
-  const canDeleteLogo = getStoredAuthRole() === 'admin'
+  const { isAuthenticated } = useAuth()
+  const canDeleteLogo = isAuthenticated && getStoredAuthRole() === 'admin'
   const [deleting, setDeleting] = useState(false)
 
   // 删除 Logo（仅管理员，全局不可逆）
@@ -342,8 +343,8 @@ const ExperienceEditor = ({
   globalSettings?: GlobalSettings
   updateGlobalSettings?: (settings: Partial<GlobalSettings>) => void
 }) => {
-  const { user } = useAuth()
-  const canUploadLogo = !!user && canUseAdminFeature()
+  const { isAuthenticated, user } = useAuth()
+  const canUploadLogo = isAuthenticated && !!user && canUseAdminFeature()
   const headerRef = useRef<HTMLDivElement>(null)
   const isCompactLayout = useCompactLayout(headerRef, 720)
   // 始终指向最新 experience，防止 handleChange 读取旧闭包

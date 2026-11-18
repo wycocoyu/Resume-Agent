@@ -7,7 +7,7 @@ import CustomScrollbar from '../common/CustomScrollbar';
 import ActionMenu from '../common/ActionMenu';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { isAgentEnabled } from '@/lib/runtimeEnv';
+import { useRuntimeFeatures } from '@/lib/runtimeEnv';
 import { getAuthHeaders as buildAuthHeaders } from '@/lib/authHeaders';
 import {
   DEFAULT_SESSION_LIMITS,
@@ -66,7 +66,7 @@ export function RecentSessions({
   onRenameSession,
   refreshKey = 0,
 }: RecentSessionsProps) {
-  const agentEnabled = isAgentEnabled();
+  const { agentEnabled } = useRuntimeFeatures();
 
   const { apiBaseUrl } = useEnvironment();  // 动态获取 API 地址
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -203,7 +203,7 @@ export function RecentSessions({
   // refreshKey 变化或环境切换时刷新，避免双 effect 造成重复请求
   useEffect(() => {
     if (authLoading) return;
-    if (!isAuthenticated) {
+    if (!agentEnabled || !isAuthenticated) {
       setSessions([]);
       setPagination({
         total: 0,
@@ -217,7 +217,7 @@ export function RecentSessions({
       return;
     }
     refreshSessions();
-  }, [apiBaseUrl, refreshKey, refreshSessions, isAuthenticated, authLoading]);
+  }, [apiBaseUrl, refreshKey, refreshSessions, agentEnabled, isAuthenticated, authLoading]);
 
   useEffect(() => {
     if (!loadMoreRef.current || !listContainerRef.current) return;

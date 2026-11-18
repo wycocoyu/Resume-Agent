@@ -307,8 +307,9 @@ class ResumeEmbedding(Base):
 
 class ScoreRequest(BaseModel):
     """简历评分请求"""
-    resume_id: str = Field(..., description="简历ID")
+    resume_id: Optional[str] = Field(default=None, description="简历ID")
     jd_text: str = Field(..., description="职位描述文本")
+    resume_data: Optional[Dict[str, Any]] = Field(default=None, description="可选：匿名或未入库简历的内联 JSON 数据")
 
 
 class DimensionScore(BaseModel):

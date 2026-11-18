@@ -21,6 +21,21 @@ try:
 except ImportError:
     import tomli as tomllib  # Python < 3.11
 
+try:
+    from backend.services.ai_guard import (
+        AiGuardError,
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+        handle_upstream_quota_exception,
+    )
+except ImportError:
+    from services.ai_guard import (
+        AiGuardError,
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+        handle_upstream_quota_exception,
+    )
+
 
 def _load_zhipu_config() -> Dict[str, str]:
     """从 config.toml 加载智谱配置"""
@@ -335,6 +350,7 @@ def recognize_layout_from_images(
         )
     content.append({"type": "text", "text": _build_prompt()})
 
+    ensure_ai_circuit_open()
     client = _get_client(api_key)
     try:
         print(f"[智谱布局] 开始调用 API，模型: {model or ZHIPU_VISION_MODEL}，图片数: {len(images)}", flush=True)
@@ -350,6 +366,7 @@ def recognize_layout_from_images(
             max_tokens=10000
         )
     except Exception as e:
+        handle_upstream_quota_exception(e, provider="zhipu")
         error_msg = str(e)
         print(f"[智谱布局] API 调用失败: {error_msg}", flush=True)
         # 检查是否是 API 密钥问题
@@ -408,7 +425,9 @@ def recognize_with_ocr(
     key = (api_key or os.getenv("ZHIPU_API_KEY", "") or ZHIPU_API_KEY).strip()
     if not key:
         raise ValueError("ZHIPU_API_KEY 未配置")
-    
+
+    ensure_ai_circuit_open()
+
     # 将文件转为 base64 data URI（支持 PDF 与图片）
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
     file_data = f"data:{mime};base64,{pdf_base64}"
@@ -432,6 +451,11 @@ def recognize_with_ocr(
         if resp.status_code != 200:
             error_text = resp.text
             print(f"[智谱OCR] API 返回错误 (HTTP {resp.status_code}): {error_text}", flush=True)
+            handle_upstream_quota_error(
+                status_code=resp.status_code,
+                error_text=error_text,
+                provider="zhipu",
+            )
             raise ValueError(f"智谱 OCR API 返回错误 (HTTP {resp.status_code}): {error_text}")
         
         result = resp.json()
@@ -457,6 +481,8 @@ def recognize_with_ocr(
         
         return md_results
         
+    except AiGuardError:
+        raise
     except httpx.HTTPError as e:
         error_msg = str(e)
         print(f"[智谱OCR] HTTP 请求失败: {error_msg}", flush=True)

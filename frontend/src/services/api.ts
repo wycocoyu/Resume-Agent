@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { extractApiErrorMessage, extractAxiosErrorMessage, readFetchErrorMessage } from '@/lib/apiError'
 import { getAuthHeaders } from '@/lib/authHeaders'
 import { getApiBaseUrl, getDirectApiBaseUrl } from '@/lib/runtimeEnv'
 import type { Resume } from '@/types/resume'
@@ -31,20 +32,10 @@ function getPDFRenderEndpoint(path: '/api/pdf/render' | '/api/pdf/render/stream'
 }
 
 function parseApiErrorDetail(raw: string): string {
-  try {
-    const parsed = JSON.parse(raw)
-    const detail = parsed?.detail
-    if (typeof detail === 'string') return detail
-    if (detail && typeof detail === 'object') {
-      const message = (detail as { message?: string }).message
-      if (message) return message
-      return JSON.stringify(detail)
-    }
-    return parsed?.message || raw
-  } catch {
-    return raw
-  }
+  return extractApiErrorMessage(raw, raw)
 }
+
+export { extractApiErrorMessage }
 
 export type UserEntitlement = {
   plan: string
@@ -97,12 +88,10 @@ export async function recordPdfDownload(): Promise<PdfDownloadQuota> {
     }
     if (error?.response?.status === 403) {
       throw new Error(
-        parseApiErrorDetail(JSON.stringify({ detail: error?.response?.data?.detail })) ||
-          'PDF 下载次数已达上限（10 次）',
+        extractApiErrorMessage(error?.response?.data, '') || 'PDF 下载次数已达上限（10 次）',
       )
     }
-    const detail = error?.response?.data?.detail || error?.message || 'PDF 下载失败'
-    throw new Error(typeof detail === 'string' ? detail : parseApiErrorDetail(JSON.stringify({ detail })))
+    throw new Error(extractAxiosErrorMessage(error, 'PDF 下载失败'))
   }
 }
 
@@ -457,7 +446,7 @@ export async function rewriteResumeStream(
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(await readFetchErrorMessage(response, `HTTP error! status: ${response.status}`))
     }
     
     const reader = response.body?.getReader()
@@ -490,7 +479,7 @@ export async function rewriteResumeStream(
           onChunk(parsed.content)
         }
         if (parsed.error) {
-          onError?.(parsed.error)
+          onError?.(extractApiErrorMessage(parsed.error, 'AI 处理失败'))
           return
         }
       } catch {
@@ -721,7 +710,7 @@ export async function rewriteTextStream(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(await readFetchErrorMessage(response, `HTTP error! status: ${response.status}`))
     }
 
     const reader = response.body?.getReader()
@@ -745,7 +734,7 @@ export async function rewriteTextStream(
       try {
         const parsed = JSON.parse(data)
         if (parsed.error) {
-          onError?.(parsed.error)
+          onError?.(extractApiErrorMessage(parsed.error, 'AI 处理失败'))
           return
         }
         if (parsed.content) {
@@ -817,7 +806,7 @@ export async function chatStream(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(await readFetchErrorMessage(response, `HTTP error! status: ${response.status}`))
     }
 
     const reader = response.body?.getReader()
@@ -845,7 +834,7 @@ export async function chatStream(
       try {
         const parsed = JSON.parse(data)
         if (parsed.error) {
-          onError?.(parsed.error)
+          onError?.(extractApiErrorMessage(parsed.error, 'AI 处理失败'))
           return
         }
         if (parsed.content) {
@@ -885,6 +874,20 @@ export async function chatStream(
   }
 }
 
+async function postAiJson<T>(
+  url: string,
+  payload: unknown,
+  fallbackError: string,
+  headers?: Record<string, string>,
+): Promise<T> {
+  try {
+    const { data } = await axios.post(url, payload, headers ? { headers } : undefined)
+    return data as T
+  } catch (error) {
+    throw new Error(extractAxiosErrorMessage(error, fallbackError))
+  }
+}
+
 export type RewriteTextIntent = 'full_bold' | 'selective_bold' | 'remove_bold' | 'list_transform' | 'rewrite'
 
 export async function detectRewriteTextIntent(
@@ -893,14 +896,17 @@ export async function detectRewriteTextIntent(
   path: string,
 ): Promise<{ intent: RewriteTextIntent; intents?: RewriteTextIntent[]; confidence: number; source?: string }> {
   const url = `${getApiBaseUrl()}/api/resume/rewrite-text/intent`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    text,
-    instruction,
-    path,
-    locale: 'zh',
-  })
-  return data as { intent: RewriteTextIntent; intents?: RewriteTextIntent[]; confidence: number; source?: string }
+  return postAiJson(
+    url,
+    {
+      provider: 'deepseek',
+      text,
+      instruction,
+      path,
+      locale: 'zh',
+    },
+    '改写意图识别失败，请稍后重试',
+  )
 }
 
 export type GrammarIssueType = 'grammar' | 'wording' | 'vague' | 'quantify'
@@ -921,13 +927,16 @@ export interface GrammarCheckResult {
 /** 单字段语法/表达体检：返回结构化 issues + 评分（非流式） */
 export async function grammarCheckField(text: string, path: string): Promise<GrammarCheckResult> {
   const url = `${getApiBaseUrl()}/api/resume/grammar-check`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    text,
-    path,
-    locale: 'zh',
-  })
-  return data as GrammarCheckResult
+  return postAiJson<GrammarCheckResult>(
+    url,
+    {
+      provider: 'deepseek',
+      text,
+      path,
+      locale: 'zh',
+    },
+    '语法体检失败，请稍后重试',
+  )
 }
 
 export interface JdOptimizeField {
@@ -962,13 +971,16 @@ export interface JdOptimizeResult {
 /** 针对 JD 的多字段优化建议（非流式，结构化） */
 export async function jdOptimize(fields: JdOptimizeField[], jdText: string): Promise<JdOptimizeResult> {
   const url = `${getApiBaseUrl()}/api/resume/jd-optimize`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    jd_text: jdText,
-    fields,
-    locale: 'zh',
-  })
-  return data as JdOptimizeResult
+  return postAiJson<JdOptimizeResult>(
+    url,
+    {
+      provider: 'deepseek',
+      jd_text: jdText,
+      fields,
+      locale: 'zh',
+    },
+    'JD 优化分析失败，请稍后重试',
+  )
 }
 
 export type JdKeywordIntegrateResult =
@@ -982,14 +994,17 @@ export async function jdIntegrateKeyword(
   jdText: string,
 ): Promise<JdKeywordIntegrateResult> {
   const url = `${getApiBaseUrl()}/api/resume/jd-keyword-integrate`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    keyword,
-    jd_text: jdText,
-    fields,
-    locale: 'zh',
-  })
-  return data as JdKeywordIntegrateResult
+  return postAiJson<JdKeywordIntegrateResult>(
+    url,
+    {
+      provider: 'deepseek',
+      keyword,
+      jd_text: jdText,
+      fields,
+      locale: 'zh',
+    },
+    '关键词融入失败，请稍后重试',
+  )
 }
 
 export interface TranslationItem {
@@ -1005,13 +1020,16 @@ export interface TranslateResult {
 /** 简历多字段翻译：逐字段返回 original/translated（非流式，结构化） */
 export async function translateResume(fields: JdOptimizeField[], targetLang: string): Promise<TranslateResult> {
   const url = `${getApiBaseUrl()}/api/resume/translate`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    target_lang: targetLang,
-    fields,
-    locale: 'zh',
-  })
-  return data as TranslateResult
+  return postAiJson<TranslateResult>(
+    url,
+    {
+      provider: 'deepseek',
+      target_lang: targetLang,
+      fields,
+      locale: 'zh',
+    },
+    '简历翻译失败，请稍后重试',
+  )
 }
 
 export interface HealthDimension {
@@ -1030,23 +1048,33 @@ export interface HealthCheckResult {
 /** 通用简历体检（无需 JD）：维度评分 + 逐条可应用建议（非流式，结构化） */
 export async function healthCheck(fields: JdOptimizeField[]): Promise<HealthCheckResult> {
   const url = `${getApiBaseUrl()}/api/resume/health-check`
-  const { data } = await axios.post(url, {
-    provider: 'deepseek',
-    fields,
-    locale: 'zh',
-  })
-  return data as HealthCheckResult
+  return postAiJson<HealthCheckResult>(
+    url,
+    {
+      provider: 'deepseek',
+      fields,
+      locale: 'zh',
+    },
+    '简历体检失败，请稍后重试',
+  )
 }
 
-export const scoreResume = async (resumeId: string, jdText: string): Promise<any> => {
-  const response = await axios.post(`${getApiBaseUrl()}/api/resume/score`, {
-    resume_id: resumeId,
-    jd_text: jdText,
-  }, {
-    headers: {
+export const scoreResume = async (
+  resumeId: string | null,
+  jdText: string,
+  resumeData?: unknown,
+): Promise<any> => {
+  return postAiJson(
+    `${getApiBaseUrl()}/api/resume/score`,
+    {
+      ...(resumeId ? { resume_id: resumeId } : {}),
+      jd_text: jdText,
+      ...(resumeData !== undefined ? { resume_data: resumeData } : {}),
+    },
+    '简历评分失败，请稍后重试',
+    {
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
     },
-  })
-  return response.data
+  )
 }

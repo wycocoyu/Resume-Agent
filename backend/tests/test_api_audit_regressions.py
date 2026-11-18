@@ -314,7 +314,8 @@ def test_mcp_sse_mounted_prefix_roundtrip(isolated_db):
 
 
 # 5. Agent resume content path traversal blocked (400, not 200)
-def test_agent_resume_content_path_traversal_blocked(isolated_db):
+def test_agent_resume_content_path_traversal_blocked(isolated_db, monkeypatch):
+    monkeypatch.setenv("AGENT_ENABLED", "true")
     client = TestClient(app)
 
     for bad_path in (".env", "../.env", "/etc/passwd", "app/docs/../../.env", "README.md"):

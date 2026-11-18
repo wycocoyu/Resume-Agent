@@ -2,11 +2,14 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { Zap } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRuntimeFeatures } from '@/lib/runtimeEnv'
 
 export default function UserMenu() {
   const { user, isAuthenticated, logout, openModal } = useAuth()
+  const { authEnabled } = useRuntimeFeatures()
 
   if (!isAuthenticated) {
+    if (!authEnabled) return null
     return (
       <button
         onClick={() => openModal('login')}

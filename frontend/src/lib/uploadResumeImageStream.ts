@@ -1,3 +1,4 @@
+import { extractApiErrorMessage } from './apiError';
 import { FetchTimeoutError } from './fetchWithTimeout';
 
 export interface UploadResumeImageStreamOptions {
@@ -49,9 +50,7 @@ export async function uploadResumeImageStream({
       let errMsg = `图片识别失败（${response.status}）`;
       try {
         const errBody = await response.json();
-        if (errBody && typeof errBody.detail === 'string' && errBody.detail) {
-          errMsg = errBody.detail;
-        }
+        errMsg = extractApiErrorMessage(errBody, errMsg) || errMsg;
       } catch {
         // 非 JSON 错误体保留 HTTP 状态码
       }
@@ -93,7 +92,7 @@ export async function uploadResumeImageStream({
           } else if (evt.type === 'json') {
             resolvedPayload = evt.content;
           } else if (evt.type === 'error') {
-            streamErr = evt.content || '图片识别失败';
+            streamErr = extractApiErrorMessage(evt.content ?? evt, '图片识别失败') || '图片识别失败';
           }
         } catch {
           // 忽略不完整或非 JSON 心跳帧

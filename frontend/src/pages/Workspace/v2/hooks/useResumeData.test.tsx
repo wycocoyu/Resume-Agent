@@ -125,4 +125,25 @@ describe("useResumeData · 删除后不显示幽灵简历（L1 加载失效兜�
 
     expect(data.basic.name).toBe("韦宇");
   });
+
+  it("clears previous basic.photo when loading a saved resume without photo", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...GHOST_DRAFT,
+        basic: { ...GHOST_DRAFT.basic, photo: "data:image/png;base64,OLDPHOTO" },
+      }),
+    );
+    mockRouteResumeId = "no-photo-id";
+    getResume.mockResolvedValue({
+      id: "no-photo-id",
+      name: "无照片简历",
+      data: { basic: { title: "全栈" }, experience: [], projects: [], education: [], menuSections: [] },
+    });
+
+    const { data } = await renderAndSettle();
+
+    expect(data.basic.name).toBe("无照片简历");
+    expect(data.basic.photo).toBeUndefined();
+  });
 });

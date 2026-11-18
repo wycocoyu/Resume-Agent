@@ -81,8 +81,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # 导入 llm_utils（兼容多种运行方式）
 try:
     from backend.llm_utils import retry_with_backoff
+    from backend.services.ai_guard import (
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+    )
 except ImportError:
     from llm_utils import retry_with_backoff
+    from services.ai_guard import (
+        ensure_ai_circuit_open,
+        handle_upstream_quota_error,
+    )
 
 """
 ========== HTTP 客户端优化 ==========
@@ -216,6 +224,8 @@ def call_deepseek_api(prompt: str, model: str = None) -> str:
     # 检查 API Key 是否配置
     if not live_key:
         raise Exception("DEEPSEEK_API_KEY 未配置。请在本地 .env 或系统环境中设置 DEEPSEEK_API_KEY")
+
+    ensure_ai_circuit_open()
     
     if model is None:
         model = DEEPSEEK_MODEL
@@ -302,16 +312,24 @@ def call_deepseek_api(prompt: str, model: str = None) -> str:
         return content
     else:
         # 获取错误详情
+        raw_resp_text = ""
         try:
-            error_detail = response.text[:500] if response.text else "无响应内容"
-        except:
+            raw_resp_text = response.text or ""
+            error_detail = raw_resp_text[:500] if raw_resp_text else "无响应内容"
+        except Exception:
             error_detail = response.content[:500].decode('utf-8', errors='ignore') if response.content else "无响应内容"
+            raw_resp_text = error_detail
         try:
             error_json = response.json()
             if "error" in error_json:
                 error_detail = error_json["error"].get("message", error_detail)
-        except:
+        except Exception:
             pass
+        handle_upstream_quota_error(
+            status_code=response.status_code,
+            error_text=f"{error_detail} {raw_resp_text}",
+            provider="deepseek",
+        )
         raise Exception(f"DeepSeek API 错误 {response.status_code}: {error_detail}")
 
 
@@ -341,6 +359,8 @@ def call_deepseek_api_stream(prompt: str, model: str = None):
         **_deepseek_thinking_off(model),
     }
 
+    ensure_ai_circuit_open()
+
     live_key = _get_live_deepseek_key()
     headers = {
         "Content-Type": "application/json",
@@ -358,7 +378,13 @@ def call_deepseek_api_stream(prompt: str, model: str = None):
     )
 
     if response.status_code != 200:
-        raise Exception(f"DeepSeek API 调用失败: {response.status_code} - {response.text}")
+        err_text = response.text or ""
+        handle_upstream_quota_error(
+            status_code=response.status_code,
+            error_text=err_text,
+            provider="deepseek",
+        )
+        raise Exception(f"DeepSeek API 调用失败: {response.status_code} - {err_text}")
 
     # 解析 SSE 流
     for line in response.iter_lines():

@@ -1,10 +1,45 @@
+import { useSyncExternalStore } from 'react'
+
 export type RuntimeEnv = 'local' | 'remote-dev'
 
+export interface RuntimeFeatures {
+  auth_enabled: boolean
+  agent_enabled: boolean
+  editor_ai_enabled: boolean
+}
+
+export interface RuntimeFeaturesSnapshot {
+  authEnabled: boolean
+  agentEnabled: boolean
+  editorAiEnabled: boolean
+  auth_enabled: boolean
+  agent_enabled: boolean
+  editor_ai_enabled: boolean
+  loaded: boolean
+}
+
 const ENV_STORAGE_KEY = 'resume_agent_env'
+const AUTH_ENABLED_OVERRIDE_KEY = 'cococv_auth_enabled_override'
 const AGENT_ENABLED_OVERRIDE_KEY = 'resume_agent_enabled_override'
 const DEFAULT_LOCAL_API_BASE = 'http://127.0.0.1:9000'
 const DEFAULT_REMOTE_API_BASE = 'https://cococv.cn'
 const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on', 'enabled'])
+
+let _runtimeFeatures: RuntimeFeatures | null = null
+let _runtimeFeaturesPromise: Promise<RuntimeFeatures | null> | null = null
+const _featureListeners = new Set<() => void>()
+let _cachedFeaturesSnapshot: RuntimeFeaturesSnapshot | null = null
+
+function notifyFeatureListeners(): void {
+  _cachedFeaturesSnapshot = null
+  _featureListeners.forEach((listener) => {
+    try {
+      listener()
+    } catch {
+      // ignore subscriber errors
+    }
+  })
+}
 
 function normalizeBaseUrl(url: string): string {
   const raw = String(url || '').trim()
@@ -98,6 +133,7 @@ export function isAuthWebEnabled(): boolean {
  */
 export function isLocalDevAuthEnabled(): boolean {
   if (!import.meta.env.DEV) return false
+  if (!isAuthEnabled()) return false
   const configured = String(import.meta.env.VITE_LOCAL_DEV_AUTH ?? '').trim().toLowerCase()
   if (!configured) return true
   return TRUE_ENV_VALUES.has(configured)
@@ -129,6 +165,34 @@ export function getRuntimeEnvOptions() {
   ]
 }
 
+export function isAuthEnabled(): boolean {
+  try {
+    const override = localStorage.getItem(AUTH_ENABLED_OVERRIDE_KEY)
+    if (override === 'true') return true
+    if (override === 'false') return false
+  } catch {
+    // no-op
+  }
+  if (_runtimeFeatures !== null) {
+    return Boolean(_runtimeFeatures.auth_enabled)
+  }
+  const raw = String(import.meta.env.VITE_AUTH_ENABLED ?? 'false').trim().toLowerCase()
+  return TRUE_ENV_VALUES.has(raw)
+}
+
+export function setAuthEnabledOverride(enabled: boolean | null): void {
+  try {
+    if (enabled === null) {
+      localStorage.removeItem(AUTH_ENABLED_OVERRIDE_KEY)
+    } else {
+      localStorage.setItem(AUTH_ENABLED_OVERRIDE_KEY, enabled ? 'true' : 'false')
+    }
+  } catch {
+    // no-op
+  }
+  notifyFeatureListeners()
+}
+
 export function isAgentEnabled(): boolean {
   try {
     const override = localStorage.getItem(AGENT_ENABLED_OVERRIDE_KEY)
@@ -137,11 +201,20 @@ export function isAgentEnabled(): boolean {
   } catch {
     // no-op
   }
-  // 本地开发默认开启 AI，避免每次手动打开入口。
-  if (import.meta.env.DEV) return true
-  // 默认开启 AI；仅在显式配置为 false 时关闭。
-  const raw = String(import.meta.env.VITE_AGENT_ENABLED ?? 'true').trim().toLowerCase()
-  return ['true', '1', 'on', 'yes'].includes(raw)
+  // 后端运行时开关已加载时优先于静态环境回退（含 DEV 模式）
+  if (_runtimeFeatures !== null) {
+    return Boolean(_runtimeFeatures.agent_enabled)
+  }
+  // 首屏默认关闭，避免加载 /api/features 前出现侧边栏 Agent 闪烁
+  const raw = String(import.meta.env.VITE_AGENT_ENABLED ?? 'false').trim().toLowerCase()
+  return TRUE_ENV_VALUES.has(raw)
+}
+
+export function isEditorAiEnabled(): boolean {
+  if (_runtimeFeatures !== null) {
+    return Boolean(_runtimeFeatures.editor_ai_enabled)
+  }
+  return true
 }
 
 export function isAskingModeEnabled(): boolean {
@@ -160,6 +233,103 @@ export function filterAgentStructuredEvents<T extends { type: string }>(items: T
 
 export function setAgentEnabledOverride(enabled: boolean): void {
   localStorage.setItem(AGENT_ENABLED_OVERRIDE_KEY, enabled ? 'true' : 'false')
+  notifyFeatureListeners()
+}
+
+/**
+ * 从后端直连基址拉取运行时功能开关（/api/features），并通知所有订阅组件更新。
+ */
+export async function hydrateRuntimeFeatures(force = false): Promise<RuntimeFeatures | null> {
+  if (_runtimeFeatures !== null && !force) {
+    return _runtimeFeatures
+  }
+  if (_runtimeFeaturesPromise && !force) {
+    return _runtimeFeaturesPromise
+  }
+
+  const url = `${getDirectApiBaseUrl()}/api/features`
+  _runtimeFeaturesPromise = (async () => {
+    try {
+      const resp = await fetch(url, { cache: 'no-store' })
+      if (!resp.ok) return null
+      const data = (await resp.json()) as Partial<RuntimeFeatures> | null
+      if (!data || typeof data !== 'object') return null
+      _runtimeFeatures = {
+        auth_enabled: Boolean(data.auth_enabled),
+        agent_enabled: Boolean(data.agent_enabled),
+        editor_ai_enabled: data.editor_ai_enabled === undefined ? true : Boolean(data.editor_ai_enabled),
+      }
+      notifyFeatureListeners()
+      return _runtimeFeatures
+    } catch {
+      return null
+    } finally {
+      _runtimeFeaturesPromise = null
+    }
+  })()
+
+  return _runtimeFeaturesPromise
+}
+
+export function subscribeRuntimeFeatures(listener: () => void): () => void {
+  _featureListeners.add(listener)
+  return () => {
+    _featureListeners.delete(listener)
+  }
+}
+
+export function getRuntimeFeaturesSnapshot(): RuntimeFeaturesSnapshot {
+  const authEnabled = isAuthEnabled()
+  const agentEnabled = isAgentEnabled()
+  const editorAiEnabled = isEditorAiEnabled()
+  const loaded = _runtimeFeatures !== null
+  if (
+    _cachedFeaturesSnapshot &&
+    _cachedFeaturesSnapshot.authEnabled === authEnabled &&
+    _cachedFeaturesSnapshot.agentEnabled === agentEnabled &&
+    _cachedFeaturesSnapshot.editorAiEnabled === editorAiEnabled &&
+    _cachedFeaturesSnapshot.loaded === loaded
+  ) {
+    return _cachedFeaturesSnapshot
+  }
+  _cachedFeaturesSnapshot = {
+    authEnabled,
+    agentEnabled,
+    editorAiEnabled,
+    auth_enabled: authEnabled,
+    agent_enabled: agentEnabled,
+    editor_ai_enabled: editorAiEnabled,
+    loaded,
+  }
+  return _cachedFeaturesSnapshot
+}
+
+export function useRuntimeFeatures(): RuntimeFeaturesSnapshot {
+  return useSyncExternalStore(
+    subscribeRuntimeFeatures,
+    getRuntimeFeaturesSnapshot,
+    getRuntimeFeaturesSnapshot,
+  )
+}
+
+export function setRuntimeFeaturesForTest(features: Partial<RuntimeFeatures> | null): void {
+  if (features === null) {
+    _runtimeFeatures = null
+  } else {
+    _runtimeFeatures = {
+      auth_enabled: Boolean(features.auth_enabled),
+      agent_enabled: Boolean(features.agent_enabled),
+      editor_ai_enabled: features.editor_ai_enabled === undefined ? true : Boolean(features.editor_ai_enabled),
+    }
+  }
+  _runtimeFeaturesPromise = null
+  notifyFeatureListeners()
+}
+
+export function resetRuntimeFeaturesForTest(): void {
+  _runtimeFeatures = null
+  _runtimeFeaturesPromise = null
+  notifyFeatureListeners()
 }
 
 export function getStoredAuthRole(): string {

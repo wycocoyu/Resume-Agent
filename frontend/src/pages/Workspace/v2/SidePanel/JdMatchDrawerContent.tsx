@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Plus,
 } from 'lucide-react'
+import { toast } from '@/lib/toast'
+import { readFetchErrorMessage } from '@/lib/apiError'
 import { JdRadarChart, type RadarDimension } from './components/JdRadarChart'
 import { JdStructuredInput, type JdParsedData } from './components/JdStructuredInput'
 import { StarRewriteDiffCard, type StarSuggestionItem } from './components/StarRewriteDiffCard'
@@ -80,6 +82,8 @@ export const JdMatchDrawerContent: React.FC<JdMatchDrawerContentProps> = ({
             domainSkills: matchData.parsed_jd.domain_keywords,
           }))
         }
+      } else {
+        toast.error(await readFetchErrorMessage(matchRes, `JD 匹配失败（HTTP ${matchRes.status}）`))
       }
 
       // 2. Run STAR Rewrite Generation
@@ -96,6 +100,8 @@ export const JdMatchDrawerContent: React.FC<JdMatchDrawerContentProps> = ({
       if (starRes.ok) {
         const starData = await starRes.json()
         setSuggestions(starData.suggestions || [])
+      } else {
+        toast.error(await readFetchErrorMessage(starRes, `JD 改写建议生成失败（HTTP ${starRes.status}）`))
       }
     } catch (err) {
       console.error('JD analysis error:', err)

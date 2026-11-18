@@ -20,6 +20,7 @@ import { convertToBackendFormat } from '@/pages/Workspace/v2/utils/convertToBack
 import { initialResumeData } from '@/pages/Workspace/v2/constants'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { isAuthEnabled } from '@/lib/runtimeEnv'
 
 // 简单的 UUID 生成
 const generateUUID = () => {
@@ -35,7 +36,7 @@ type DashboardPageRequest = Readonly<{
 }>
 
 export const useDashboardLogic = ({ offset, limit }: DashboardPageRequest) => {
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, isAuthenticated, openModal } = useAuth()
   const [resumes, setResumes] = useState<SavedResumeSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -289,17 +290,30 @@ export const useDashboardLogic = ({ offset, limit }: DashboardPageRequest) => {
       return
     }
 
-    // 下载额度预检（与单份下载同一记账口径：渲染预览不计次、真实下载才计）
-    let quota
-    try {
-      quota = await fetchPdfDownloadQuota()
-    } catch {
+    if (isAuthEnabled() && !isAuthenticated) {
+      openModal('login')
       toast.error('请先登录后再批量下载')
       return
     }
-    if (!quota.unlimited && (quota.remaining ?? 0) < latexTargets.length) {
-      toast.error(`下载额度不足：本次需 ${latexTargets.length} 次，剩余 ${quota.remaining ?? 0} 次`)
-      return
+
+    // 下载额度预检（与单份下载同一记账口径：渲染预览不计次、真实下载才计；未登录免额度校验）
+    let quota: { unlimited: boolean; limit: number | null; used: number; remaining: number | null } = {
+      unlimited: true,
+      limit: null,
+      used: 0,
+      remaining: null,
+    }
+    if (isAuthenticated) {
+      try {
+        quota = await fetchPdfDownloadQuota()
+      } catch {
+        toast.error('请先登录后再批量下载')
+        return
+      }
+      if (!quota.unlimited && (quota.remaining ?? 0) < latexTargets.length) {
+        toast.error(`下载额度不足：本次需 ${latexTargets.length} 次，剩余 ${quota.remaining ?? 0} 次`)
+        return
+      }
     }
 
     const quotaNote = quota.unlimited ? '' : `，将消耗 ${latexTargets.length} 次下载额度（剩余 ${quota.remaining}）`
@@ -354,8 +368,8 @@ export const useDashboardLogic = ({ offset, limit }: DashboardPageRequest) => {
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     saveAs(zipBlob, `我的简历-${new Date().toISOString().slice(0, 10)}.zip`)
 
-    // 记账：每份成功下载的 PDF 记一次（不限次角色由后端直接跳过计数）
-    if (!quota.unlimited) {
+    // 记账：每份成功下载的 PDF 记一次（不限次角色由后端直接跳过计数；未登录跳过记账）
+    if (isAuthenticated && !quota.unlimited) {
       for (let i = 0; i < okCount; i++) {
         try {
           await recordPdfDownload()
@@ -375,7 +389,7 @@ export const useDashboardLogic = ({ offset, limit }: DashboardPageRequest) => {
     } else {
       toast.success(parts.join('，'))
     }
-  }, [resumes, downloadProgress])
+  }, [resumes, downloadProgress, isAuthenticated, openModal])
 
   /**
    * 清空所有选中状态

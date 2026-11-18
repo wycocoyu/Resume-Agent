@@ -2,14 +2,27 @@
 简历评分服务
 计算简历与JD的多维度匹配分数
 """
+from datetime import datetime, timezone
 import json
+import sys
+from types import SimpleNamespace
 from typing import Dict, List, Any, Optional, Union
 from sqlalchemy.orm import Session
+
+if __name__ == "services.scoring_service":
+    sys.modules.setdefault("backend.services.scoring_service", sys.modules[__name__])
+elif __name__ == "backend.services.scoring_service":
+    sys.modules.setdefault("services.scoring_service", sys.modules[__name__])
 
 from models import ScoreResult, Resume
 from services.embedding_service import EmbeddingService
 from services.reason_quotes import mark_unverified_quotes as _mark_unverified_quotes
 from llm import call_llm
+
+try:
+    from backend.services.ai_guard import AiGuardError
+except ImportError:
+    from services.ai_guard import AiGuardError
 
 
 class ScoringService:
@@ -82,6 +95,34 @@ class ScoringService:
             "created_at": score_record.created_at.isoformat()
         }
 
+    def score_resume_data(
+        self,
+        resume_data: Dict[str, Any],
+        jd_text: str,
+        resume_id: str = "anonymous",
+    ) -> Dict[str, Any]:
+        """对未入库的内联简历 JSON 直接评分（不写数据库，供匿名模式使用）。"""
+        skill_experience_result = self._score_skill_experience(resume_data, jd_text)
+        education_result = self._score_education(resume_data, jd_text)
+        project_result = self._score_project_overall(SimpleNamespace(data=resume_data), jd_text)
+
+        overall_score = (
+            skill_experience_result["score"] * 0.4
+            + education_result["score"] * 0.2
+            + project_result["score"] * 0.4
+        )
+        dimensions = [
+            {"name": "技能与经验匹配", "score": skill_experience_result["score"], "reasons": skill_experience_result["reasons"]},
+            {"name": "教育背景匹配", "score": education_result["score"], "reasons": education_result["reasons"]},
+            {"name": "项目与整体匹配", "score": project_result["score"], "reasons": project_result["reasons"]},
+        ]
+        return {
+            "resume_id": resume_id or "anonymous",
+            "overall_score": round(overall_score, 1),
+            "dimensions": dimensions,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def _score_skill_experience(self, resume_data: Dict, jd_text: str) -> Dict[str, Any]:
         """技能与经验匹配评分"""
         skills = resume_data.get("skills", [])
@@ -116,6 +157,8 @@ class ScoringService:
                 "score": float(data.get("score", 0)),
                 "reasons": _mark_unverified_quotes(data.get("reasons", []), source_text)
             }
+        except AiGuardError:
+            raise
         except Exception as e:
             print(f"[ERROR] Skill/experience scoring failed: {e}")
             return {"score": 0, "reasons": [f"评分失败: {str(e)}"]}
@@ -150,6 +193,8 @@ class ScoringService:
                 "score": float(data.get("score", 0)),
                 "reasons": _mark_unverified_quotes(data.get("reasons", []), source_text)
             }
+        except AiGuardError:
+            raise
         except Exception as e:
             print(f"[ERROR] Education scoring failed: {e}")
             return {"score": 0, "reasons": [f"评分失败: {str(e)}"]}
@@ -198,6 +243,8 @@ class ScoringService:
                 "score": round(final_score, 1),
                 "reasons": _mark_unverified_quotes(data.get("reasons", []), source_text)
             }
+        except AiGuardError:
+            raise
         except Exception as e:
             print(f"[ERROR] Project/overall scoring failed: {e}")
             return {"score": round(embedding_score, 1), "reasons": [f"LLM评分失败，使用向量相似度: {round(embedding_score, 1)}"]}

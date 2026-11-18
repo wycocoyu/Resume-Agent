@@ -137,6 +137,15 @@ export default defineConfig(({ mode }) => {
       }
     }
   },
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: apiBase,
+        changeOrigin: true
+      }
+    }
+  },
   optimizeDeps: {
     exclude: ['pdfjs-dist'],
     // 预构建 Agent 对话页（懒加载 SophiaChat）才用到的重型 markdown / 图表依赖，
