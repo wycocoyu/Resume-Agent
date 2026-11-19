@@ -15,6 +15,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '3.14.4',
+    date: '2026-11-19',
+    fixed: [
+      '修复简历分享页缩放预览时页面占位未随比例缩小导致的滚动条遮挡与右侧裁切问题',
+    ],
+  },
+  {
     version: '3.14.3',
     date: '2026-11-18',
     fixed: [

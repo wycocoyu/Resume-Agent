@@ -55,7 +55,9 @@ vi.mock('@/lib/toast', () => ({
 }))
 
 vi.mock('../components/PDFEditor', () => ({
-  PDFViewerSelector: () => <div data-testid="pdf-viewer" />,
+  PDFViewerSelector: (props: { scale?: number }) => (
+    <div data-testid="pdf-viewer" data-scale={String(props.scale)} />
+  ),
 }))
 
 vi.mock('file-saver', () => ({
@@ -243,5 +245,36 @@ describe('SharePage auth toggle & workspace continuation', () => {
     expect(mockSaveResume).toHaveBeenCalledWith(SHARED_PAYLOAD.data)
     expect(mockSetCurrentResumeId).toHaveBeenCalledWith('resume_cloud_456')
     expect(mockNavigate).toHaveBeenCalledWith('/workspace/resume_cloud_456')
+  })
+
+  it('passes zoom scale directly to PDFViewerSelector without CSS transform or maxWidth clipping', async () => {
+    mockIsAuthenticated = false
+    mockAuthEnabled = false
+    mockRenderPDFStream.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }))
+
+    await act(async () => {
+      root.render(<SharePage />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(350)
+    })
+
+    const viewer = container.querySelector('[data-testid="pdf-viewer"]') as HTMLElement | null
+    expect(viewer).not.toBeNull()
+    expect(viewer?.getAttribute('data-scale')).toBe('1')
+    expect(viewer?.parentElement?.style.transform).toBe('')
+    expect(viewer?.parentElement?.style.maxWidth).toBe('')
+
+    const buttons = Array.from(container.querySelectorAll('button'))
+    const zoomOutBtn = buttons.find((b) => b.querySelector('.lucide-zoom-out'))
+    expect(zoomOutBtn).toBeDefined()
+
+    await act(async () => {
+      zoomOutBtn!.click()
+      zoomOutBtn!.click()
+    })
+
+    expect(viewer?.getAttribute('data-scale')).toBe('0.8')
   })
 })

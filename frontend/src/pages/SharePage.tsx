@@ -321,13 +321,13 @@ export default function SharePage() {
         </div>
       </div>
 
-      {/* PDF 预览区域 - 直接复制 PreviewPanel 的样式 */}
-      <div className="flex-1 overflow-auto p-4 bg-slate-100 dark:bg-slate-900/50 flex flex-col">
+      {/* PDF 预览区域 */}
+      <div className="flex-1 min-h-0 flex flex-col bg-slate-100 dark:bg-slate-900/50 overflow-hidden">
         {/* 缩放控制 */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center pt-4 pb-3 shrink-0">
           <div className="flex items-center gap-1 bg-white/60 dark:bg-slate-700/60 backdrop-blur-sm rounded-xl px-2 py-1 border border-slate-200/50 dark:border-slate-600/50">
             <button
-              onClick={() => setZoom(Math.max(50, zoom - 10))}
+              onClick={() => setZoom((z) => Math.max(50, z - 10))}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-600 dark:text-slate-300"
             >
               <ZoomOut className="w-4 h-4" />
@@ -336,7 +336,7 @@ export default function SharePage() {
               {zoom}%
             </span>
             <button
-              onClick={() => setZoom(Math.min(200, zoom + 10))}
+              onClick={() => setZoom((z) => Math.min(200, z + 10))}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-600 dark:text-slate-300"
             >
               <ZoomIn className="w-4 h-4" />
@@ -352,17 +352,10 @@ export default function SharePage() {
         </div>
 
         {/* PDF 内容 */}
-        <div className="flex-1 overflow-auto flex justify-center">
+        <div className="flex-1 min-h-0 overflow-auto px-4 pb-4" style={{ scrollbarGutter: 'stable' }}>
           {pdfBlob ? (
-            <div
-              style={{
-                width: 'fit-content',
-                maxWidth: '100%',
-                transform: `scale(${zoom / 100})`,
-                transformOrigin: 'top center',
-              }}
-            >
-              <PDFViewerSelector pdfBlob={pdfBlob} scale={1.0} />
+            <div className="w-max min-w-full flex justify-center">
+              <PDFViewerSelector pdfBlob={pdfBlob} scale={zoom / 100} />
             </div>
           ) : (
             <div className="h-full flex items-center justify-center">
