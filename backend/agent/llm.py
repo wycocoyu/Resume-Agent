@@ -233,6 +233,15 @@ class LLM:
             cls._instances[config_name] = instance
         return cls._instances[config_name]
 
+    @classmethod
+    def create_isolated(
+        cls, config_name: str = "default", llm_config: Optional[LLMSettings] = None
+    ) -> "LLM":
+        """Create a fresh, session-isolated LLM instance without touching _instances."""
+        instance = super().__new__(cls)
+        instance.__init__(config_name, llm_config)
+        return instance
+
     def __init__(
         self, config_name: str = "default", llm_config: Optional[LLMSettings] = None
     ):

@@ -6,6 +6,10 @@
 LLM 调用。本工具只读，不修改简历。
 """
 
+from typing import Any, Optional
+
+from pydantic import Field
+
 from backend.agent.tool.base import BaseTool, ToolResult
 from backend.agent.tool.resume_data_store import ResumeDataStore
 from backend.core.logger import get_logger
@@ -37,6 +41,7 @@ READ-ONLY: it presents suggestions as a card and never edits the resume."""
         },
         "required": ["question"],
     }
+    llm: Optional[Any] = Field(default=None, exclude=True)
 
     class Config:
         arbitrary_types_allowed = True
@@ -73,7 +78,7 @@ READ-ONLY: it presents suggestions as a card and never edits the resume."""
             )
             envelope = ResumeGuidanceModule.present(assessment, "suggestions")
         else:
-            guidance = ResumeGuidanceModule()
+            guidance = ResumeGuidanceModule(llm=self.llm)
             envelope = await guidance.suggest(resume_data, assessment)
             # suggest() 已把建议回写进 assessment；存回 shared_state 让下次
             # 查看缓存命中（以及后续轮次可引用建议内容）

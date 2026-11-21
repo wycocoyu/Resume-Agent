@@ -30,6 +30,11 @@ import { RecentSessions } from "@/components/sidebar/RecentSessions";
 import SkinPickerModal from "@/pages/Workspace/v2/components/SkinPickerModal";
 import { canUseAdminFeature, getApiBaseUrl, useRuntimeFeatures } from "@/lib/runtimeEnv";
 import { getAuthHeaders as buildAuthHeaders } from "@/lib/authHeaders";
+import { getAgentRequestHeaders } from "@/services/agentByokConfig";
+import {
+  deleteLocalAgentSession,
+  renameLocalAgentSession,
+} from "@/services/agentLocalHistory";
 
 // 工作区类型
 type WorkspaceType =
@@ -143,7 +148,7 @@ export default function WorkspaceLayout({
 
   const currentWorkspace = getCurrentWorkspace();
   const { agentEnabled, authEnabled } = useRuntimeFeatures();
-  const canUseAgent = isAuthenticated && agentEnabled;
+  const canUseAgent = agentEnabled;
   const canUseAdmin = isAuthenticated && canUseAdminFeature();
 
   const sidebarWidthPx = sidebarCollapsed ? 96 : 200;
@@ -238,6 +243,20 @@ export default function WorkspaceLayout({
       await agentSession.onDeleteSession(sessionId);
       return;
     }
+    if (!isAuthenticated) {
+      deleteLocalAgentSession(sessionId);
+      try {
+        localStorage.removeItem(`ui_state:${sessionId}`);
+      } catch {
+        // ignore storage errors
+      }
+      fetch(`${getApiBaseUrl()}/api/agent/stream/session/${sessionId}`, {
+        method: "DELETE",
+        headers: getAgentRequestHeaders(),
+      }).catch(() => undefined);
+      setSessionsRefreshKey((prev) => prev + 1);
+      return;
+    }
     try {
       const resp = await fetch(
         `${getApiBaseUrl()}/api/agent/history/${sessionId}`,
@@ -254,6 +273,11 @@ export default function WorkspaceLayout({
     if (!canUseAgent) return;
     if (agentSession?.onRenameSession) {
       await agentSession.onRenameSession(sessionId, title);
+      return;
+    }
+    if (!isAuthenticated) {
+      renameLocalAgentSession(sessionId, title);
+      setSessionsRefreshKey((prev) => prev + 1);
       return;
     }
     try {

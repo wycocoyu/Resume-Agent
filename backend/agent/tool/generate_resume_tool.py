@@ -1,5 +1,9 @@
 import json
+from typing import Any, Optional
 import uuid
+
+from pydantic import Field
+
 from backend.agent.tool.base import BaseTool, ToolResult
 from backend.core.logger import get_logger
 
@@ -48,6 +52,7 @@ class GenerateResumeTool(BaseTool):
         },
         "required": ["job_description"],
     }
+    llm: Optional[Any] = Field(default=None, exclude=True)
 
     async def execute(self, job_description: str, user_background: str = "") -> ToolResult:
         from backend.agent.llm import LLM
@@ -58,7 +63,7 @@ class GenerateResumeTool(BaseTool):
             user_background=user_background or "未提供",
         )
         try:
-            llm = LLM()
+            llm = self.llm or LLM()
             response = await llm.ask(
                 messages=[Message(role=Role.USER, content=prompt)],
             )

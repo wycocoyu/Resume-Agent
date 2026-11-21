@@ -49,6 +49,10 @@ class AgentStateMachine:
         self._error_callbacks: Set[ErrorCallback] = set()
         self._lock = asyncio.Lock()
         self._stop_requested = False
+        self._extra_secrets: tuple[str, ...] = ()
+
+    def set_extra_secrets(self, secrets: tuple[str, ...]) -> None:
+        self._extra_secrets = tuple(s for s in secrets if s)
 
     @property
     def current_state(self) -> AgentState:
@@ -202,23 +206,33 @@ class AgentStateMachine:
         Args:
             error: The exception that occurred
         """
-        logger.error(
-            f"[{self._session_id}] Error in state {self._current_state.value}: {error}",
-            exc_info=True,
-        )
+        from backend.services.ai_guard import redact_secrets
+
+        safe_message = redact_secrets(str(error), self._extra_secrets)
+        if self._extra_secrets:
+            logger.error(
+                f"[{self._session_id}] Error in state {self._current_state.value}: {safe_message}"
+            )
+        else:
+            logger.error(
+                f"[{self._session_id}] Error in state {self._current_state.value}: {safe_message}",
+                exc_info=True,
+            )
 
         # Notify error callbacks
         for callback in self._error_callbacks:
             try:
                 await callback(error, self._state_info)
             except Exception as e:
-                logger.error(f"[{self._session_id}] Error in error callback: {e}")
+                logger.error(
+                    f"[{self._session_id}] Error in error callback: {redact_secrets(str(e), self._extra_secrets)}"
+                )
 
         # Transition to error state
         if not self._current_state.is_terminal():
             await self.transition_to(
                 AgentState.ERROR,
-                message=str(error),
+                message=safe_message,
                 data={"error_type": type(error).__name__},
             )
 

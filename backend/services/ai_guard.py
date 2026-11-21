@@ -3,12 +3,15 @@ from __future__ import annotations
 
 from collections import deque
 import inspect
+import ipaddress
 import os
 import re
+import socket
 import sys
 import threading
 import time
 from typing import Literal, Optional
+import urllib.parse
 
 from fastapi import Depends, HTTPException, Request
 
@@ -26,6 +29,7 @@ except ImportError:
 try:
     from backend.services.runtime_features import (
         get_ai_quota_cooldown_seconds,
+        get_anon_ai_agent_hourly_limit,
         get_anon_ai_import_hourly_limit,
         get_anon_ai_rewrite_hourly_limit,
         is_editor_ai_enabled,
@@ -33,6 +37,7 @@ try:
 except ImportError:
     from services.runtime_features import (
         get_ai_quota_cooldown_seconds,
+        get_anon_ai_agent_hourly_limit,
         get_anon_ai_import_hourly_limit,
         get_anon_ai_rewrite_hourly_limit,
         is_editor_ai_enabled,
@@ -76,6 +81,18 @@ class AiRateLimitedError(AiGuardError):
             status_code=429,
             code="AI_RATE_LIMITED",
             message=AI_RATE_LIMITED_MESSAGE,
+        )
+
+
+class InvalidByokConfigError(AiGuardError):
+    def __init__(
+        self,
+        message: str = "自定义 API 配置无效，请填写合法的公网 HTTPS Base URL 与模型名称。",
+    ) -> None:
+        super().__init__(
+            status_code=400,
+            code="INVALID_BYOK_BASE_URL",
+            message=message,
         )
 
 
@@ -246,13 +263,147 @@ def _should_skip_rate_limit(request: Request) -> tuple[bool, str]:
     return False, (client_host or "unknown")
 
 
+_BUCKET_LIMIT_GETTERS = {
+    "import": get_anon_ai_import_hourly_limit,
+    "rewrite": get_anon_ai_rewrite_hourly_limit,
+    "agent": get_anon_ai_agent_hourly_limit,
+}
+
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+_BLOCKED_BYOK_HOSTNAMES = frozenset({
+    "localhost",
+    "0.0.0.0",
+    "metadata.google.internal",
+})
+_BLOCKED_BYOK_SUFFIXES = (".localhost", ".local", ".internal", ".lan")
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_SK_SECRET_RE = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+_BEARER_SECRET_RE = re.compile(r"Bearer\s+[A-Za-z0-9._-]+", re.IGNORECASE)
+
+
+def _is_blocked_byok_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None:
+        ip_obj = ip_obj.ipv4_mapped
+    if (
+        ip_obj.is_loopback
+        or ip_obj.is_private
+        or ip_obj.is_link_local
+        or ip_obj.is_multicast
+        or ip_obj.is_unspecified
+        or ip_obj.is_reserved
+    ):
+        return True
+    if isinstance(ip_obj, ipaddress.IPv4Address) and ip_obj in _CGNAT_NETWORK:
+        return True
+    return not ip_obj.is_global
+
+
+def _is_valid_public_hostname(host: str) -> bool:
+    try:
+        ascii_host = host.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return False
+    if not ascii_host or len(ascii_host) > 253 or "." not in ascii_host:
+        return False
+    labels = ascii_host.split(".")
+    return all(bool(_DNS_LABEL_RE.match(label)) for label in labels)
+
+
+def validate_byok_base_url(raw_url: str) -> str:
+    """校验用户自带 API Key 的 Base URL，防止 SSRF 与凭据注入。"""
+    cleaned = raw_url.strip() if isinstance(raw_url, str) else ""
+    if not cleaned:
+        raise InvalidByokConfigError("请填写自定义 API Base URL。")
+
+    parsed = urllib.parse.urlsplit(cleaned)
+    scheme = (parsed.scheme or "").lower()
+    if not scheme or parsed.hostname is None:
+        raise InvalidByokConfigError("自定义 API Base URL 格式无效。")
+    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+        raise InvalidByokConfigError("Base URL 不允许包含用户名或密码。")
+    try:
+        _ = parsed.port
+    except ValueError as exc:
+        raise InvalidByokConfigError("自定义 API Base URL 端口无效。") from exc
+
+    host = parsed.hostname.strip().lower().rstrip(".")
+    if not host or "%" in host:
+        raise InvalidByokConfigError("自定义 API Base URL 主机名无效。")
+
+    allow_local = os.getenv("ALLOW_LOCAL_BYOK_URLS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if allow_local:
+        if scheme not in {"http", "https"}:
+            raise InvalidByokConfigError("Base URL 仅支持 http 或 https 协议。")
+        return cleaned.rstrip("/")
+
+    if scheme != "https":
+        raise InvalidByokConfigError("出于安全原因，自定义 API Base URL 必须使用 https://。")
+
+    if host in _BLOCKED_BYOK_HOSTNAMES or host.endswith(_BLOCKED_BYOK_SUFFIXES):
+        raise InvalidByokConfigError("不允许使用本机或内网域名作为自定义 API Base URL。")
+
+    ip_literal: Optional[ipaddress.IPv4Address | ipaddress.IPv6Address] = None
+    try:
+        ip_literal = ipaddress.ip_address(host)
+    except ValueError:
+        ip_literal = None
+
+    if ip_literal is not None:
+        if _is_blocked_byok_ip(ip_literal):
+            raise InvalidByokConfigError("不允许使用内网或保留 IP 作为自定义 API Base URL。")
+        return cleaned.rstrip("/")
+
+    if not _is_valid_public_hostname(host):
+        raise InvalidByokConfigError("自定义 API Base URL 主机名无效。")
+
+    try:
+        addr_infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return cleaned.rstrip("/")
+
+    for _family, _socktype, _proto, _canonname, sockaddr in addr_infos:
+        if not sockaddr:
+            continue
+        addr_str = str(sockaddr[0]).split("%", 1)[0]
+        try:
+            resolved_ip = ipaddress.ip_address(addr_str)
+        except ValueError:
+            continue
+        if _is_blocked_byok_ip(resolved_ip):
+            raise InvalidByokConfigError("目标域名解析到内网或保留地址，已拒绝访问。")
+
+    return cleaned.rstrip("/")
+
+
+def redact_secrets(text: str, extra_secrets: tuple[str, ...] = ()) -> str:
+    """将文本中的显式密钥、sk-* 密钥与 Bearer Token 脱敏为 [REDACTED]。"""
+    if not text:
+        return ""
+    masked = str(text)
+    masked = _BEARER_SECRET_RE.sub("[REDACTED]", masked)
+    secrets = sorted(
+        {s for s in extra_secrets if isinstance(s, str) and len(s) >= 6},
+        key=len,
+        reverse=True,
+    )
+    for secret in secrets:
+        masked = masked.replace(secret, "[REDACTED]")
+    masked = _SK_SECRET_RE.sub("[REDACTED]", masked)
+    return masked
+
+
 def check_anonymous_rate_limit(
     request: Request,
     current_user: Optional[AppUser],
     *,
-    bucket: Literal["import", "rewrite"],
+    bucket: Literal["import", "rewrite", "agent"],
 ) -> None:
-    """对匿名请求按 IP + 桶（import/rewrite）执行 3600 秒滑动窗口限流。"""
+    """对匿名请求按 IP + 桶（import/rewrite/agent）执行 3600 秒滑动窗口限流。"""
     if current_user is not None:
         return
 
@@ -260,11 +411,8 @@ def check_anonymous_rate_limit(
     if skip:
         return
 
-    limit = (
-        get_anon_ai_import_hourly_limit()
-        if bucket == "import"
-        else get_anon_ai_rewrite_hourly_limit()
-    )
+    limit_getter = _BUCKET_LIMIT_GETTERS.get(bucket, get_anon_ai_rewrite_hourly_limit)
+    limit = limit_getter()
     now = time.monotonic()
     cutoff = now - WINDOW_SECONDS
     key = (bucket, ip)
@@ -289,13 +437,26 @@ def check_ai_guard(
     request: Request,
     current_user: Optional[AppUser],
     *,
-    bucket: Literal["import", "rewrite"],
+    bucket: Literal["import", "rewrite", "agent"],
 ) -> None:
     """统一执行 AI 开关检查、配额熔断检查与匿名 IP 限流检查。"""
     if not is_editor_ai_enabled():
         raise AiFeatureDisabledError()
     ensure_ai_circuit_open()
     check_anonymous_rate_limit(request, current_user, bucket=bucket)
+
+
+def check_agent_ai_guard(
+    request: Request,
+    current_user: Optional[AppUser],
+    *,
+    using_byok: bool,
+) -> None:
+    """Agent 对话保护：BYOK 跳过服务端熔断与匿名限流，服务端通道走 agent 桶。"""
+    if using_byok:
+        return
+    ensure_ai_circuit_open()
+    check_anonymous_rate_limit(request, current_user, bucket="agent")
 
 
 async def _resolve_effective_user(

@@ -28,6 +28,7 @@ _MANAGED_ENV_KEYS = frozenset({
     "ADMIN_SWITCH_TOKEN",
     "ANON_AI_IMPORT_HOURLY_LIMIT",
     "ANON_AI_REWRITE_HOURLY_LIMIT",
+    "ANON_AI_AGENT_HOURLY_LIMIT",
     "AI_QUOTA_COOLDOWN_SECONDS",
 })
 
@@ -119,7 +120,7 @@ def get_runtime_features(env_path: Optional[Path] = None) -> dict[str, bool]:
     sync_runtime_features_if_changed(env_path=env_path)
     return {
         "auth_enabled": _parse_bool(os.getenv("AUTH_ENABLED"), False),
-        "agent_enabled": _parse_bool(os.getenv("AGENT_ENABLED"), False),
+        "agent_enabled": _parse_bool(os.getenv("AGENT_ENABLED"), True),
         "editor_ai_enabled": _parse_bool(os.getenv("EDITOR_AI_ENABLED"), True),
     }
 
@@ -149,6 +150,11 @@ def get_anon_ai_import_hourly_limit(env_path: Optional[Path] = None) -> int:
 def get_anon_ai_rewrite_hourly_limit(env_path: Optional[Path] = None) -> int:
     sync_runtime_features_if_changed(env_path=env_path)
     return _parse_int(os.getenv("ANON_AI_REWRITE_HOURLY_LIMIT"), 30, min_value=0)
+
+
+def get_anon_ai_agent_hourly_limit(env_path: Optional[Path] = None) -> int:
+    sync_runtime_features_if_changed(env_path=env_path)
+    return _parse_int(os.getenv("ANON_AI_AGENT_HOURLY_LIMIT"), 20, min_value=1)
 
 
 def get_ai_quota_cooldown_seconds(env_path: Optional[Path] = None) -> int:
